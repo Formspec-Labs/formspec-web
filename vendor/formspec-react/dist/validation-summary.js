@@ -1,12 +1,13 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc ValidationSummary — the shared summary rows, each a link to its field, in the default look. */
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useContext } from 'react';
 import { readValidationSummaryRows, } from '@formspec-org/layout';
 import { useFormspecContext } from './context';
 import { useChromeText } from './use-chrome-text';
 import { useHeadingLevel } from './heading-level';
 import { useSignal } from './use-signal';
+import { WorkspaceFieldJump } from './workspace';
 import { focusFieldIn } from './use-focus-field';
 /**
  * The validation summary in the default look: a heading with the count, then every finding as a link to
@@ -18,6 +19,7 @@ import { focusFieldIn } from './use-focus-field';
 export function ValidationSummary({ comp, results: resultsProp, source: sourceProp = 'submit', severityFilter = ['error', 'warning'], autoFocus = true, className, }) {
     const { engine, touchedVersion, latestSubmit } = useFormspecContext();
     const chrome = useChromeText();
+    const workspaceJump = useContext(WorkspaceFieldJump);
     const Heading = `h${useHeadingLevel()}`;
     const containerRef = useRef(null);
     // Reading the signals here re-renders on every change they carry: touch, submit, live validation.
@@ -68,7 +70,11 @@ export function ValidationSummary({ comp, results: resultsProp, source: sourcePr
     const jump = (row) => (event) => {
         event.preventDefault();
         const scope = containerRef.current?.closest('.formspec-theme-scope') ?? document.body;
-        if (row.jumpPath)
+        if (!row.jumpPath)
+            return;
+        if (workspaceJump)
+            workspaceJump(row.jumpPath);
+        else
             focusFieldIn(scope, row.jumpPath);
     };
     const renderRows = (items) => (_jsx(_Fragment, { children: items.map((r, i) => {

@@ -33,3 +33,5 @@ export { HOST_WIDGET_CONTRACT_CODES, hostWidgetContractSet, hostWidgetContractVa
 export { resolveWidgetContribution, type WidgetContributionEntry, type WidgetContributionIdentity, } from './widget-contribution.js';
 export { ROUTE_CLASS_THEME_AUTHORITY, TENANT_THEMING_REFUSING_ROUTE_CLASSES, validateUiGraphPolicy, } from './ui-graph-policy.js';
 export { artifactHandlesFor, validateAppGraph, } from './validator.js';
+export { parseRouteSubjectKey } from './surface-definition-slots.js';
+export { filingStatusEntries, resolveFilingStatusTargets, validateFilingStatusTargets } from './filing-status-targets.js';

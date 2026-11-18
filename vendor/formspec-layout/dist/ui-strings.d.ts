@@ -29,6 +29,18 @@ export declare const UI_STRINGS: {
     readonly 'wizard.step': "Step";
     readonly 'wizard.collapseNavigation': "Collapse navigation";
     readonly 'wizard.otherItems': "Additional items";
+    readonly 'workspace.sections': "Form sections";
+    readonly 'workspace.search': "Search questions";
+    readonly 'workspace.matchCount': "Matching questions ({{$count}})";
+    readonly 'workspace.noMatches': "No matching questions.";
+    readonly 'workspace.findings': "Findings";
+    readonly 'workspace.error': "Error: {{$message}}";
+    readonly 'workspace.warning': "Warning: {{$message}}";
+    readonly 'workspace.info': "Information: {{$message}}";
+    readonly 'workspace.filled': "{{$filled}} of {{$total}} answers filled";
+    readonly 'workspace.validationUnavailable': "Validation is unavailable.";
+    readonly 'workspace.targetUnavailable': "This question is no longer available.";
+    readonly 'workspace.targetReadOnly': "This question cannot be edited.";
     readonly 'modal.close': "Close";
     readonly 'alert.dismiss': "Dismiss";
     readonly 'validationSummary.heading': "Please correct the following";

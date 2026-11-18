@@ -1,8 +1,6 @@
-/** @filedesc WASM definition-eval payload, EvalResult merge, FEL normalization, and scoped variable visibility. */
-import type { FormVariable } from '@formspec-org/types';
+/** @filedesc WASM definition-eval payload, EvalResult merge, and validation merge. */
 import type { EvalResult, EvalValidation } from '../diff.js';
 import type { ResponseSubjectKeys } from '../interfaces.js';
-import type { EngineSignal } from '../reactivity/types.js';
 /** Subset of validation objects passed back into WASM as previous state. */
 export type WasmPreviousValidation = Array<{
     path: string;
@@ -41,11 +39,3 @@ export type EvalShapeTiming = 'continuous' | 'submit' | 'demand';
 export declare function mergeWasmEvalWithExternalValidations(result: EvalResult, options: {
     externalValidations: EvalValidation[];
 }): EvalResult;
-export declare function normalizeExpressionForWasmEvaluation(options: {
-    expression: string;
-    currentItemPath: string;
-    replaceSelfRef: boolean;
-    repeats: Record<string, EngineSignal<number>>;
-    fieldSignals: Record<string, EngineSignal<any>>;
-}): string;
-export declare function visibleScopedVariableValues(scopePath: string, variableDefs: FormVariable[], variableSignals: Record<string, EngineSignal<any>>): Record<string, any>;

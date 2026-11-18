@@ -7,7 +7,12 @@ export declare const RepeatInstanceContext: import("react").Context<string>;
  * made from a group is titled by that group's label (`titleBind`), a page nobody authored by its `$ui`
  * chrome key (`titleKey`); undefined for any other node. Read inside a locale-signal subscription.
  */
-export declare function plannedTitle(engine: IFormEngine, props: Record<string, unknown> | undefined): string | undefined;
+export declare function plannedTitle(engine: IFormEngine, props: {
+    title?: unknown;
+    titleBind?: unknown;
+    titleKey?: unknown;
+    titleLocaleKey?: unknown;
+} | undefined): string | undefined;
 /**
  * The node renderers see, live:
  * - an authored node's string props, and string elements of its array props (`tabLabels[0]`,

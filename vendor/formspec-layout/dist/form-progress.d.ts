@@ -24,7 +24,7 @@ export interface ProgressFinding {
 }
 export interface FormProgressSummary {
     form: ProgressCounts & {
-        ready: boolean;
+        ready: boolean | null;
     };
     sections: Array<{
         id?: string;

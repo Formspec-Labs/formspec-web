@@ -45,11 +45,12 @@ import type { SurfaceScreenerCompletionPolicy } from './screener-completion.js';
 import { type SurfaceRouteTitleResolver } from './title-presentation.js';
 import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from "react";
-import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
+import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceDefinitionComponentResolver, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
 import type { RegistryEntry, LocaleDocument, ThemeDocument } from "@formspec-org/types";
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetModule } from "./widget-api.js";
 import type { SurfaceDefinitionFormRenderInput, SurfaceDefinitionFormRenderer, SurfaceFormSession, SurfaceSemanticControlScopeResolver } from "./SurfaceSlot.js";
 import type { SurfaceSemanticOutputScopeResolver } from "./semantic-output.js";
+import type { FilingStatusOptions } from "./FilingStatus.js";
 export interface SurfaceTransitionOutcome {
     advanced: boolean;
     reason?: string;
@@ -144,6 +145,12 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     /** Opaque host generation marker; changing it invalidates late navigation. */
     sessionGeneration?: string | number | undefined;
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
+    /** Reads authorized draft progress across the filing tracker in one batch. */
+    readSummaries?: FilingStatusOptions["readSummaries"];
+    /** Change when a committed observation should be read again. */
+    filingDraftRevision?: FilingStatusOptions["revision"];
+    /** Pure selection of an admitted Component for both the form and its tracker links. */
+    resolveDefinitionComponent?: SurfaceDefinitionComponentResolver | undefined;
     /** Host form runtime seam; the current `FormspecForm` remains the default. */
     renderDefinitionForm?: SurfaceDefinitionFormRenderer | undefined;
     /** Generic async Response Actions executor used by mounted Definition forms. */

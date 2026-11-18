@@ -162,8 +162,6 @@ export declare function wasmInterpolateFelTemplate(template: string, context: Wa
  * and coercion rules; `evaluate(expression)` returns JSON `{ value, hasErrorDiagnostics? }` or throws.
  */
 export declare function wasmInterpolateTemplate(template: string, evaluate: (expression: string) => string): WasmInterpolated;
-/** Normalize FEL source before evaluation (bare `$`, repeat qualifiers, repeat aliases). */
-export declare function wasmPrepareFelExpression(optionsJson: string): string;
 /**
  * One form's FEL state, resident in WASM across ad-hoc reads.
  *
@@ -173,6 +171,7 @@ export declare function wasmPrepareFelExpression(optionsJson: string): string;
 export type WasmFelContextHandle = import('../wasm-pkg-runtime/formspec_wasm_runtime.js').FelContext;
 /** Creates a resident FEL context from a Definition's leaf typing and `excludedValue: "null"` binds. */
 export declare function wasmCreateFelContext(schema: {
+    itemPaths?: string[];
     dataTypes: Record<string, string>;
     excludedValueNull: string[];
 }): WasmFelContextHandle;

@@ -142,7 +142,7 @@ export function summarizeFormProgress(sectionPlan, state) {
         if (section !== undefined)
             countField(sections[section].counts, field, hasError);
     }
-    const ready = form.missing === 0 && state.report?.valid === true;
+    const ready = form.missing > 0 ? false : (state.report === null ? null : state.report.valid);
     for (const section of sections) {
         section.filled = section.counts.filled === section.counts.total;
     }

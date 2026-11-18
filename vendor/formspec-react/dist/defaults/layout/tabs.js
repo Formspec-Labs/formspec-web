@@ -28,11 +28,12 @@ export function Tabs({ node, children }) {
     const ariaLabel = node.props?.['aria-label']
         || node.fieldItem?.label
         || 'Tabs';
-    const setActiveTab = useCallback((nextIndex) => {
+    const setActiveTab = useCallback((nextIndex, focus = true) => {
         const bounded = Math.max(0, Math.min(tabCount - 1, nextIndex));
         setActiveTabRaw(bounded);
         // Focus the target tab button (WAI-ARIA automatic activation)
-        setTimeout(() => buttonRefs.current[bounded]?.focus(), 0);
+        if (focus)
+            setTimeout(() => buttonRefs.current[bounded]?.focus(), 0);
     }, [tabCount]);
     const handleKeyDown = useCallback((event) => {
         let nextIndex;
@@ -72,7 +73,7 @@ export function Tabs({ node, children }) {
     const renderedChildren = React.Children.toArray(children);
     const tabBar = (_jsx("div", { role: "tablist", "aria-label": ariaLabel, "aria-orientation": placement === 'left' || placement === 'right' ? 'vertical' : undefined, className: "formspec-tab-bar", onKeyDown: handleKeyDown, children: tabLabels.map((label, idx) => {
             const isActive = idx === activeTab;
-            return (_jsx("button", { type: "button", className: isActive ? 'formspec-tab formspec-tab--active' : 'formspec-tab', ref: (el) => { buttonRefs.current[idx] = el; }, role: "tab", id: `tab-${id}-${idx}`, "aria-selected": isActive, "aria-controls": `panel-${id}-${idx}`, tabIndex: isActive ? 0 : -1, onClick: () => setActiveTab(idx), ...needTraceAttrs(explicitLabels?.[idx]
+            return (_jsx("button", { type: "button", className: isActive ? 'formspec-tab formspec-tab--active' : 'formspec-tab', ref: (el) => { buttonRefs.current[idx] = el; }, role: "tab", id: `tab-${id}-${idx}`, "aria-selected": isActive, "aria-controls": `panel-${id}-${idx}`, tabIndex: isActive ? 0 : -1, onClick: event => setActiveTab(idx, event.nativeEvent.isTrusted === true), ...needTraceAttrs(explicitLabels?.[idx]
                     ? explicitLabelGeneration?.[idx]?.anchors
                     : node.children[idx]?.needAnchors), children: label }, idx));
         }) }));

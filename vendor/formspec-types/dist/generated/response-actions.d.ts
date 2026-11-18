@@ -444,6 +444,10 @@ export interface RuntimeRequest {
      * JSON-over-HTTP runtime adapter.
      */
     adapter: 'http-json';
+    /**
+     * Optional signing-ceremony operation for response-scoped requests.
+     */
+    operation?: 'prepare' | 'sign';
     request: HttpJsonRequest;
     /**
      * Optional exact successful HTTP status codes. Omission admits any 2xx response.

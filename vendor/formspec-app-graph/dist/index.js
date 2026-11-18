@@ -41,3 +41,5 @@ export { resolveWidgetContribution, } from './widget-contribution.js';
 // restate which classes admit.
 export { ROUTE_CLASS_THEME_AUTHORITY, TENANT_THEMING_REFUSING_ROUTE_CLASSES, validateUiGraphPolicy, } from './ui-graph-policy.js';
 export { artifactHandlesFor, validateAppGraph, } from './validator.js';
+export { parseRouteSubjectKey } from './surface-definition-slots.js';
+export { filingStatusEntries, resolveFilingStatusTargets, validateFilingStatusTargets } from './filing-status-targets.js';

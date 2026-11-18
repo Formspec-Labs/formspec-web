@@ -41,6 +41,16 @@
   },
   {
     "body": {
+      "detail": "draft access unavailable",
+      "error_code": "FORMSPEC-4030",
+      "status": 403,
+      "title": "forbidden",
+      "type": "about:blank"
+    },
+    "case": "forbidden"
+  },
+  {
+    "body": {
       "detail": "draft was submitted",
       "error_code": "FORMSPEC-4090",
       "status": 409,

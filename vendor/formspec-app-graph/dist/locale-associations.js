@@ -95,7 +95,7 @@ function targetArtifact(context, kind, url) {
         matches: definitions.length,
     };
 }
-function compatibleVersionFailure(compatibleVersions, targetVersion) {
+export function compatibleVersionFailure(compatibleVersions, targetVersion) {
     if (compatibleVersions === undefined)
         return undefined;
     if (!validRange(compatibleVersions))

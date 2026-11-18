@@ -1,4 +1,4 @@
-import type { FormResponse, ResponseSelection, ResponseSelectionContext, SelectResponses } from "@formspec-org/types";
+import type { DataSource, FormResponse, ResponseSelection, ResponseSelectionContext, SelectResponses } from "@formspec-org/types";
 import type { DataSourceActiveContext, DataSourceCatalogHandle, DataSourceLoader, DataSourceLoadResult } from "./data-source-loader.js";
 /** An exact source identity within one manifested Data Sources catalog. */
 export interface DefinitionResponseSourceBinding {
@@ -40,6 +40,7 @@ export interface PreviewDefinitionResponseStore {
     overlay(binding: DefinitionResponseSourceBinding, baseline: DataSourceLoadResult, inputs?: ReadInputs): DataSourceLoadResult;
     wrapLoader(baselineLoader: DataSourceLoader): DataSourceLoader;
 }
+export declare function catalogResponseProjection(schema: DataSource["schema"], cardinality: ResponseSelection["cardinality"]): string[] | undefined;
 /** Create an isolated in-memory store for an already admitted preview catalog. */
 export declare function createPreviewDefinitionResponseStore(catalogs: readonly DataSourceCatalogHandle[], options: PreviewDefinitionResponseStoreOptions): PreviewDefinitionResponseStore;
 export {};

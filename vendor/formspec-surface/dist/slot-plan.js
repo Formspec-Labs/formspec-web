@@ -33,8 +33,9 @@
  */
 import { admitScreenerPresentation } from './screener-slot.js';
 import { targetDefinitionMatches } from '@formspec-org/types';
-import { widgetActionScopeMatches } from '@formspec-org/app-graph';
+import { parseRouteSubjectKey, widgetActionScopeMatches } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
+import { planFilingStatus } from './filing-status.js';
 import { planExperienceUnit, } from './experience-unit.js';
 import { planStaticContent, } from './static-content.js';
 import { dataSourceAvailableToWidget, resolveDataSourceDescriptor, } from './data-source-loader.js';
@@ -42,6 +43,7 @@ import { generationNeedAnchors } from './need-trace.js';
 import { planDefinitionFormInitialData, } from './definition-form-initial-data.js';
 const KNOWN_SLOT_TYPES = {
     'screener': true,
+    'filing-status': true,
     'definition-form': true,
     'experience-unit': true,
     'module-widget': true,
@@ -83,13 +85,35 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
             const allowedTargets = Array.isArray(binding.allowedTargets) && binding.allowedTargets.every(t => typeof t === 'string') ? binding.allowedTargets : [];
             const authored = new Set(handle?.document.evaluation?.flatMap(p => p.routes.map(r => r.target)) ?? []);
             const admission = handle ? admitScreenerPresentation(handle.document) : undefined;
-            const reason = context.handle.surface.$formspecSurface !== '0.3' ? 'surface-version-unsupported'
+            const reason = context.handle.surface.$formspecSurface !== '0.3' && context.handle.surface.$formspecSurface !== '0.4' ? 'surface-version-unsupported'
                 : !handle || !handle.ref.version || handle.document.url !== handle.ref.url || handle.document.version !== handle.ref.version ? 'screener-pin-unresolved'
                     : admission?.status !== 'ready' ? admission?.reason ?? 'presentation-unsupported'
                         : !allowedTargets.length || new Set(allowedTargets).size !== allowedTargets.length || allowedTargets.some(t => !t.startsWith('surface:') || !authored.has(t)) ? 'allowed-target-invalid' : undefined;
             if (reason)
                 diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The native Screener slot is unavailable.', site, { reason }));
             return { ...shared, slotType: 'screener', ...(handle ? { screener: handle } : {}), allowedTargets, status: reason ? 'unresolved' : 'ready', ...(reason ? { reason } : {}) };
+        }
+        case 'filing-status': {
+            const tracker = context.filingStatus ? planFilingStatus({
+                ...context.filingStatus,
+                handle: context.handle,
+                bindingRoute,
+                binding,
+                params: context.params ?? {},
+                definitions: context.definitions,
+                resolveSubject: resolveFormSubject,
+                resolveDefinitionComponent: context.resolveDefinitionComponent,
+                surfaceRef: context.surfaceRef,
+            }) : { status: 'unresolved', reason: 'route-table-unavailable' };
+            if (tracker.status === 'unresolved')
+                diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The filing tracker cannot resolve its form links.', site, { reason: tracker.reason }));
+            else
+                for (const group of tracker.groups)
+                    for (const row of group.rows) {
+                        if (row.status === 'disabled')
+                            diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'A filing tracker form is unavailable.', site, { reason: row.reason, entry: row.key }));
+                    }
+            return { ...shared, slotType: 'filing-status', tracker };
         }
         case 'definition-form': {
             const definitionRef = typeof binding.definitionRef === 'string' ? binding.definitionRef : '';
@@ -116,6 +140,11 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
                     return { ...plan, status: 'unresolved' };
                 }
                 plan.definition = definition;
+                const component = context.resolveDefinitionComponent?.({
+                    surfaceRef: context.surfaceRef, routeId: bindingRoute.id, slotId: slot.id, definition,
+                });
+                if (component)
+                    plan.componentDocument = component;
                 if (subject)
                     plan.subject = subject;
                 if (binding.initialData !== undefined) {
@@ -412,18 +441,10 @@ function resolveFormSubject(definition, binding, route, params) {
         const value = ownString(params, parameter);
         if (value === undefined)
             return false;
-        if (dataType === 'string') {
-            keys.push([key, value]);
-            continue;
-        }
-        if (dataType !== 'integer' || !/^(?:0|-?[1-9][0-9]*)$/u.test(value))
+        const typed = parseRouteSubjectKey(dataType, value);
+        if (typed === undefined)
             return false;
-        const integer = BigInt(value);
-        const number = Number(integer);
-        // Core §2.1.6 and ADR 0172 §11 item 9 require the I-JSON integer range.
-        if (!Number.isSafeInteger(number))
-            return false;
-        keys.push([key, number]);
+        keys.push([key, typed]);
     }
     return Object.freeze({ type, keys: Object.freeze(Object.fromEntries(keys)) });
 }

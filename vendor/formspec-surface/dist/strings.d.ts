@@ -36,7 +36,7 @@ export type SurfaceStringVars = Readonly<Record<string, string>>;
  * The closed key set. Small enough to translate in one sitting, which is the
  * property that makes F7 closable.
  */
-export declare const SURFACE_STRING_KEYS: readonly ["slotUnavailableDefinitionForm", "slotUnavailableExperienceUnit", "slotUnavailableWidgetUnimplemented", "slotUnavailableWidgetIncompatible", "slotUnavailableWidgetUndeclared", "slotUnavailableWidgetData", "slotUnavailableStaticContent", "slotUnavailableEmbedUnresolved", "slotUnavailableEmbedCycle", "widgetEmpty", "notFoundTitle", "notFoundBody", "navigationLabel", "transitionContinue", "transitionPending", "transitionFailed", "transitionTargetUnresolved", "transitionTargetCollision", "transitionNoResponseActions", "transitionTriggerUnresolved", "transitionTriggerAmbiguous", "transitionNoExecutor", "transitionSuppliedBySlot", "transitionFireable", "previewEditionLabel", "appearanceLabel", "appearanceSystem", "appearanceLight", "appearanceDark", "saved", "savedLocally", "saveFailed"];
+export declare const SURFACE_STRING_KEYS: readonly ["slotUnavailableDefinitionForm", "slotUnavailableExperienceUnit", "slotUnavailableWidgetUnimplemented", "slotUnavailableWidgetIncompatible", "slotUnavailableWidgetUndeclared", "slotUnavailableWidgetData", "slotUnavailableStaticContent", "slotUnavailableEmbedUnresolved", "slotUnavailableEmbedCycle", "widgetEmpty", "notFoundTitle", "notFoundBody", "navigationLabel", "transitionContinue", "transitionPending", "transitionFailed", "transitionTargetUnresolved", "transitionTargetCollision", "transitionNoResponseActions", "transitionTriggerUnresolved", "transitionTriggerAmbiguous", "transitionNoExecutor", "transitionSuppliedBySlot", "transitionFireable", "previewEditionLabel", "appearanceLabel", "appearanceSystem", "appearanceLight", "appearanceDark", "saved", "savedLocally", "saveFailed", "draftConflict", "draftLoadNewer", "draftKeepChanges", "draftDiscardPrompt", "draftOverwritePrompt", "draftConfirmDiscard", "draftConfirmOverwrite", "draftCancel", "draftLoaded", "draftUnavailable", "draftVersionMismatch", "draftRestart", "draftConfirmRestart", "draftKeep", "filingNotStarted", "filingNotStartedWithSize", "filingInProgress", "filingReady", "filingReadinessUnavailable", "filingLoading", "filingDenied", "filingStale", "filingUnavailable", "filingAddressUnavailable", "filingDefinitionUnavailable", "filingSubjectUnavailable", "filingChecksUnavailable", "filingSectionCountsUnavailable", "filingFillCount", "filingSomeProgressUnavailable", "filingFixCount", "filingCheckCount", "filingAnswered", "filingStillToAnswer", "filingHasFix", "filingHasCheck", "filingSummaryAnswered", "filingSummaryToFix", "filingSummaryToCheck", "filingLegendCaption", "filingSections"];
 export type SurfaceStringKey = (typeof SURFACE_STRING_KEYS)[number];
 /** One string, possibly interpolated from the vars its call site supplies. */
 export type SurfaceStringTemplate = (vars: SurfaceStringVars) => string;
@@ -101,6 +101,47 @@ export declare const DEFAULT_SURFACE_STRINGS: {
     readonly saved: () => string;
     readonly savedLocally: () => string;
     readonly saveFailed: () => string;
+    readonly draftConflict: () => string;
+    readonly draftLoadNewer: () => string;
+    readonly draftKeepChanges: () => string;
+    readonly draftDiscardPrompt: () => string;
+    readonly draftOverwritePrompt: () => string;
+    readonly draftConfirmDiscard: () => string;
+    readonly draftConfirmOverwrite: () => string;
+    readonly draftCancel: () => string;
+    readonly draftLoaded: () => string;
+    readonly draftUnavailable: () => string;
+    readonly draftVersionMismatch: () => string;
+    readonly draftRestart: () => string;
+    readonly draftConfirmRestart: () => string;
+    readonly draftKeep: () => string;
+    readonly filingNotStarted: () => string;
+    readonly filingNotStartedWithSize: ({ count }: Readonly<Record<string, string>>) => string;
+    readonly filingInProgress: () => string;
+    readonly filingReady: () => string;
+    readonly filingReadinessUnavailable: () => string;
+    readonly filingLoading: () => string;
+    readonly filingDenied: () => string;
+    readonly filingStale: () => string;
+    readonly filingUnavailable: () => string;
+    readonly filingAddressUnavailable: () => string;
+    readonly filingDefinitionUnavailable: () => string;
+    readonly filingSubjectUnavailable: () => string;
+    readonly filingChecksUnavailable: () => string;
+    readonly filingSectionCountsUnavailable: () => string;
+    readonly filingFillCount: (vars: Readonly<Record<string, string>>) => string;
+    readonly filingSomeProgressUnavailable: () => string;
+    readonly filingFixCount: (vars: Readonly<Record<string, string>>) => string;
+    readonly filingCheckCount: (vars: Readonly<Record<string, string>>) => string;
+    readonly filingAnswered: () => string;
+    readonly filingStillToAnswer: () => string;
+    readonly filingHasFix: () => string;
+    readonly filingHasCheck: () => string;
+    readonly filingSummaryAnswered: ({ filled, total }: Readonly<Record<string, string>>) => string;
+    readonly filingSummaryToFix: () => string;
+    readonly filingSummaryToCheck: () => string;
+    readonly filingLegendCaption: () => string;
+    readonly filingSections: ({ count }: Readonly<Record<string, string>>) => string;
 };
 /**
  * The table a shell reads. Overrides win; anything the host leaves out falls

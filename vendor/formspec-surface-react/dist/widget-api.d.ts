@@ -32,9 +32,10 @@
  * module-supplied widget navigating the app is a module deciding the app's
  * route graph, and transitions are the shell's (`transitions.ts`).
  */
+import type { DraftActionInvokerResult, SurfaceDraftFence } from './draft-writer.js';
 import type { ReactNode } from 'react';
 import type { HeadingLevel, RouteClass, SurfaceSemanticOutputPublisherScope, WidgetModule } from '@formspec-org/surface';
-import type { ResponseActionInvocationResult, ResponseActionInvokerResult, SubmitResult } from '@formspec-org/react';
+import type { ResponseActionInvocationResult, SubmitResult } from '@formspec-org/react';
 import type { FormDefinition, FormResponse, ResponseActionsDocument } from '@formspec-org/types';
 /** The route a host admits a widget action emission by: identity only, no presented text. */
 export interface SurfaceWidgetRouteIdentity {
@@ -141,6 +142,8 @@ export interface SurfaceWidgetActionExecutorInput {
     input?: SurfaceWidgetActionInput | undefined;
     /** Shell-admitted immutable subject, separate from widget-selected input. */
     responseContext?: SurfaceWidgetResponseContext | undefined;
+    /** Exact revision for the durable filing operation to compare before committing. */
+    draftFence?: Readonly<SurfaceDraftFence> | undefined;
 }
 export interface SurfaceWidgetResponseContext {
     inputName: string;
@@ -156,7 +159,7 @@ export interface SurfaceWidgetResponseContext {
  * identity and exact action resolution; this port owns preconditions,
  * validation, effects, retry, idempotency and durable execution.
  */
-export type SurfaceWidgetActionExecutor = (input: SurfaceWidgetActionExecutorInput) => ResponseActionInvokerResult<SurfaceWidgetActionDetail> | Promise<ResponseActionInvokerResult<SurfaceWidgetActionDetail>>;
+export type SurfaceWidgetActionExecutor = (input: SurfaceWidgetActionExecutorInput) => DraftActionInvokerResult<SurfaceWidgetActionDetail> | Promise<DraftActionInvokerResult<SurfaceWidgetActionDetail>>;
 export interface SurfaceWidgetActionOutcomeKey {
     generation: string;
     source: SurfaceWidgetActionSource;

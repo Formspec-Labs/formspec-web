@@ -26,10 +26,14 @@ import type { NativeScreenerSlotProps, SurfaceScreenerCompletionPolicy } from '.
  */
 import { type DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from 'react';
-import type { ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
+import { type FormEngineOptions } from '@formspec-org/engine';
+import type { ResponseAction, ResponseActionInvocationResult, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
 import { type FormDefinition, type ComponentDocument, type LocaleDocument, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourceSelectionEvidence, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceSemanticOutputScope, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
+import type { DraftSession } from './draft-session.js';
+import type { DraftActionInvoker } from './draft-writer.js';
 import { nextLevel } from './heading.js';
+import { type FilingStatusViewContext } from './FilingStatus.js';
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetRouteContext } from './widget-api.js';
 import { type WidgetActionCoordinator } from './widget-action-runtime.js';
 export type ResolvedDefinitionFormPlan = Extract<SlotPlan<SurfaceWidget>, {
@@ -40,16 +44,19 @@ export type ResolvedDefinitionFormPlan = Extract<SlotPlan<SurfaceWidget>, {
         slotType: 'definition-form';
     }>['definition']>;
 };
-export type SurfaceSaveNotice = 'saved' | 'savedLocally' | 'saveFailed';
+export type SurfaceSaveNotice = 'saved' | 'savedLocally' | 'saveFailed' | 'draftConflict' | 'draftLoaded';
 export interface SurfaceFormSession {
     appearance: 'light' | 'dark';
     previewScope: string | undefined;
+    drafts?: DraftSession | undefined;
+    draftRevision?: number | undefined;
     reportSave: (notice: SurfaceSaveNotice) => void;
     workspace?: {
         slot: string | undefined;
         activeSection: string | undefined;
         hrefForSection: (slot: string, section: string) => string | undefined;
         onActiveSectionChange: (slot: string, section: string) => void;
+        reportSectionTitle?: ((slot: string, title: string | undefined) => void) | undefined;
     } | undefined;
 }
 export interface SurfaceDefinitionFormRenderInput {
@@ -59,7 +66,7 @@ export interface SurfaceDefinitionFormRenderInput {
     responseActionsDocument: ReactResponseActionsDocument | undefined;
     referencesDocuments: readonly ReferencesDocument[];
     ontologyDocuments: readonly OntologyDocument[];
-    /** Host-admitted Component for this exact Definition and route/slot. */
+    /** Host-admitted Component from resolveDefinitionComponent for this Definition and route/slot. */
     componentDocument?: ComponentDocument | undefined;
     /** Host-admitted Locale documents; only matching Definition targets apply. */
     localeDocuments?: readonly LocaleDocument[] | undefined;
@@ -67,11 +74,18 @@ export interface SurfaceDefinitionFormRenderInput {
     appearance?: 'light' | 'dark' | undefined;
     /** Exact local draft scope when the browser app is previewing an edition. */
     previewScope?: string | undefined;
+    draftSession?: DraftSession | undefined;
+    /** A new form still needs its authored seed. An existing draft has its own data. */
+    draftSeed?: 'loading' | 'unavailable' | undefined;
+    draftStrings?: SurfaceStrings | undefined;
+    responseSubject?: FormEngineOptions['responseSubject'];
     /** Report committed saves and failed writes to the single shell live region. */
     reportSave?: ((notice: SurfaceSaveNotice) => void) | undefined;
     activeSection?: string | undefined;
+    sectionNavigationActive?: boolean | undefined;
     hrefForSection?: ((section: string) => string | undefined) | undefined;
     onActiveSectionChange?: ((section: string) => void) | undefined;
+    onSectionTitleChange?: ((title: string | undefined) => void) | undefined;
     /**
      * Data Source payload admitted before mount. Record identity, route/session
      * generation, and owner revision remain separate from Definition field data.
@@ -86,7 +100,7 @@ export interface SurfaceDefinitionFormRenderInput {
      * renderer still owns action resolution and submission; this port lets a
      * generic async Response Actions runtime perform declared durable effects.
      */
-    responseActionInvoker?: ResponseActionInvoker<SubmitResult> | undefined;
+    responseActionInvoker?: DraftActionInvoker | undefined;
     /** Preserve the shell's completed-action navigation boundary. */
     onActionCompleted?: ((action: ResponseAction, result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
 }
@@ -125,8 +139,10 @@ export interface SurfaceSemanticControlPairing {
  */
 export declare function createSurfaceSemanticControlScopeResolver(pairing: SurfaceSemanticControlPairing): SurfaceSemanticControlScopeResolver;
 export interface SurfaceSlotProps {
+    filingStatus?: FilingStatusViewContext | undefined;
     formSession?: SurfaceFormSession | undefined;
     activeSection?: string | undefined;
+    sectionNavigationActive?: boolean | undefined;
     localeDocuments?: readonly LocaleDocument[] | undefined;
     activeLocale?: string | undefined;
     screenerCompletion?: SurfaceScreenerCompletionPolicy | undefined;
@@ -173,7 +189,7 @@ export interface SurfaceSlotProps {
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
     onRuntimeDiagnosticsChange?: ((scope: string, diagnostics: readonly SurfaceDiagnostic[]) => void) | undefined;
     renderDefinitionForm?: SurfaceDefinitionFormRenderer | undefined;
-    definitionActionInvoker?: ResponseActionInvoker<SubmitResult> | undefined;
+    definitionActionInvoker?: DraftActionInvoker | undefined;
     resolveSemanticControlScope?: SurfaceSemanticControlScopeResolver | undefined;
     /** Exact caller-paired identity used only by renderers that publish output. */
     semanticOutputScope?: SurfaceSemanticOutputScope | undefined;
@@ -208,6 +224,6 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * landmark — which is the honest shape for a slot the author did not name.
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, }: SurfaceSlotProps): ReactNode;
+export declare function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, sectionNavigationActive, }: SurfaceSlotProps): ReactNode;
 export declare function renderDefaultDefinitionForm(input: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

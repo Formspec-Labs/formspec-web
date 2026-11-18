@@ -247,6 +247,7 @@ export declare class FormEngine implements IFormEngine {
     private findGoverningRelevanceBindPath;
     private expressionDependencies;
     private collectExpressionDependencies;
+    private variableScopePath;
     private visibleVariableDefinitions;
     private downstreamDependencyEdges;
     private static normalizeDependencyPath;
@@ -256,14 +257,12 @@ export declare class FormEngine implements IFormEngine {
     private shapedEvalResult;
     private _evaluate;
     private evaluateResultForTrigger;
-    private normalizeExpressionForWasm;
     private resolveRepeatPath;
     private clearRepeatSubtree;
     private _createFieldVM;
     /**
      * Locale §3.3.2: resolve `{{}}` in `template` in the binding scope of `itemPath` (form scope when empty),
      * one WASM call per template. Plain text skips the FEL context, so it tracks no evaluation signals.
-     * `bindScope` binds bare `$` to the item, as its Bind does — the scope a validation message resolves in.
      */
     private _interpolate;
     private getDisplayedIssuerPin;

@@ -38,21 +38,27 @@ export function patchValueSignalsFromWasm(options) {
     }
 }
 export function patchDeltaSignalsFromWasm(rx, delta, options) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e;
     for (const [path, relevant] of Object.entries(delta.relevant)) {
-        (_a = options.relevantSignals)[path] ?? (_a[path] = rx.signal(true));
-        options.relevantSignals[path].value = relevant;
+        const existing = options.relevantSignals[path];
+        if (existing) {
+            existing.value = relevant;
+        }
+        else if (!relevant) {
+            // A removed path may leave the non-relevant set. Only create a signal for a false value.
+            options.relevantSignals[path] = rx.signal(false);
+        }
     }
     for (const [path, required] of Object.entries(delta.required)) {
-        (_b = options.requiredSignals)[path] ?? (_b[path] = rx.signal(false));
+        (_a = options.requiredSignals)[path] ?? (_a[path] = rx.signal(false));
         options.requiredSignals[path].value = required;
     }
     for (const [path, readonly] of Object.entries(delta.readonly)) {
-        (_c = options.readonlySignals)[path] ?? (_c[path] = rx.signal(false));
+        (_b = options.readonlySignals)[path] ?? (_b[path] = rx.signal(false));
         options.readonlySignals[path].value = readonly;
     }
     for (const [path, results] of Object.entries(delta.validations)) {
-        (_d = options.validationResults)[path] ?? (_d[path] = rx.signal([]));
+        (_c = options.validationResults)[path] ?? (_c[path] = rx.signal([]));
         options.validationResults[path].value = toValidationResults(results);
     }
     for (const path of delta.removedValidationPaths) {
@@ -61,7 +67,7 @@ export function patchDeltaSignalsFromWasm(rx, delta, options) {
         }
     }
     for (const [shapeId, results] of Object.entries(delta.shapeResults)) {
-        (_e = options.shapeResults)[shapeId] ?? (_e[shapeId] = rx.signal([]));
+        (_d = options.shapeResults)[shapeId] ?? (_d[shapeId] = rx.signal([]));
         options.shapeResults[shapeId].value = toValidationResults(results);
     }
     for (const shapeId of delta.removedShapeIds) {
@@ -72,7 +78,7 @@ export function patchDeltaSignalsFromWasm(rx, delta, options) {
     for (const [name, value] of Object.entries(delta.variables)) {
         const signalKeys = options.variableSignalKeys.get(name) ?? [name];
         for (const key of signalKeys) {
-            (_f = options.variableSignals)[key] ?? (_f[key] = rx.signal(undefined));
+            (_e = options.variableSignals)[key] ?? (_e[key] = rx.signal(undefined));
             options.variableSignals[key].value = normalizeWasmValue(value);
         }
     }

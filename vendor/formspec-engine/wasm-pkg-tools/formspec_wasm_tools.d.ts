@@ -15,7 +15,7 @@ export interface FelExtensionHost {
  * One form's FEL state, resident across calls.
  *
  * `new` takes the Definition's leaf typing; `load` replaces the per-evaluation snapshot;
- * `evaluate`, `evaluateTrace`, `interpolate`, and `prepare` read it by Item path.
+ * `evaluate`, `evaluateTrace`, and `interpolate` read it by Item path.
  */
 export class FelContext {
     free(): void;
@@ -42,10 +42,6 @@ export class FelContext {
      * Context for a Definition: `{ dataTypes: { path: dataType }, excludedValueNull: [path] }`.
      */
     constructor(schema_json: string);
-    /**
-     * Normalizes `expression` for `item_path` (bare `$`, `$group.field`, repeat aliases).
-     */
-    prepare(expression: string, item_path: string, replace_self_ref: boolean): string;
 }
 
 export function analyzeFel(expression: string): string;
@@ -145,7 +141,7 @@ export function evalFelWithTrace(expression: string, fields_json: string): strin
 
 /**
  * Evaluate a Formspec definition against provided data (4-phase batch processor).
- * Returns JSON: { values, validations, nonRelevant, variables, required, readonly }
+ * Returns the camelCase evaluation report with the browser's editing state.
  *
  * `context_json.subjectType` and `context_json.subjectKeys` supply the current Response's subject.
  * `extensions` resolves Definition calls to host extension functions (Core §3.12).
@@ -257,12 +253,6 @@ export function parseRegistry(registry_json: string): string;
 export function planSchemaValidation(doc_json: string, document_type_override?: string | null): string;
 
 /**
- * Normalize FEL source for host evaluation (bare `$`, repeat qualifiers, repeat aliases).
- * `options_json`: `{ expression, currentItemPath?, replaceSelfRef?, repeatCounts?, valuesByPath? | fieldPaths? }`.
- */
-export function prepareFelExpression(options_json: string): string;
-
-/**
  * Print a FEL expression AST back to normalized source string.
  */
 export function printFel(expression: string): string;
@@ -344,7 +334,6 @@ export interface InitOutput {
     readonly felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly felcontext_load: (a: number, b: number, c: number, d: number) => void;
     readonly felcontext_new: (a: number, b: number, c: number) => void;
-    readonly felcontext_prepare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly formspecWasmSplitAbiVersion: (a: number) => void;
     readonly generateChangelog: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
@@ -362,7 +351,6 @@ export interface InitOutput {
     readonly parseFel: (a: number, b: number) => number;
     readonly parseRegistry: (a: number, b: number, c: number) => void;
     readonly planSchemaValidation: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly prepareFelExpression: (a: number, b: number, c: number) => void;
     readonly printFel: (a: number, b: number, c: number) => void;
     readonly resolveOptionSetsOnDefinition: (a: number, b: number, c: number) => void;
     readonly rewriteFelForAssembly: (a: number, b: number, c: number, d: number, e: number) => void;

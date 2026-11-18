@@ -24,7 +24,7 @@ export { widgetTokenToComponent, KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT
 export { mergeFormPresentationForPlanning } from './form-presentation.js';
 // Layout planner
 export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, ensureValidationSummary, createNodeIdGenerator, preparePlanContext, } from './planner.js';
-export { resolvePageSequence } from './page-sequence.js';
+export { placementCovers, placementKey, resolvePageSequence } from './page-sequence.js';
 export * from './form-progress.js';
 // Anchored overlays (Modal / Popover positioning)
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';

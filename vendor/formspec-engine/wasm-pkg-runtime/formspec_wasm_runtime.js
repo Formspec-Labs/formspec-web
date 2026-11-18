@@ -4,7 +4,7 @@
  * One form's FEL state, resident across calls.
  *
  * `new` takes the Definition's leaf typing; `load` replaces the per-evaluation snapshot;
- * `evaluate`, `evaluateTrace`, `interpolate`, and `prepare` read it by Item path.
+ * `evaluate`, `evaluateTrace`, and `interpolate` read it by Item path.
  */
 export class FelContext {
     __destroy_into_raw() {
@@ -176,33 +176,6 @@ export class FelContext {
             return this;
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Normalizes `expression` for `item_path` (bare `$`, `$group.field`, repeat aliases).
-     * @param {string} expression
-     * @param {string} item_path
-     * @param {boolean} replace_self_ref
-     * @returns {string}
-     */
-    prepare(expression, item_path, replace_self_ref) {
-        let deferred3_0;
-        let deferred3_1;
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-            const len0 = WASM_VECTOR_LEN;
-            const ptr1 = passStringToWasm0(item_path, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-            const len1 = WASM_VECTOR_LEN;
-            wasm.felcontext_prepare(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1, replace_self_ref);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            deferred3_0 = r0;
-            deferred3_1 = r1;
-            return getStringFromWasm0(r0, r1);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-            wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
         }
     }
 }
@@ -570,7 +543,7 @@ export function evalFelWithTrace(expression, fields_json) {
 
 /**
  * Evaluate a Formspec definition against provided data (4-phase batch processor).
- * Returns JSON: { values, validations, nonRelevant, variables, required, readonly }
+ * Returns the camelCase evaluation report with the browser's editing state.
  *
  * `context_json.subjectType` and `context_json.subjectKeys` supply the current Response's subject.
  * `extensions` resolves Definition calls to host extension functions (Core §3.12).
@@ -887,39 +860,6 @@ export function normalizeIndexedPath(path) {
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
         wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * Normalize FEL source for host evaluation (bare `$`, repeat qualifiers, repeat aliases).
- * `options_json`: `{ expression, currentItemPath?, replaceSelfRef?, repeatCounts?, valuesByPath? | fieldPaths? }`.
- * @param {string} options_json
- * @returns {string}
- */
-export function prepareFelExpression(options_json) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(options_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.prepareFelExpression(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
-        var ptr2 = r0;
-        var len2 = r1;
-        if (r3) {
-            ptr2 = 0; len2 = 0;
-            throw takeObject(r2);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
     }
 }
 

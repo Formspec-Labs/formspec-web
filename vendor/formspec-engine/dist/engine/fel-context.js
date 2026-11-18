@@ -1,5 +1,5 @@
 /** @filedesc Schema and per-evaluation snapshot for the WASM-resident FEL context (ad-hoc reads). */
-export function felContextSchema(fieldDataTypes, bindConfigs) {
+export function felContextSchema(fieldDataTypes, bindConfigs, itemPaths) {
     const dataTypes = {};
     for (const [path, dataType] of Object.entries(fieldDataTypes)) {
         if (dataType !== undefined) {
@@ -8,6 +8,7 @@ export function felContextSchema(fieldDataTypes, bindConfigs) {
     }
     return {
         dataTypes,
+        itemPaths,
         excludedValueNull: Object.entries(bindConfigs)
             .filter(([, bind]) => bind.excludedValue === 'null')
             .map(([path]) => path),
@@ -18,46 +19,30 @@ export function felContextSchema(fieldDataTypes, bindConfigs) {
  * the Rust context types leaves from `FelContextSchema.dataTypes` and infers money from `{amount, currency}`.
  */
 export function felContextSnapshot(options) {
-    const values = {
-        ...options.data,
-        ...(options.fullResult?.values ?? {}),
+    const result = options.fullResult;
+    const values = result
+        ? { ...result.values, ...result.preservedValues }
+        : options.data;
+    for (const path of result?.filingOnlyPaths ?? [])
+        delete values[path];
+    const truePaths = (states) => Object.keys(states ?? {}).filter(path => states?.[path] === true);
+    const mips = {
+        invalid: (result?.validations ?? [])
+            .filter(finding => finding.severity === 'error' && finding.path)
+            .map(finding => finding.path),
+        nonRelevant: result?.nonRelevant ?? [],
+        readonly: truePaths(result?.readonly),
+        required: truePaths(result?.required),
     };
-    for (const [path, signalRef] of Object.entries(options.fieldSignals)) {
-        const value = signalRef.value;
-        if (value !== undefined) {
-            values[path] = value;
-        }
-    }
-    const mips = { invalid: [], nonRelevant: [], readonly: [], required: [] };
-    for (const path of Object.keys(options.fieldSignals)) {
-        if (!(options.validationResults[path]?.value ?? []).every((r) => r.severity !== 'error')) {
-            mips.invalid.push(path);
-        }
-        if (options.relevantSignals[path]?.value === false) {
-            mips.nonRelevant.push(path);
-        }
-        if (options.readonlySignals[path]?.value === true) {
-            mips.readonly.push(path);
-        }
-        if (options.requiredSignals[path]?.value === true) {
-            mips.required.push(path);
-        }
-    }
     const repeatCounts = {};
     for (const [path, repeatSignal] of Object.entries(options.repeats)) {
         repeatCounts[path] = repeatSignal.value;
     }
-    const variables = {};
-    for (const variableDef of options.variableDefs) {
-        const scope = variableDef.scope ?? '#';
-        (variables[scope] ?? (variables[scope] = {}))[variableDef.name] =
-            options.variableSignals[`${scope}:${variableDef.name}`]?.value ?? null;
-    }
     return {
         values,
         mips,
-        repeatCounts,
-        variables,
+        repeatCounts: options.fullResult?.repeatCounts ?? repeatCounts,
+        variables: options.fullResult?.scopedVariables ?? {},
         instances: options.instanceData,
         locale: options.locale,
         dateFormats: options.dateFormats,

@@ -20,7 +20,7 @@ export { STATIC_CONTENT_KINDS, planStaticContent, resolveHeadingLevel, resolveRo
 export { planExperienceUnit, } from './experience-unit.js';
 export { planRoute, } from './slot-plan.js';
 export { createDocumentResourceDataSourceLoader, dataSourceAvailableToWidget, loadWidgetDataInputs, resolveDataSourceDescriptor, } from './data-source-loader.js';
-export { createPreviewDefinitionResponseStore, } from './definition-response-store.js';
+export { catalogResponseProjection, createPreviewDefinitionResponseStore, } from './definition-response-store.js';
 export { dataSourceAvailableToDefinitionForm, loadDefinitionFormInitialData, planDefinitionFormInitialData, } from './definition-form-initial-data.js';
 export { createSurfaceSemanticOutputRegistry, } from './semantic-output.js';
 export { planTransitions, responseActionsDocumentForDefinition, slotSuppliedTriggers, } from './transitions.js';

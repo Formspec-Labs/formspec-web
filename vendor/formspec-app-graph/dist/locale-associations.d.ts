@@ -14,6 +14,7 @@ export declare const LOCALE_ASSOCIATION_CODES: {
  * expand aliases or consult an external language registry.
  */
 export declare function normalizeLocaleTag(locale: string): string;
+export declare function compatibleVersionFailure(compatibleVersions: string | undefined, targetVersion: string | undefined): string | undefined;
 /** The Definition URL a Component document renders, under any of its target spellings. */
 export declare function componentTargetUrl(compDoc: JsonRecord | undefined): string | undefined;
 export declare function validateLocaleAssociations(context: AppGraphContext): AppGraphDiagnostic[];

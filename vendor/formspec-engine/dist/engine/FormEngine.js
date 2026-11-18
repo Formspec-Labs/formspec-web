@@ -18,7 +18,7 @@ import { validateInstanceDataAgainstSchema } from './instance-schema.js';
 import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignalsFromWasm, } from './reactive-patches.js';
 import { clearRepeatIndexedSubtree, snapshotRepeatRow, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectRelevantValidationResults, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
-import { mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
+import { mergeWasmEvalWithExternalValidations, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
 import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { collectSeedFromGroups, repeatHasHostData, resolvePrePopulateFromInstance, } from './instance-seeding.js';
@@ -121,7 +121,7 @@ export class FormEngine {
         this.initializeInstances();
         this.initializeBindConfigs(this.definition.items);
         this.rejectInstancePathBinds();
-        validateVariableDefinitionCycles(this._variableDefs);
+        validateVariableDefinitionCycles(this._variableDefs, scope => this.variableScopePath(scope));
         validateCalculateBindCycles(this._bindConfigs);
         this.registerItems(this.definition.items);
         if (options.draftSnapshot) {
@@ -248,8 +248,14 @@ export class FormEngine {
         return this._bindConfigs[toBasePath(path)]?.disabledDisplay ?? 'hidden';
     }
     getVariableValue(name, scopePath) {
-        const visible = visibleScopedVariableValues(scopePath, this._variableDefs, this.variableSignals);
-        return visible[name];
+        this._evaluationVersion.value;
+        const scopes = this._fullResult?.scopedVariables ?? {};
+        const path = scopePath.split('.');
+        const prefixes = path.map((_, index) => path.slice(0, index + 1).join('.'));
+        if (!['#', ...prefixes].some(scope => Object.prototype.hasOwnProperty.call(scopes[scope] ?? {}, name))) {
+            return undefined;
+        }
+        return this.compileExpression(`@${name}`, scopePath)();
     }
     /** Appends a row and returns its index; `undefined` when the path is not repeatable or already at `maxRepeat` (Core §4.2.2). */
     addRepeatInstance(itemName) {
@@ -404,6 +410,21 @@ export class FormEngine {
                         this._sourceSeedPreservedFields.add(fieldPath);
                 }
             }
+            // The rebuilt signals need their evaluated state even when it matches the old index.
+            const previous = this._previousEvalResult;
+            if (previous) {
+                const prefix = `${path}[`;
+                // The evaluator pads phantom rows below minRepeat (fs-i731). Keep their prior state.
+                const keepPath = (fieldPath) => !(fieldPath.startsWith(prefix) && Object.prototype.hasOwnProperty.call(this.requiredSignals, fieldPath));
+                const keepFlags = (flags) => Object.fromEntries(Object.entries(flags).filter(([fieldPath]) => keepPath(fieldPath)));
+                this._previousEvalResult = {
+                    ...previous,
+                    nonRelevant: previous.nonRelevant.filter(keepPath),
+                    required: keepFlags(previous.required),
+                    readonly: keepFlags(previous.readonly),
+                    validations: previous.validations.filter(({ path: resultPath, shapeId }) => shapeId || keepPath(resultPath)),
+                };
+            }
             this.structureVersion.value += 1;
         });
     }
@@ -413,7 +434,7 @@ export class FormEngine {
             this.instanceVersion.value;
             this.structureVersion.value;
             // compileExpression is a public API — propagate errors (unlike internal evaluation).
-            return parseJsonExact(this.felContext().evaluate(expression, currentItemName, false, this.nowISO(), this._extensionFunctions)).value;
+            return parseJsonExact(this.felContext().evaluate(expression, currentItemName, true, this.nowISO(), this._extensionFunctions)).value;
         };
     }
     setValue(name, value, options = {}) {
@@ -562,14 +583,14 @@ export class FormEngine {
             return [];
         }
         const version = this._evaluationVersion.value;
-        const cached = this._derivationTraceCache.get(basePath);
+        const cached = this._derivationTraceCache.get(path);
         if (cached && cached.version === version) {
             return cached.trace.map((step) => cloneValue(step));
         }
         try {
-            const result = parseJsonExact(this.felContext().evaluateTrace(calculate, basePath, false, this.nowISO(), this._extensionFunctions));
+            const result = parseJsonExact(this.felContext().evaluateTrace(calculate, path, true, this.nowISO(), this._extensionFunctions));
             const trace = Array.isArray(result.trace) ? result.trace : [];
-            this._derivationTraceCache.set(basePath, {
+            this._derivationTraceCache.set(path, {
                 version,
                 trace: trace.map((step) => cloneValue(step)),
             });
@@ -1401,21 +1422,14 @@ export class FormEngine {
         if (!this._felContext) {
             this._felContext = {
                 key: '',
-                handle: wasmCreateFelContext(felContextSchema(this._fieldDataTypes, this._bindConfigs)),
+                handle: wasmCreateFelContext(felContextSchema(this._fieldDataTypes, this._bindConfigs, [...this._groupItems.keys()].filter(path => !path.includes('[')))),
             };
         }
         if (this._felContext.key !== key) {
             this._felContext.handle.load(JSON.stringify(felContextSnapshot({
                 data: this._data,
                 fullResult: this._fullResult,
-                fieldSignals: this.signals,
-                validationResults: this.validationResults,
-                relevantSignals: this.relevantSignals,
-                readonlySignals: this.readonlySignals,
-                requiredSignals: this.requiredSignals,
                 repeats: this.repeats,
-                variableDefs: this._variableDefs,
-                variableSignals: this.variableSignals,
                 instanceData: this.instanceData,
                 locale: this.felLocale(),
                 dateFormats: this._localeStore.dateFormats() ?? undefined,
@@ -1459,8 +1473,7 @@ export class FormEngine {
     collectExpressionDependencies(expression, currentPath, seenVariables) {
         const dependencies = new Set();
         try {
-            const normalized = this.normalizeExpressionForWasm(expression, currentPath);
-            for (const dependency of getFELDependencies(normalized)
+            for (const dependency of getFELDependencies(expression)
                 .map(FormEngine.normalizeDependencyPath)
                 .filter((dependency) => dependency.length > 0)) {
                 dependencies.add(dependency);
@@ -1470,7 +1483,7 @@ export class FormEngine {
             // Static dependency extraction is best-effort; callers treat missing deps as no impact.
         }
         for (const variableDef of this.visibleVariableDefinitions(expression, currentPath)) {
-            const scope = variableDef.scope ?? '#';
+            const scope = this.variableScopePath(variableDef.scope);
             const key = `${scope}:${variableDef.name}`;
             if (seenVariables.has(key)) {
                 continue;
@@ -1482,6 +1495,15 @@ export class FormEngine {
             }
         }
         return dependencies;
+    }
+    variableScopePath(scope = '#') {
+        if (scope === '#' || this._groupItems.has(scope))
+            return scope;
+        for (const [path, item] of this._groupItems) {
+            if (!path.includes('[') && item.key === scope)
+                return path;
+        }
+        return scope;
     }
     visibleVariableDefinitions(expression, currentPath) {
         let names;
@@ -1498,7 +1520,7 @@ export class FormEngine {
             let visible;
             for (const scope of scopes) {
                 for (const variableDef of this._variableDefs) {
-                    if (variableDef.name === name && (variableDef.scope ?? '#') === scope) {
+                    if (variableDef.name === name && this.variableScopePath(variableDef.scope) === scope) {
                         visible = variableDef;
                     }
                 }
@@ -1640,15 +1662,6 @@ export class FormEngine {
             subjectKeys: this._responseSubject?.keys,
         }), this._extensionFunctions));
     }
-    normalizeExpressionForWasm(expression, currentItemPath = '', replaceSelfRef = false) {
-        return normalizeExpressionForWasmEvaluation({
-            expression,
-            currentItemPath,
-            replaceSelfRef,
-            repeats: this.repeats,
-            fieldSignals: this.signals,
-        });
-    }
     resolveRepeatPath(itemName) {
         return this.repeats[itemName] ? itemName : toBasePath(itemName);
     }
@@ -1718,20 +1731,19 @@ export class FormEngine {
             setFieldValue: (value, options) => this.setValue(path, value, options),
             getWriteSource: () => { var _a; return ((_a = this.writeSources)[path] ?? (_a[path] = this._rx.signal(null))); },
             interpolate: (template) => this._interpolate(template, path),
-            interpolateMessage: (template) => this._interpolate(template, path, true),
+            interpolateMessage: (template) => this._interpolate(template, path),
         });
         this._fieldViewModels[path] = vm;
     }
     /**
      * Locale §3.3.2: resolve `{{}}` in `template` in the binding scope of `itemPath` (form scope when empty),
      * one WASM call per template. Plain text skips the FEL context, so it tracks no evaluation signals.
-     * `bindScope` binds bare `$` to the item, as its Bind does — the scope a validation message resolves in.
      */
-    _interpolate(template, itemPath = '', bindScope = false) {
+    _interpolate(template, itemPath = '') {
         if (!template.includes('{{')) {
             return template;
         }
-        return parseJsonExact(this.felContext().interpolate(template, itemPath, bindScope, this.nowISO(), this._extensionFunctions)).text;
+        return parseJsonExact(this.felContext().interpolate(template, itemPath, true, this.nowISO(), this._extensionFunctions)).text;
     }
     getDisplayedIssuerPin() {
         if (this._resolvedIssuer

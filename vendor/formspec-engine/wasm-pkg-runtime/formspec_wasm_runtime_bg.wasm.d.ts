@@ -19,7 +19,6 @@ export const felcontext_evaluateTrace: (a: number, b: number, c: number, d: numb
 export const felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
 export const felcontext_load: (a: number, b: number, c: number, d: number) => void;
 export const felcontext_new: (a: number, b: number, c: number) => void;
-export const felcontext_prepare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const formspecWasmSplitAbiVersion: (a: number) => void;
 export const getFelDependencies: (a: number, b: number, c: number) => void;
 export const interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
@@ -28,7 +27,6 @@ export const isValidFelIdentifier: (a: number, b: number) => number;
 export const itemAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
 export const itemLocationAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
 export const normalizeIndexedPath: (a: number, b: number, c: number) => void;
-export const prepareFelExpression: (a: number, b: number, c: number) => void;
 export const resolveOptionSetsOnDefinition: (a: number, b: number, c: number) => void;
 export const sanitizeFelIdentifier: (a: number, b: number, c: number) => void;
 export const __wbindgen_export: (a: number, b: number) => number;

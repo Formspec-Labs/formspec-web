@@ -27,7 +27,7 @@ function sourceBucket(source) {
     }
     return { source, draft, selection, invocationFingerprints: new Map(), responses: [] };
 }
-function catalogProjection(schema, cardinality) {
+export function catalogResponseProjection(schema, cardinality) {
     const shape = schema;
     const properties = cardinality === "latest-per-subject" ? shape?.items?.properties : shape?.properties;
     if (properties && typeof properties === "object" && !Array.isArray(properties)) {
@@ -76,7 +76,7 @@ export function createPreviewDefinitionResponseStore(catalogs, options) {
             if (context?.upstreamSubject === undefined)
                 return { status: "unavailable" };
             const { upstreamSubject, dispositions, pin } = context;
-            const projection = draft ? undefined : catalogProjection(source.schema, selection.cardinality);
+            const projection = draft ? undefined : catalogResponseProjection(source.schema, selection.cardinality);
             return options.selectResponses(responses, selection, {
                 upstreamSubject,
                 ...(dispositions !== undefined && { dispositions }),

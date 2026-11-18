@@ -30,10 +30,11 @@ import type { WidgetRegistry } from './registry.js';
 import type { DataSourceCatalogHandle } from './data-source-loader.js';
 import type { MappingDocumentHandle } from './definition-form-initial-data.js';
 import type { ExperienceDocumentHandle } from './experience-unit.js';
-import { type SlotPlan } from './slot-plan.js';
+import { type SlotPlan, type SurfaceDefinitionComponentResolver } from './slot-plan.js';
 import type { HeadingLevel, SurfaceStaticAssetResolver } from './static-content.js';
 import type { SurfaceStringOverrides, SurfaceStrings } from './strings.js';
 import type { ThemeAuthority, ThemeGrant } from './theme-authority.js';
+import type { FilingSectionLocaleLookup } from './filing-status.js';
 import { type PlannedTransition, type ResponseActionsDocumentLike, type TransitionConditionEvaluator } from './transitions.js';
 export interface SurfaceRoutePlanInput<TComponent> {
     handle: SurfaceRouteHandle;
@@ -51,6 +52,8 @@ export interface SurfaceRoutePlanInput<TComponent> {
     mappings?: readonly MappingDocumentHandle[] | undefined;
     /** Exact manifest URL for the matched Surface document. */
     surfaceRef?: string | undefined;
+    resolveDefinitionComponent?: SurfaceDefinitionComponentResolver | undefined;
+    resolveDefinitionLocaleString?: FilingSectionLocaleLookup | undefined;
     responseActions?: readonly ResponseActionsDocumentLike[] | undefined;
     themeAuthority: ThemeAuthority;
     /** Whether the host supplied a Response Actions executor. Never assumed. */

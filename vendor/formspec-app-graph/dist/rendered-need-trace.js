@@ -1,7 +1,8 @@
 /** @filedesc Opt-in strict validation from every authored render node to an adopted, current Need. */
+import { Path, PathSegmentKind, } from '@formspec-org/types';
 import { diagnosticSourceForHandle } from './report.js';
 import { NEED_ANCHOR } from './needs-coverage.js';
-import { componentTargetUrl } from './locale-associations.js';
+import { compatibleVersionFailure, componentTargetUrl } from './locale-associations.js';
 import { registryWidgetEntries, resolvedWidgetContributionFromEntries, widgetShape, } from './surface-widgets.js';
 const NEEDS_DOCUMENT_VERSION = '1.0';
 const CONFIG_POINTER_PATTERN = /^(?:|\/(?:\*|(?:[^~/]|~[01])+)(?:\/(?:\*|(?:[^~/]|~[01])+))*)$/;
@@ -11,6 +12,7 @@ export const RENDERED_NEED_TRACE_CODES = {
     unresolved: 'APP-GRAPH-RENDERED-NEED-UNRESOLVED',
     nonAdopted: 'APP-GRAPH-RENDERED-NEED-NON-ADOPTED',
     stale: 'APP-GRAPH-RENDERED-NEED-STALE',
+    redundant: 'APP-GRAPH-RENDERED-NEED-REDUNDANT',
     scopeUnknown: 'APP-GRAPH-RENDERED-NODE-SCOPE-UNKNOWN',
     inventoryInvalid: 'APP-GRAPH-RENDERED-NODE-INVENTORY-INVALID',
     navigationImplicit: 'APP-GRAPH-RENDERED-NAVIGATION-IMPLICIT',
@@ -101,9 +103,10 @@ function directConfigAnchors(node, pointer) {
     }
     return anchors;
 }
-function sourceIdentity(handle) {
+function sourceIdentity(handle, jsonPointer) {
     return {
         artifactSlot: handle.slot,
+        jsonPointer,
         artifactKind: handle.artifactKind,
         source: handle.source,
         ref: handle.ref ? { ...handle.ref } : undefined,
@@ -155,7 +158,7 @@ function nodeLabel(node, fallback) {
 function generationNode(handle, kind, pointer, node, fallback) {
     const { anchors, invalidAnchors } = classifiedAnchors(directGenerationAnchors(node, pointer));
     return {
-        source: sourceIdentity(handle),
+        source: sourceIdentity(handle, pointer),
         kind,
         pointer,
         label: nodeLabel(node, fallback),
@@ -166,7 +169,7 @@ function generationNode(handle, kind, pointer, node, fallback) {
 function siblingGenerationNode(handle, kind, pointer, node, fallback, generationValue, generationPointer) {
     const { anchors, invalidAnchors } = classifiedAnchors(generationObjectAnchors(generationValue, generationPointer));
     return {
-        source: sourceIdentity(handle),
+        source: sourceIdentity(handle, pointer),
         kind,
         pointer,
         label: nodeLabel(node, fallback),
@@ -179,7 +182,7 @@ function registrySource(entry) {
 }
 function failedInventoryNode(handle, kind, pointer, label, code, message, reason, relatedSources = [], details = {}) {
     return {
-        source: sourceIdentity(handle),
+        source: sourceIdentity(handle, pointer),
         kind,
         pointer,
         label,
@@ -288,7 +291,7 @@ function inventoriedConfigTraceNodes(handle, binding, config, pointer, entries) 
             claimedPointers.set(match.pointer, kind);
             const { anchors, invalidAnchors } = classifiedAnchors(directConfigAnchors(object, match.pointer));
             out.push({
-                source: sourceIdentity(handle),
+                source: sourceIdentity(handle, match.pointer),
                 kind,
                 pointer: match.pointer,
                 label: nodeLabel(object, match.pointer),
@@ -337,6 +340,25 @@ function surfaceNodes(handle, entries) {
                 if (stringProp(slot, 'slotType') === 'static-content' && binding) {
                     out.push(generationNode(handle, 'surface-static-content', `${slotPointer}/binding`, binding, `${nodeLabel(slot, `slots[${slotIndex}]`)} content`));
                 }
+                if (stringProp(slot, 'slotType') === 'filing-status' && binding) {
+                    const bindingPointer = `${slotPointer}/binding`;
+                    out.push(generationNode(handle, 'surface-filing-status-binding', bindingPointer, binding, 'Filing tracker'));
+                    if (Array.isArray(binding.groups))
+                        binding.groups.forEach((rawGroup, groupIndex) => {
+                            const group = record(rawGroup);
+                            if (!group)
+                                return;
+                            const groupPointer = `${bindingPointer}/groups/${groupIndex}`;
+                            out.push(generationNode(handle, 'surface-filing-status-group', groupPointer, group, stringProp(group, 'label') ?? `groups[${groupIndex}]`));
+                            if (Array.isArray(group.forms))
+                                group.forms.forEach((rawEntry, entryIndex) => {
+                                    const entry = record(rawEntry);
+                                    if (!entry)
+                                        return;
+                                    out.push(generationNode(handle, 'surface-filing-status-entry', `${groupPointer}/forms/${entryIndex}`, entry, stringProp(entry, 'routeRef') ?? `forms[${entryIndex}]`));
+                                });
+                        });
+                }
                 if (stringProp(slot, 'slotType') !== 'module-widget')
                     return;
                 const dataBindings = record(binding?.dataBindings);
@@ -381,7 +403,20 @@ function appManifestNodes(handle) {
         return [];
     return [generationNode(handle, 'app-manifest-title', '', document, stringProp(document, 'title') ?? 'App title')];
 }
-function collectDefinitionItems(handle, items, pointer, out, family) {
+function indexBy(index, key, value) {
+    const entries = index.get(key);
+    if (entries)
+        entries.push(value);
+    else
+        index.set(key, [value]);
+}
+function unique(entries) {
+    return entries?.length === 1 ? entries[0] : undefined;
+}
+function optionLocaleKey(prefix, value) {
+    return `${prefix}.${value.replace(/[.\\]/g, '\\$&')}.label`;
+}
+function collectDefinitionItems(handle, items, pointer, form, family, owners, parent, parentPath, setFields) {
     if (!Array.isArray(items))
         return;
     items.forEach((rawItem, index) => {
@@ -389,40 +424,103 @@ function collectDefinitionItems(handle, items, pointer, out, family) {
         if (!item)
             return;
         const itemPointer = `${pointer}/${index}`;
-        out.push(generationNode(handle, `${family}-item`, itemPointer, item, `items[${index}]`));
+        const node = generationNode(handle, `${family}-item`, itemPointer, item, `items[${index}]`);
+        form.nodes.push(node);
+        owners.set(node, [parent]);
+        const key = stringProp(item, 'key');
+        const path = parentPath ? `${parentPath}.${key ?? ''}` : key ?? '';
+        if (key) {
+            const entry = { node, item, path };
+            indexBy(form.itemsByPath, path, entry);
+            indexBy(form.itemsByKey, key, entry);
+        }
+        const setName = stringProp(item, 'optionSet');
+        if (setName && item.type === 'field')
+            indexBy(setFields, setName, node);
         if (Array.isArray(item.options)) {
             item.options.forEach((rawOption, optionIndex) => {
                 const option = record(rawOption);
                 if (!option)
                     return;
-                out.push(generationNode(handle, `${family}-option`, `${itemPointer}/options/${optionIndex}`, option, `options[${optionIndex}]`));
+                const optionNode = generationNode(handle, `${family}-option`, `${itemPointer}/options/${optionIndex}`, option, `options[${optionIndex}]`);
+                form.nodes.push(optionNode);
+                owners.set(optionNode, [node]);
+                const value = stringProp(option, 'value');
+                if (key && value !== undefined) {
+                    indexBy(form.localizedNodes, optionLocaleKey(`${key}.options`, value), optionNode);
+                }
             });
         }
-        collectDefinitionItems(handle, item.children, `${itemPointer}/children`, out, family);
+        collectDefinitionItems(handle, item.children, `${itemPointer}/children`, form, family, owners, node, path, setFields);
     });
 }
-function definitionNodes(handle, family = 'definition') {
+function resolveItems(form, path) {
+    // Core §4.3.3 selectors address instances of the same authored item.
+    const segmentPattern = /^[a-zA-Z][a-zA-Z0-9_]*(?:\[\*\]|\[@index\s*=\s*[1-9]\d*\])?$/;
+    if (!path || !path.split('.').every((segment) => segmentPattern.test(segment)))
+        return [];
+    const parsed = Path.parse(path);
+    let itemPath = '';
+    for (const segment of parsed.segments) {
+        if (segment.kind === PathSegmentKind.Exact) {
+            itemPath = itemPath ? `${itemPath}.${segment.key}` : segment.key;
+        }
+        else if (!unique(form.itemsByPath.get(itemPath))?.item.repeatable) {
+            return [];
+        }
+    }
+    return form.itemsByPath.get(itemPath) ?? [];
+}
+function targetedOwners(form, path) {
+    return path === '#' ? [form.root] : resolveItems(form, path).map(({ node }) => node);
+}
+function collectFormNodes(handle, family, owners) {
     const document = record(handle.document);
     if (!document)
-        return [];
-    const out = [
-        generationNode(handle, `${family}-document`, '', document, stringProp(document, 'title') ?? (family === 'screener' ? 'Screener' : 'Definition')),
-    ];
-    collectDefinitionItems(handle, document.items, '/items', out, family);
+        return undefined;
+    const root = generationNode(handle, `${family}-document`, '', document, family === 'screener' ? 'Screener' : 'Definition');
+    const form = {
+        root, nodes: [root], itemsByPath: new Map(), itemsByKey: new Map(), localizedNodes: new Map(),
+        constraintMessages: new Map(), componentsById: new Map(),
+    };
+    const setFields = new Map();
+    collectDefinitionItems(handle, document.items, '/items', form, family, owners, root, '', setFields);
     if (Array.isArray(document.binds)) {
+        const bindsByItemPath = new Map();
+        const constraintPaths = new Set();
         document.binds.forEach((rawBind, bindIndex) => {
             const bind = record(rawBind);
             if (!bind)
                 return;
-            out.push(generationNode(handle, `${family}-bind`, `/binds/${bindIndex}`, bind, stringProp(bind, 'path') ?? `binds[${bindIndex}]`));
+            const path = stringProp(bind, 'path');
+            const node = generationNode(handle, `${family}-bind`, `/binds/${bindIndex}`, bind, path ?? `binds[${bindIndex}]`);
+            form.nodes.push(node);
+            const targets = resolveItems(form, path);
+            owners.set(node, targets.map((target) => target.node));
+            for (const target of targets) {
+                indexBy(bindsByItemPath, target.path, node);
+                if (typeof bind.constraint === 'string' || typeof bind.constraintMessage === 'string') {
+                    constraintPaths.add(target.path);
+                }
+            }
         });
+        // Locale §3.1.4 addresses the effective Bind that Core §4.3.1 merges for the item.
+        for (const [path, binds] of bindsByItemPath) {
+            if (constraintPaths.has(path))
+                form.constraintMessages.set(path, binds);
+        }
     }
     if (Array.isArray(document.shapes)) {
         document.shapes.forEach((rawShape, shapeIndex) => {
             const shape = record(rawShape);
             if (!shape)
                 return;
-            out.push(generationNode(handle, `${family}-shape`, `/shapes/${shapeIndex}`, shape, `shapes[${shapeIndex}]`));
+            const node = generationNode(handle, `${family}-shape`, `/shapes/${shapeIndex}`, shape, `shapes[${shapeIndex}]`);
+            form.nodes.push(node);
+            owners.set(node, targetedOwners(form, stringProp(shape, 'target')));
+            const id = stringProp(shape, 'id');
+            if (id)
+                indexBy(form.localizedNodes, `$shape.${id}.message`, node);
         });
     }
     const optionSets = record(document.optionSets);
@@ -435,11 +533,16 @@ function definitionNodes(handle, family = 'definition') {
                 const option = record(rawOption);
                 if (!option)
                     return;
-                out.push(generationNode(handle, `${family}-option`, `/optionSets/${escapePointerSegment(setName)}/options/${optionIndex}`, option, `${setName}.options[${optionIndex}]`));
+                const node = generationNode(handle, `${family}-option`, `/optionSets/${escapePointerSegment(setName)}/options/${optionIndex}`, option, `${setName}.options[${optionIndex}]`);
+                form.nodes.push(node);
+                owners.set(node, setFields.get(setName) ?? [root]);
+                const value = stringProp(option, 'value');
+                if (value !== undefined)
+                    indexBy(form.localizedNodes, optionLocaleKey(`$optionSet.${setName}`, value), node);
             });
         }
     }
-    return out;
+    return form;
 }
 function themeNodes(handle) {
     const document = record(handle.document);
@@ -460,7 +563,7 @@ function responseActionNodes(handle) {
     });
     return out;
 }
-function referenceNodes(handle) {
+function referenceNodes(handle, form, owners) {
     const document = record(handle.document);
     const references = document?.references;
     const referenceDefs = record(document?.referenceDefs);
@@ -479,14 +582,17 @@ function referenceNodes(handle) {
         if (audience !== 'human' && audience !== 'both')
             return [];
         const { anchors, invalidAnchors } = classifiedAnchors(directGenerationAnchors(reference, pointer));
-        return [{
-                source: sourceIdentity(handle),
-                kind: 'reference-entry',
-                pointer,
-                label: nodeLabel(resolved, `references[${referenceIndex}]`),
-                anchors,
-                invalidAnchors,
-            }];
+        const node = {
+            source: sourceIdentity(handle, pointer),
+            kind: 'reference-entry',
+            pointer,
+            label: nodeLabel(resolved, `references[${referenceIndex}]`),
+            anchors,
+            invalidAnchors,
+        };
+        if (form)
+            owners.set(node, targetedOwners(form, stringProp(resolved, 'target')));
+        return [node];
     });
 }
 function dataSourceNodes(handle) {
@@ -544,16 +650,34 @@ function previewScenarioNodes(handle) {
     }
     return out;
 }
-function collectComponentNodes(handle, value, pointer, out) {
+function collectComponentNodes(handle, value, pointer, out, form, owners, repeatPath) {
     if (Array.isArray(value)) {
-        value.forEach((child, index) => collectComponentNodes(handle, child, `${pointer}/${index}`, out));
+        value.forEach((child, index) => collectComponentNodes(handle, child, `${pointer}/${index}`, out, form, owners, repeatPath));
         return;
     }
     const object = record(value);
     if (!object)
         return;
     if (typeof object.component === 'string') {
-        out.push(generationNode(handle, 'component-node', pointer, object, object.component));
+        const node = generationNode(handle, 'component-node', pointer, object, object.component);
+        out.push(node);
+        if (form) {
+            const id = stringProp(object, 'id');
+            if (id)
+                indexBy(form.componentsById, id, { node, component: object.component });
+            const bind = stringProp(object, 'bind');
+            if (bind) {
+                // Component §4.4 resolves child paths in the current repeat instance.
+                const path = repeatPath ? `${repeatPath}.${bind}` : bind;
+                const targets = bind.includes('[') ? [] : resolveItems(form, path);
+                owners.set(node, targets.map((target) => target.node));
+                const target = unique(targets);
+                if (target?.item.type === 'group' && target.item.repeatable === true
+                    && (object.component === 'DataTable' || object.component === 'Accordion')) {
+                    repeatPath = target.path;
+                }
+            }
+        }
         if (object.component === 'Summary' && Array.isArray(object.items)) {
             object.items.forEach((rawItem, index) => {
                 const item = record(rawItem);
@@ -577,7 +701,7 @@ function collectComponentNodes(handle, value, pointer, out) {
             object.tabLabels.forEach((rawLabel, index) => {
                 const { anchors, invalidAnchors } = classifiedAnchors(generationObjectAnchors(labelGeneration[index], `${pointer}/tabLabelGeneration/${index}`));
                 out.push({
-                    source: sourceIdentity(handle),
+                    source: sourceIdentity(handle, `${pointer}/tabLabels/${index}`),
                     kind: 'component-tab-label',
                     pointer: `${pointer}/tabLabels/${index}`,
                     label: typeof rawLabel === 'string' ? rawLabel : `Tabs.tabLabels[${index}]`,
@@ -588,15 +712,65 @@ function collectComponentNodes(handle, value, pointer, out) {
         }
     }
     for (const [key, child] of Object.entries(object)) {
-        collectComponentNodes(handle, child, `${pointer}/${escapePointerSegment(key)}`, out);
+        collectComponentNodes(handle, child, `${pointer}/${escapePointerSegment(key)}`, out, form, owners, repeatPath);
     }
 }
-function componentNodes(handle) {
+function componentNodes(handle, form, owners) {
     const out = [];
-    collectComponentNodes(handle, handle.document, '', out);
+    collectComponentNodes(handle, handle.document, '', out, form, owners);
     return out;
 }
-function localeNodes(handle) {
+// Locale §3.1.8 properties owned by a Component node itself.
+// Tabs labels, Summary entries and DataTable columns have independent inventory nodes.
+const COMPONENT_LOCALE_PROPERTIES = new Map([
+    ['Page', ['title', 'description']],
+    ['Heading', ['text']], ['Text', ['text']], ['Alert', ['text']], ['Badge', ['text']],
+    ['Divider', ['label']], ['ProgressBar', ['label']], ['Card', ['title', 'subtitle']],
+    ['Collapsible', ['title']], ['Panel', ['title']], ['ConditionalGroup', ['fallback']],
+    ['ActionButton', ['label', 'pendingLabel']], ['Modal', ['title', 'triggerLabel']], ['Popover', ['triggerLabel']],
+    ['Select', ['placeholder']], ['NumberInput', ['placeholder']], ['DatePicker', ['placeholder']],
+    ['MoneyInput', ['placeholder']], ['TextInput', ['placeholder', 'prefix', 'suffix']],
+]);
+function localizedOwners(form, key, owners) {
+    if (/^\$form\.(title|description)(@[^.]+)?$/.test(key))
+        return [form.root];
+    if (key.startsWith('$shape.') || key.startsWith('$optionSet.')) {
+        const matches = form.localizedNodes.get(key);
+        return matches?.length === 1 ? matches : undefined;
+    }
+    const componentKey = /^\$component\.([^.]+)\.(\w+|labels\[\d+\])(?:@[^.]+)?$/.exec(key);
+    if (componentKey) {
+        const target = unique(form.componentsById.get(componentKey[1]));
+        if (!target || !owners.has(target.node))
+            return undefined;
+        const property = componentKey[2];
+        const localizable = target.component === 'Accordion'
+            ? /^labels\[\d+\]$/.test(property)
+            : COMPONENT_LOCALE_PROPERTIES.get(target.component)?.includes(property);
+        return localizable ? [target.node] : undefined;
+    }
+    const itemKey = /^([a-zA-Z][a-zA-Z0-9_]*)\.(.+)$/.exec(key);
+    if (!itemKey)
+        return undefined;
+    const [, bareKey, property] = itemKey;
+    const item = unique(form.itemsByKey.get(bareKey));
+    if (!item || !property)
+        return undefined;
+    if (property === 'constraintMessage')
+        return form.constraintMessages.get(item.path);
+    if (/^(label|hint|description)(@[^.]+)?$|^(rowLabel|addLabel|removeLabel|helpLabel|requiredMessage)$|^errors\.[^.]+$/.test(property))
+        return [item.node];
+    if (property.startsWith('options.') && property.endsWith('.label')) {
+        const optionSet = stringProp(item.item, 'optionSet');
+        const optionKey = optionSet ? `$optionSet.${optionSet}.${property.slice('options.'.length)}` : key;
+        const matches = form.localizedNodes.get(optionKey);
+        if (matches?.length !== 1)
+            return undefined;
+        return optionSet ? [item.node] : matches;
+    }
+    return undefined;
+}
+function localeNodes(handle, form, owners) {
     const document = record(handle.document);
     const strings = record(document?.strings);
     const stringGeneration = record(document?.stringGeneration);
@@ -604,14 +778,19 @@ function localeNodes(handle) {
         return [];
     return Object.keys(strings).sort().map((key) => {
         const { anchors, invalidAnchors } = classifiedAnchors(generationObjectAnchors(stringGeneration?.[key], `/stringGeneration/${escapePointerSegment(key)}`));
-        return {
-            source: sourceIdentity(handle),
+        const pointer = `/strings/${escapePointerSegment(key)}`;
+        const node = {
+            source: sourceIdentity(handle, pointer),
             kind: 'locale-string',
-            pointer: `/strings/${escapePointerSegment(key)}`,
+            pointer,
             label: key,
             anchors,
             invalidAnchors,
         };
+        const localized = form && localizedOwners(form, key, owners);
+        if (localized)
+            owners.set(node, localized);
+        return node;
     });
 }
 function handleUrl(handle) {
@@ -678,7 +857,7 @@ function experienceUnitTitleNodes(context, handle) {
             })
             : [];
         return [{
-                source: sourceIdentity(handle),
+                source: sourceIdentity(handle, `/units/${unitIndex}/title`),
                 kind: 'experience-unit-title',
                 pointer: `/units/${unitIndex}/title`,
                 label: title,
@@ -688,22 +867,46 @@ function experienceUnitTitleNodes(context, handle) {
             }];
     });
 }
-/**
- * Enumerate every authored node that can render in the normal product.
- *
- * This is the authoritative inventory used by strict rendered-Need validation.
- * Consumers may inspect it for review or reporting, but must not infer anchors
- * from a parent, sibling, mounted slot, or related Experience unit.
- *
- * Preview scenarios are supplied separately because they are preview-only
- * inputs, not App Manifest members. Pass loaded handles whose documents use
- * `$formspecSurfaceScenario: "0.1"` to preserve exact source identity.
- */
-export function collectRenderedNeedTraceNodes(context, previewScenarios = []) {
+function collectTraceGraph(context, previewScenarios) {
     const registryEntries = registryWidgetEntries(context);
     const handles = context.handles.some((handle) => handle === context.manifest)
         ? context.handles
         : [context.manifest, ...context.handles];
+    const owners = new Map();
+    const forms = new Map();
+    const formsByTarget = new Map();
+    for (const handle of handles) {
+        const kind = handle.artifactKind;
+        if (handle.status !== 'loaded' || (kind !== 'definition' && kind !== 'screener'))
+            continue;
+        const form = collectFormNodes(handle, kind, owners);
+        if (!form)
+            continue;
+        forms.set(handle, form);
+        const document = record(handle.document);
+        const url = stringProp(document, 'url');
+        const version = stringProp(document, 'version');
+        if (url && (!handle.ref?.url || handle.ref.url === url)
+            && (!handle.ref?.version || handle.ref.version === version)) {
+            indexBy(formsByTarget, `${kind}:${url}`, { form, version });
+        }
+    }
+    const targetForm = (kind, url, target) => {
+        if (!url || (kind !== 'definition' && kind !== 'screener'))
+            return undefined;
+        const candidates = formsByTarget.get(`${kind}:${url}`);
+        const compatibleVersions = stringProp(target, 'compatibleVersions');
+        return unique(candidates?.filter(({ version }) => !compatibleVersionFailure(compatibleVersions, version)))?.form;
+    };
+    // Register Component nodes before Locales, regardless of manifest load order.
+    const components = new Map();
+    for (const handle of handles) {
+        if (handle.status !== 'loaded' || handle.artifactKind !== 'component')
+            continue;
+        const doc = record(handle.document);
+        const target = record(doc?.targetDefinition) ?? record(doc?.target);
+        components.set(handle, componentNodes(handle, targetForm('definition', componentTargetUrl(doc), target), owners));
+    }
     const graphNodes = handles.flatMap((handle) => {
         if (handle.status !== 'loaded' || handle.document === undefined)
             return [];
@@ -713,21 +916,24 @@ export function collectRenderedNeedTraceNodes(context, previewScenarios = []) {
             case 'surface':
                 return surfaceNodes(handle, registryEntries);
             case 'definition':
-                return definitionNodes(handle);
             case 'screener':
-                return definitionNodes(handle, 'screener');
+                return forms.get(handle)?.nodes ?? [];
             case 'theme':
                 return themeNodes(handle);
             case 'responseActions':
                 return responseActionNodes(handle);
-            case 'references':
-                return referenceNodes(handle);
+            case 'references': {
+                const target = record(record(handle.document)?.targetDefinition);
+                return referenceNodes(handle, targetForm('definition', stringProp(target, 'url'), target), owners);
+            }
             case 'dataSources':
                 return dataSourceNodes(handle);
             case 'component':
-                return componentNodes(handle);
-            case 'locale':
-                return localeNodes(handle);
+                return components.get(handle) ?? [];
+            case 'locale': {
+                const target = record(record(handle.document)?.target);
+                return localeNodes(handle, targetForm(stringProp(target, 'kind'), stringProp(target, 'url'), target), owners);
+            }
             case 'experience':
                 return experienceUnitTitleNodes(context, handle);
             default:
@@ -739,12 +945,111 @@ export function collectRenderedNeedTraceNodes(context, previewScenarios = []) {
             return [];
         return previewScenarioNodes(handle);
     });
-    return [...graphNodes, ...scenarioNodes];
+    return { nodes: [...graphNodes, ...scenarioNodes], owners };
+}
+const EMPTY_TRACE = { pins: new Map(), via: new Set(), missingRoots: new Set(), malformed: false };
+function unionTraces(traces) {
+    const distinct = new Set(traces);
+    if (distinct.size <= 1)
+        return traces[0] ?? EMPTY_TRACE;
+    const pins = new Map();
+    const via = new Set();
+    const missingRoots = new Set();
+    let malformed = false;
+    for (const trace of distinct) {
+        for (const [pin, id] of trace.pins)
+            pins.set(pin, id);
+        for (const node of trace.via)
+            via.add(node);
+        for (const node of trace.missingRoots)
+            missingRoots.add(node);
+        malformed || (malformed = trace.malformed);
+    }
+    return { pins, via, missingRoots, malformed };
+}
+function compareCodePoints(left, right) {
+    for (let index = 0; index < left.length && index < right.length;) {
+        const a = left.codePointAt(index);
+        const b = right.codePointAt(index);
+        if (a !== b)
+            return a - b;
+        index += a > 0xffff ? 2 : 1;
+    }
+    return left.length - right.length;
+}
+function compareSources(left, right) {
+    return compareCodePoints(left.artifactSlot, right.artifactSlot) || compareCodePoints(left.jsonPointer, right.jsonPointer);
+}
+function sourceKey(source) {
+    return JSON.stringify([source.artifactSlot, source.jsonPointer]);
+}
+function resolveTraces(nodes, owners) {
+    const traces = new Map();
+    const redundant = new Set();
+    const missingDependents = new Map();
+    const effectiveByTrace = new Map();
+    function resolve(node) {
+        const cached = traces.get(node);
+        if (cached)
+            return cached;
+        const parents = owners.get(node) ?? [];
+        const inherited = unionTraces(parents.map(resolve));
+        let trace = inherited;
+        if (nodeCarriesTrace(node)) {
+            const pins = new Map(node.anchors.map((anchor) => [anchor.raw, anchor.needId]));
+            for (const ref of node.typedNeedRefs ?? [])
+                pins.set(`need:${ref.needId}`, ref.needId);
+            const malformed = node.invalidAnchors.length > 0;
+            if (!malformed && !inherited.malformed && inherited.missingRoots.size === 0
+                && pins.size === inherited.pins.size && [...pins.keys()].every((pin) => inherited.pins.has(pin))) {
+                redundant.add(node);
+            }
+            trace = { ...EMPTY_TRACE, pins, via: new Set([node]), malformed };
+        }
+        else if (parents.length === 0 && !node.failure) {
+            trace = { ...EMPTY_TRACE, missingRoots: new Set([node]) };
+        }
+        traces.set(node, trace);
+        return trace;
+    }
+    for (const node of nodes) {
+        for (const root of resolve(node).missingRoots) {
+            if (root === node)
+                continue;
+            const dependents = missingDependents.get(root);
+            if (dependents)
+                dependents.push(node.source);
+            else
+                missingDependents.set(root, [node.source]);
+        }
+    }
+    function effective(node) {
+        const trace = resolve(node);
+        const cached = effectiveByTrace.get(trace);
+        if (cached)
+            return cached;
+        const sources = new Map();
+        for (const { source } of trace.via)
+            sources.set(sourceKey(source), source);
+        const result = {
+            needIds: [...new Set(trace.pins.values())].sort(compareCodePoints),
+            via: [...sources.values()].sort(compareSources),
+        };
+        effectiveByTrace.set(trace, result);
+        return result;
+    }
+    return { effective, redundant, missingDependents };
+}
+/** Each authored render node, its direct citations, and its effective publication trace. */
+export function collectRenderedNeedTraceNodes(context, previewScenarios = []) {
+    const { nodes, owners } = collectTraceGraph(context, previewScenarios);
+    const traces = resolveTraces(nodes, owners);
+    return nodes.map((node) => ({ ...node, effective: traces.effective(node) }));
 }
 function traceDiagnostic(code, message, node, jsonPointer, reason, details, relatedSources) {
     return {
         code,
-        severity: 'error',
+        severity: code === RENDERED_NEED_TRACE_CODES.redundant ? 'warning' : 'error',
         phase: 'cross-artifact',
         origin: 'app-graph-validator',
         message,
@@ -762,18 +1067,18 @@ function traceDiagnostic(code, message, node, jsonPointer, reason, details, rela
         },
     };
 }
-function validateNode(node, needsById, needsRoots) {
+function validateNode(node, needsById, needsRoots, owners, traces) {
     if (node.failure) {
         return [traceDiagnostic(node.failure.code, node.failure.message, node, node.pointer, node.failure.reason, node.failure.details ?? {}, node.failure.relatedSources ?? [])];
     }
-    if (node.anchors.length === 0
-        && node.invalidAnchors.length === 0
-        && (node.typedNeedRefs?.length ?? 0) === 0) {
+    if (!nodeCarriesTrace(node)) {
+        if (owners.get(node)?.length)
+            return [];
         return [traceDiagnostic(RENDERED_NEED_TRACE_CODES.missing, node.kind === 'experience-unit-title'
                 ? `Rendered ${node.kind} '${node.label}' has no direct typed Need reference.`
                 : `Rendered ${node.kind} '${node.label}' has no direct need:<id>@<revision> anchor.`, node, node.pointer, node.kind === 'experience-unit-title'
                 ? 'direct-typed-need-ref-missing'
-                : 'direct-need-anchor-missing', {}, needsRoots)];
+                : 'direct-need-anchor-missing', {}, (traces.missingDependents.get(node) ?? []).sort(compareSources))];
     }
     const diagnostics = [];
     for (const invalid of node.invalidAnchors) {
@@ -839,22 +1144,25 @@ function validateNode(node, needsById, needsRoots) {
             }, [need.source]));
         }
     }
+    if (traces.redundant.has(node)) {
+        diagnostics.push(traceDiagnostic(RENDERED_NEED_TRACE_CODES.redundant, `Rendered ${node.kind} '${node.label}' repeats the Need trace it inherits.`, node, node.pointer, 'direct-need-trace-repeats-inherited', {}, []));
+    }
     return diagnostics;
 }
 /**
  * Strict data-only authoring profile.
  *
- * The caller must pair at least one valid Needs 1.0 document, and every authored
- * node that directly controls product rendering must carry its own
- * `need:<id>@<revision>` trace. A parent node's anchor never covers a child.
- * The target must be unambiguous, adopted, and pinned to its current revision.
+ * Trace roots and overrides carry direct traces. Other Definition and Screener
+ * nodes inherit through the App Graph owner table. The caller pairs a Needs
+ * 1.0 document and each trace resolves to an unambiguous, adopted, current Need.
  *
  * This validator is intentionally not part of AppGraph's built-in set. General
  * Needs coverage remains report-only; callers opt into this error-severity
  * profile through `crossArtifactValidators`.
  */
 export function validateRenderedNeedTrace(context, previewScenarios = []) {
-    return traceDiagnostics(pairedNeedsDocuments(context), collectRenderedNeedTraceNodes(context, previewScenarios));
+    const { nodes, owners } = collectTraceGraph(context, previewScenarios);
+    return traceDiagnostics(pairedNeedsDocuments(context), nodes, owners, resolveTraces(nodes, owners));
 }
 function nodeCarriesTrace(node) {
     return node.anchors.length > 0
@@ -868,7 +1176,7 @@ function nodeCarriesTrace(node) {
  */
 export function runRenderedNeedTrace(context, request) {
     const paired = pairedNeedsDocuments(context);
-    const nodes = collectRenderedNeedTraceNodes(context);
+    const { nodes, owners } = collectTraceGraph(context, []);
     const applies = request.mode === 'required' || paired.length > 0 || nodes.some(nodeCarriesTrace);
     const loaded = (kind) => context.handles.filter((handle) => handle.artifactKind === kind && handle.status === 'loaded');
     const covered = (handle) => {
@@ -895,11 +1203,24 @@ export function runRenderedNeedTrace(context, request) {
                     .flatMap(covered),
             }];
     });
-    return applies
-        ? { diagnostics: traceDiagnostics(paired, nodes), record: { status: 'completed', definitions } }
-        : { diagnostics: [], record: { status: 'not-applicable', definitions } };
+    if (!applies)
+        return { diagnostics: [], record: { status: 'not-applicable', definitions, nodes: [] } };
+    const traces = resolveTraces(nodes, owners);
+    const seen = new Set();
+    const inventory = [...nodes].sort((left, right) => compareSources(left.source, right.source) || compareCodePoints(left.kind, right.kind)).flatMap((node) => {
+        const { source, kind, label } = node;
+        const identity = sourceKey(source);
+        if (seen.has(identity))
+            return [];
+        seen.add(identity);
+        return [{ source, kind, label, effective: traces.effective(node) }];
+    });
+    return {
+        diagnostics: traceDiagnostics(paired, nodes, owners, traces),
+        record: { status: 'completed', definitions, nodes: inventory },
+    };
 }
-function traceDiagnostics(paired, nodes) {
+function traceDiagnostics(paired, nodes, owners, traces) {
     if (paired.length === 0) {
         const first = nodes[0];
         if (!first)
@@ -907,5 +1228,5 @@ function traceDiagnostics(paired, nodes) {
         return [traceDiagnostic(RENDERED_NEED_TRACE_CODES.needsUnpaired, `Strict rendered-Need validation found ${nodes.length} rendered node${nodes.length === 1 ? '' : 's'} but no paired Needs 1.0 document.`, first, first.pointer, 'needs-document-unpaired', { renderedNodeCount: nodes.length }, [])];
     }
     const { byId, roots } = pairedNeeds(paired);
-    return nodes.flatMap((node) => validateNode(node, byId, roots));
+    return nodes.flatMap((node) => validateNode(node, byId, roots, owners, traces));
 }

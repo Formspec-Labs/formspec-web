@@ -1,5 +1,5 @@
 /** @filedesc Plans renderable sections and stable Item ownership in Core page-authority order. */
-import type { ComponentDocument, FormDefinition, ThemeDocument } from '@formspec-org/types';
+import type { ComponentDocument, FormDefinition } from '@formspec-org/types';
 import type { LayoutNode, PlanContext } from './types.js';
 export interface PageSequenceEntry {
     id?: string;
@@ -18,7 +18,7 @@ export interface PageSequenceEntry {
 }
 export interface PageSequenceOptions {
     component?: ComponentDocument;
-    theme?: ThemeDocument;
+    theme?: PlanContext['theme'];
     context?: Pick<PlanContext, 'formPresentation' | 'componentGraph' | 'hostEvidence' | 'isComponentAvailable' | 'nextId' | 'activeBreakpoint'>;
 }
 /** Whether one placement covers every instance of the other placement. */

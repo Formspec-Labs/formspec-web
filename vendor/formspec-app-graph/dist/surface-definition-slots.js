@@ -84,6 +84,15 @@ function undeclaredDiagnostic(surfaceHandle, manifest, slot, declaredUrls) {
         },
     };
 }
+/** Parse a Definition subject key from its route string using the Core I-JSON range. */
+export function parseRouteSubjectKey(dataType, value) {
+    if (dataType === 'string')
+        return value;
+    if (dataType !== 'integer' || !/^(?:0|-?[1-9][0-9]*)$/u.test(value))
+        return undefined;
+    const integer = Number(value);
+    return Number.isSafeInteger(integer) ? integer : undefined;
+}
 function subjectKeyDiagnostics(surface, slot, definition) {
     const declared = record(record(record(definition.document)?.subject)?.keys);
     const bound = record(slot.subjectKeys) ?? {};

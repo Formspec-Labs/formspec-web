@@ -27,7 +27,6 @@ export const felcontext_evaluateTrace: (a: number, b: number, c: number, d: numb
 export const felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
 export const felcontext_load: (a: number, b: number, c: number, d: number) => void;
 export const felcontext_new: (a: number, b: number, c: number) => void;
-export const felcontext_prepare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const formspecWasmSplitAbiVersion: (a: number) => void;
 export const generateChangelog: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
@@ -45,7 +44,6 @@ export const normalizeIndexedPath: (a: number, b: number, c: number) => void;
 export const parseFel: (a: number, b: number) => number;
 export const parseRegistry: (a: number, b: number, c: number) => void;
 export const planSchemaValidation: (a: number, b: number, c: number, d: number, e: number) => void;
-export const prepareFelExpression: (a: number, b: number, c: number) => void;
 export const printFel: (a: number, b: number, c: number) => void;
 export const resolveOptionSetsOnDefinition: (a: number, b: number, c: number) => void;
 export const rewriteFelForAssembly: (a: number, b: number, c: number, d: number, e: number) => void;

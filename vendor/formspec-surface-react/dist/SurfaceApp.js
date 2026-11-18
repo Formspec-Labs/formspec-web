@@ -42,7 +42,9 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * of the way of hosts that already have a router — which every host of any size
  * does. A shell that owned history would be a shell that could not be embedded.
  */
-import { presentedRouteTitle } from './title-presentation.js';
+import { presentedRouteLabel, presentedRouteTitle } from './title-presentation.js';
+import { definitionLocaleLookup } from './browser-locale.js';
+import { activeWorkspaceSlot } from './workspace-navigation.js';
 import { useHostAppearance } from './browser-appearance.js';
 import { deriveSurfaceRuntimeGeneration } from "./runtime-generation.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
@@ -52,6 +54,7 @@ import { createWidgetActionCoordinator } from "./widget-action-runtime.js";
 import { diagnosticListsEqual, useDiagnosticDelivery, } from "./diagnostic-delivery.js";
 import { needTraceAttributes } from "./need-trace.js";
 import { useSurfaceThemeTokens } from "./surface-theme.js";
+import { isPlainLinkClick } from "./browser-location.js";
 export function navigateAfterCompletedAction(transition, routeParams, transitionBindingsOrNavigate, maybeNavigate) {
     if (!transition.target)
         return "refused";
@@ -153,7 +156,6 @@ export function SurfaceAppView(props) {
     const appRoot = useRef(null);
     const main = useRef(null);
     const hostAppearance = useHostAppearance(appRoot, browser !== undefined);
-    const formSession = browser && { ...browser, appearance: hostAppearance ?? browser.appearance };
     const strings = useMemo(() => typeof props.strings === "function"
         ? props.strings
         : resolveSurfaceStrings(props.strings), [props.strings]);
@@ -193,6 +195,8 @@ export function SurfaceAppView(props) {
         screenerVisit.active = true;
         return () => { screenerVisit.active = false; };
     }, [screenerVisit]);
+    const localeDocuments = props.localeDocuments ?? bundle.localeDocuments;
+    const resolveDefinitionLocaleString = useMemo(() => definitionLocaleLookup(localeDocuments, props.activeLocale), [localeDocuments, props.activeLocale]);
     const routePlan = useMemo(() => {
         if (!resolution.match)
             return undefined;
@@ -209,6 +213,8 @@ export function SurfaceAppView(props) {
             dataSources: bundle.dataSources,
             mappings: bundle.mappings,
             surfaceRef: bundle.surfaceRefs?.get(resolution.match.handle.surface),
+            resolveDefinitionComponent: props.resolveDefinitionComponent,
+            resolveDefinitionLocaleString,
             responseActions: bundle.responseActions,
             themeAuthority: model.themeAuthority,
             hasExecutor: props.onFireTransition !== undefined,
@@ -228,6 +234,8 @@ export function SurfaceAppView(props) {
         props.evaluateTransitionCondition,
         props.headingBaseLevel,
         props.staticAssetResolver,
+        props.resolveDefinitionComponent,
+        resolveDefinitionLocaleString,
         strings,
     ]);
     useSurfaceThemeTokens(appRoot, browser ? routePlan?.grant.themeDocument ?? props.platformTheme : undefined);
@@ -317,6 +325,29 @@ export function SurfaceAppView(props) {
         });
         return () => deliver(undefined);
     }, [props.onCurrentRouteStateChange, routePlan, runtimeGeneration]);
+    const [sectionTitles, setSectionTitles] = useState();
+    const reportSectionTitle = useCallback((slot, title) => {
+        setSectionTitles(previous => {
+            if (previous?.generation !== runtimeGeneration && title === undefined)
+                return previous;
+            const bySlot = new Map(previous?.generation === runtimeGeneration ? previous.bySlot : []);
+            if (bySlot.get(slot) === title)
+                return previous;
+            if (title === undefined)
+                bySlot.delete(slot);
+            else
+                bySlot.set(slot, title);
+            return { generation: runtimeGeneration, bySlot };
+        });
+    }, [runtimeGeneration]);
+    const workspace = browser?.workspace;
+    const formSession = browser && {
+        ...browser, appearance: hostAppearance ?? browser.appearance,
+        workspace: workspace && { ...workspace, reportSectionTitle },
+    };
+    const activeSlot = activeWorkspaceSlot(routePlan, workspace?.slot);
+    const sectionTitle = workspace && activeSlot && sectionTitles?.generation === runtimeGeneration
+        ? sectionTitles.bySlot.get(activeSlot) : undefined;
     const appTitle = props.appTitle ?? bundle.title;
     const entryPath = browser?.entryPath;
     const entryHref = entryPath === undefined || !props.resolveNavigationHref
@@ -324,7 +355,7 @@ export function SurfaceAppView(props) {
         : props.resolveNavigationHref(entryPath);
     const brandTrace = needTraceAttributes(generationNeedAnchors(bundle.manifest));
     const routeTitle = browser && routePlan ? presentedRouteTitle(routePlan.handle, props.resolveRouteTitle) : undefined;
-    const title = routeTitle && appTitle ? `${routeTitle} – ${appTitle}` : routeTitle ?? appTitle;
+    const title = [sectionTitle, routeTitle, appTitle].filter(Boolean).join(' – ');
     const match = resolution.match;
     const routeIdentity = browser && JSON.stringify([browser.previewScope, match
             ? [match.handle.surfaceId, match.handle.routeId, match.params]
@@ -346,7 +377,16 @@ export function SurfaceAppView(props) {
                                     event.preventDefault();
                                     onNavigate(entryPath);
                                 }, children: appTitle })
-                            : _jsx("span", { className: "fs-surface-brand", ...brandTrace, children: appTitle }))), browser && (browser.editionPicker || hostAppearance === undefined) && (_jsxs("div", { className: "fs-surface-masthead-controls", children: [browser.editionPicker, hostAppearance === undefined && browser.appearancePicker] })), browser && _jsx("p", { className: "fs-surface-save-notice", role: "status", children: browser.saveNotice })] }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: navigationParams, onNavigate: onNavigate, resolveNavigationHref: props.resolveNavigationHref, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { ref: main, className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, formSession: formSession, screenerCompletion: props.screenerCompletion, screenerInstanceId: screenerVisit.id, localeDocuments: props.localeDocuments ?? props.bundle.localeDocuments, activeLocale: props.activeLocale, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, checkScreenerTarget: screenerDestination, onScreenerTarget: (target) => {
+                            : _jsx("span", { className: "fs-surface-brand", ...brandTrace, children: appTitle }))), browser && (browser.editionPicker || hostAppearance === undefined) && (_jsxs("div", { className: "fs-surface-masthead-controls", children: [browser.editionPicker, hostAppearance === undefined && browser.appearancePicker] })), browser && _jsx("p", { className: "fs-surface-save-notice", role: "status", children: browser.saveNotice })] }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: navigationParams, onNavigate: onNavigate, resolveNavigationHref: props.resolveNavigationHref, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { ref: main, className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, formSession: formSession, filingStatus: {
+                                readSummaries: props.readSummaries,
+                                revision: props.filingDraftRevision,
+                                navigate: (href) => { if (browser)
+                                    void browser.navigate(href);
+                                else
+                                    onNavigate(href); },
+                                formatHref: props.resolveNavigationHref,
+                                resolveRouteTitle: props.resolveRouteTitle,
+                            }, screenerCompletion: props.screenerCompletion, screenerInstanceId: screenerVisit.id, localeDocuments: localeDocuments, activeLocale: props.activeLocale, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, checkScreenerTarget: screenerDestination, onScreenerTarget: (target) => {
                                 const destination = screenerDestination(target);
                                 if (destination.status === 'refused')
                                     return destination;
@@ -377,10 +417,6 @@ function SurfaceDocumentTitle({ title }) {
         return () => { document.title = previous; };
     }, [title]);
     return null;
-}
-function isPlainLinkClick(event) {
-    return !event.defaultPrevented && event.button === 0 &&
-        !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 export function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavigationHref, label, menuLabel, resolveRouteTitle, }) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -425,8 +461,7 @@ export function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavi
     ]));
     return (_jsxs("nav", { className: "fs-surface-nav", "aria-label": label ?? "Pages in this app", "data-navigation-scope": activeNavigationScope, "data-menu-open": menuOpen ? "true" : "false", children: [_jsxs("button", { className: "fs-surface-nav__toggle", type: "button", "aria-expanded": menuOpen, onClick: () => setMenuOpen((open) => !open), ...needTraceAttributes(navigationNeedAnchors), children: [_jsx("span", { children: menuLabel ?? label ?? "Pages in this app" }), _jsx("span", { "aria-hidden": "true", children: menuOpen ? "×" : "☰" })] }), _jsx("div", { className: "fs-surface-nav__content", children: groups.map((group) => (_jsxs("div", { className: "fs-surface-nav__group", children: [showGroupLabels && (_jsx("p", { className: "fs-surface-nav__label", ...needTraceAttributes(group.needAnchors), children: group.label })), _jsx("ul", { className: "fs-surface-nav__list", children: group.routes.map((handle, index) => {
                                 const { href, refusal } = routeHref(handle, routeParams ?? {});
-                                const navigationLabel = handle.route.navigation?.label ??
-                                    presentedRouteTitle(handle, resolveRouteTitle);
+                                const navigationLabel = presentedRouteLabel(handle, resolveRouteTitle);
                                 const navigationAnchors = generationNeedAnchors(handle.route.navigation);
                                 const traceAttributes = needTraceAttributes(handle.route.navigation?.label === undefined
                                     ? mergeNeedAnchors(navigationAnchors, generationNeedAnchors(handle.route))

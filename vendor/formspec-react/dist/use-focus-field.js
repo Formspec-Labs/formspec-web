@@ -26,12 +26,13 @@ export function focusFieldIn(container, path) {
         }
         parent = parent.parentElement;
     }
-    // If inside a hidden tab panel, activate that tab
-    const tabPanel = fieldEl.closest('[role="tabpanel"][hidden]');
-    if (tabPanel) {
-        const tabButton = container.querySelector(`[aria-controls="${tabPanel.id}"]`);
-        tabButton?.click();
+    // The tab selection commits through React. A caller can retry focus after it paints.
+    const hiddenTabs = '[role="tabpanel"][hidden]';
+    for (let tab = fieldEl.closest(hiddenTabs); tab; tab = tab.parentElement?.closest(hiddenTabs) ?? null) {
+        container.querySelector(`[aria-controls="${tab.id}"]`)?.click();
     }
+    if (fieldEl.closest(hiddenTabs))
+        return false;
     // If inside a hidden wizard panel, navigate to that step
     const wizardPanel = fieldEl.closest('.formspec-wizard-panel[hidden]');
     if (wizardPanel) {
@@ -48,11 +49,11 @@ export function focusFieldIn(container, path) {
     if (typeof fieldEl.scrollIntoView === 'function') {
         fieldEl.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
     }
-    const input = fieldEl.querySelector('input, select, textarea, button, [tabindex]');
+    const input = fieldEl.querySelector('input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([disabled])');
     if (!input)
         return false;
     input.focus();
-    return true;
+    return input.ownerDocument.activeElement === input;
 }
 /** Enclosing group/repeat path of an instance path (`a[0].b` → `a[0]` → `a` → `''`). */
 function parentInstancePath(path) {

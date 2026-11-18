@@ -112,3 +112,7 @@ export function useBrowserLocation(fallback = '/') {
     const navigate = useCallback((href) => pushBrowserAddress(href, true), []);
     return [location, navigate];
 }
+export function isPlainLinkClick(event) {
+    return !event.defaultPrevented && event.button === 0 &&
+        !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+}

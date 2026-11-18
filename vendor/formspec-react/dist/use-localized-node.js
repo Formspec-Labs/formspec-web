@@ -29,6 +29,12 @@ const UNCHANGED = signal(null);
 export function plannedTitle(engine, props) {
     const titleBind = typeof props?.titleBind === 'string' ? props.titleBind : undefined;
     const titleKey = typeof props?.titleKey === 'string' ? props.titleKey : undefined;
+    const localeKey = typeof props?.titleLocaleKey === 'string' ? props.titleLocaleKey : undefined;
+    if (localeKey) {
+        if (localeKey.startsWith('$ui.'))
+            return chromeText(engine, localeKey.slice(4));
+        return engine.resolveLocaleString(localeKey, typeof props?.title === 'string' ? props.title : '');
+    }
     return (titleBind && engine.getItemLabelSignal(titleBind)?.value)
         || (titleKey && chromeText(engine, titleKey))
         || undefined;
@@ -55,7 +61,7 @@ export function useLocalizedNode(node) {
         const props = node.props ?? {};
         const id = typeof props.id === 'string' ? props.id : null;
         const groupPath = node.scopeChange && node.bindPath && typeof props.title === 'string' ? node.bindPath : null;
-        const planned = typeof props.titleBind === 'string' || typeof props.titleKey === 'string';
+        const planned = typeof props.titleBind === 'string' || typeof props.titleKey === 'string' || typeof props.titleLocaleKey === 'string';
         if (!id && !groupPath && !planned)
             return UNCHANGED;
         const group = groupPath ? findItemByKey(engine.getDefinition().items ?? [], groupPath) : null;

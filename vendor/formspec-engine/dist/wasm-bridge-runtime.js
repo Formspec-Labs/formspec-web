@@ -120,10 +120,6 @@ export function wasmInterpolateFelTemplate(template, context, extensions) {
 export function wasmInterpolateTemplate(template, evaluate) {
     return parseWasmJson(wasm().interpolateTemplate(template, evaluate));
 }
-/** Normalize FEL source before evaluation (bare `$`, repeat qualifiers, repeat aliases). */
-export function wasmPrepareFelExpression(optionsJson) {
-    return wasm().prepareFelExpression(optionsJson);
-}
 /** Creates a resident FEL context from a Definition's leaf typing and `excludedValue: "null"` binds. */
 export function wasmCreateFelContext(schema) {
     return new (wasm().FelContext)(JSON.stringify(schema));

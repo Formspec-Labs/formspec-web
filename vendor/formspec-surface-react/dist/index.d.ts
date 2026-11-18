@@ -25,3 +25,6 @@ export { deriveSurfaceRuntimeGeneration, type SurfaceRuntimeGenerationInput } fr
 export type { DataSourceRevisionSelector } from './data-source-revision.js';
 export type { SurfaceRouteTitleResolver } from './title-presentation.js';
 export type { SurfaceScreenerCompletionPolicy, SurfaceScreenerCompletion, SurfaceScreenerCompletionRequest } from './screener-completion.js';
+export { createBrowserDraftPort, type BrowserDraftPortOptions } from './browser-draft-port.js';
+export { createDraftWriter, type DraftWriter, type DraftActionInvoker, type DraftActionInvokerResult, type DraftCheckpointPorts, type DraftFencedAction, type DraftWriterOptions, type SurfaceDraftFence } from './draft-writer.js';
+export type { SurfaceDraftStorage } from './draft-session.js';

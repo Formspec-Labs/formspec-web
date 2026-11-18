@@ -1,5 +1,7 @@
 /** @filedesc Surface definition-form slot binding cross-artifact validation against loaded Definitions. */
 import { type AppGraphContext, type AppGraphDiagnostic } from './types.js';
+/** Parse a Definition subject key from its route string using the Core I-JSON range. */
+export declare function parseRouteSubjectKey(dataType: unknown, value: string): string | number | undefined;
 /**
  * Surface `definition-form` slot binding URLs MUST appear in App Manifest
  * `definitions[].url` — every form-bearing slot in an app graph references a

@@ -32,11 +32,13 @@
  *   set is a termination requirement, not an optimisation.
  */
 import { type ScreenerDocumentHandle } from './screener-slot.js';
-import type { FormDefinition, RegistryEntry } from '@formspec-org/types';
+import type { ComponentDocument, FormDefinition, RegistryEntry } from '@formspec-org/types';
 import type { ExperienceDocument } from '@formspec-org/types';
 import { type SurfaceDiagnostic } from './diagnostics.js';
 import type { SurfaceRoute } from './route-path.js';
-import type { SurfaceRouteHandle } from './composition.js';
+import type { SurfaceApp, SurfaceRouteHandle } from './composition.js';
+import { type FilingSectionLocaleLookup, type FilingStatusPlan } from './filing-status.js';
+import type { ThemeAuthority } from './theme-authority.js';
 import { type ExperienceDocumentHandle, type ExperienceUnitPlan } from './experience-unit.js';
 import { type HeadingLevel, type StaticContentPlan, type SurfaceStaticAssetResolver } from './static-content.js';
 import type { WidgetKey, WidgetRegistry, WidgetResolution } from './registry.js';
@@ -61,6 +63,7 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     /** Qualified Data Source plan used before the form engine mounts. */
     initialData?: DefinitionFormInitialDataPlan;
     definition?: FormDefinition;
+    componentDocument?: ComponentDocument;
     subject?: DataSourceSubject;
     registryEntries: readonly RegistryEntry[];
     status: 'ready' | 'unresolved';
@@ -70,6 +73,9 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     allowedTargets: readonly string[];
     status: 'ready' | 'unresolved';
     reason?: string;
+} | {
+    slotType: 'filing-status';
+    tracker: FilingStatusPlan;
 } | {
     slotType: 'experience-unit';
     unit: ExperienceUnitPlan;
@@ -99,10 +105,23 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     slots: readonly SlotPlan<TComponent>[];
     status: 'ready' | 'unresolved' | 'cycle';
 });
+/** Select an already admitted Component for this exact route and form. */
+export type SurfaceDefinitionComponentResolver = (target: {
+    surfaceRef: string | undefined;
+    routeId: string;
+    slotId: string;
+    definition: FormDefinition;
+}) => ComponentDocument | undefined;
 export interface SlotPlanContext<TComponent> {
     handle: SurfaceRouteHandle;
     params?: Readonly<Record<string, string>> | undefined;
     screenerHandles?: readonly ScreenerDocumentHandle[] | undefined;
+    resolveDefinitionComponent?: SurfaceDefinitionComponentResolver | undefined;
+    filingStatus?: {
+        app: SurfaceApp;
+        themeAuthority: ThemeAuthority;
+        resolveDefinitionLocaleString?: FilingSectionLocaleLookup | undefined;
+    };
     experiences: readonly ExperienceDocument[];
     /** Exact manifested source identity for qualified Experience bindings. */
     experienceHandles?: readonly ExperienceDocumentHandle[] | undefined;

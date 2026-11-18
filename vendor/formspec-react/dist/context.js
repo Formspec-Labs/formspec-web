@@ -6,6 +6,7 @@ import { signal } from '@preact/signals-core';
 import { ActionFeedbackProvider } from './action-feedback.js';
 import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, planContains, preparePlanContext, ensureActionButton, ensureValidationSummary, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
+import { planPageMode } from './plan-page-mode';
 import { useSignal } from './use-signal';
 import { chromeText } from './use-chrome-text';
 const platformTheme = buildPlatformTheme();
@@ -16,11 +17,6 @@ const platformTheme = buildPlatformTheme();
 export const admitDefaultFieldHelpUri = admitFieldHelpUri;
 /** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
 export const FormspecContext = createContext(null);
-function pageModeFromPresentation(presentation) {
-    return presentation?.pageMode === 'wizard' || presentation?.pageMode === 'tabs'
-        ? presentation.pageMode
-        : undefined;
-}
 const RESPONSE_ACTION_ID = /^[A-Za-z][A-Za-z0-9-]*$/;
 function record(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -251,12 +247,12 @@ export function FormspecProvider(props) {
         : undefined, [engine, componentDocument]);
     const [showValidationSummaryAttr, setShowValidationSummaryAttr] = useState(false);
     const effectiveShowValidationSummary = showValidationSummary || showValidationSummaryAttr;
-    const layoutPlan = useMemo(() => {
+    const { root: layoutPlan, workspace } = useMemo(() => {
         if (!engine)
-            return null;
+            return { root: null };
         const def = engine.getDefinition();
         const items = def.items || [];
-        const pageMode = pageModeFromPresentation(mergedFormPresentation);
+        const pageMode = mergedFormPresentation?.pageMode;
         const planCtx = preparePlanContext({
             items,
             formPresentation: mergedFormPresentation,
@@ -267,8 +263,14 @@ export function FormspecProvider(props) {
             activeBreakpoint,
             findItem: (key) => findItemByKey(items, key),
         });
+        const paged = pageMode === 'wizard' || pageMode === 'tabs' || pageMode === 'workspace'
+            ? planPageMode(def, planCtx, pageMode)
+            : undefined;
         let root;
-        if (componentDocument?.tree) {
+        if (paged) {
+            root = paged.root;
+        }
+        else if (componentDocument?.tree) {
             root = planComponentTree(componentDocument.tree, planCtx);
         }
         else {
@@ -281,9 +283,6 @@ export function FormspecProvider(props) {
                 props: {},
                 cssClasses: [],
                 children: nodes,
-                pageMode: pageMode && nodes.some((node) => node.component === 'Section')
-                    ? pageMode
-                    : undefined,
             };
         }
         // A submit callback opts in; an invoker fills only an unauthored control layout.
@@ -292,12 +291,12 @@ export function FormspecProvider(props) {
         // authored labels keep visible copy in the Action or its Locale reference.
         if (onSubmit || responseActionInvoker && !planContains(root, 'ActionButton')) {
             for (const action of autoPlacedDefinitionActions(responseActionsDocument, def)) {
-                ensureActionButton(root, planCtx.nextId, { pageMode, actionRef: action.id });
+                ensureActionButton(root, planCtx.nextId, { pageMode: root.pageMode, actionRef: action.id });
             }
         }
         if (effectiveShowValidationSummary)
             ensureValidationSummary(root, planCtx.nextId);
-        return root;
+        return { root, workspace: paged?.workspace };
     }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, responseActionInvoker, effectiveShowValidationSummary, responseActionsDocument, mergedFormPresentation]);
     // §10: surface a finding when the host wires onSubmit but no submit Action
     // is published — otherwise auto-inject silently no-ops.
@@ -362,9 +361,17 @@ export function FormspecProvider(props) {
             return () => engine.dispose();
         }
     }, [engine, externalEngine]);
+    const { activeSection, onActiveSectionChange, sectionNavigationActive, hrefForSection, onSectionTitleChange, updateDocumentTitle } = props;
+    const controlledSection = Object.prototype.hasOwnProperty.call(props, 'activeSection');
+    const workspaceNavigation = useMemo(() => ({
+        ...(controlledSection && { activeSection }),
+        onActiveSectionChange, sectionNavigationActive, hrefForSection, onSectionTitleChange, updateDocumentTitle,
+    }), [controlledSection, activeSection, onActiveSectionChange, sectionNavigationActive, hrefForSection, onSectionTitleChange, updateDocumentTitle]);
     const value = useMemo(() => ({
         engine,
         layoutPlan,
+        workspacePages: workspace,
+        workspaceNavigation,
         components,
         themeDocument: effectiveThemeDocument,
         emitThemeTokens: shouldEmitThemeTokens,
@@ -397,7 +404,7 @@ export function FormspecProvider(props) {
         fieldHelpLabel,
         formPresentation: mergedFormPresentation,
         setShowValidationSummaryAttr,
-    }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation, setShowValidationSummaryAttr]);
+    }), [engine, layoutPlan, workspace, workspaceNavigation, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation, setShowValidationSummaryAttr]);
     return (_jsx(FormspecContext.Provider, { value: value, children: _jsx(ActionFeedbackProvider, { engine: engine, responseId: semanticControlScope?.responseId, renderInstanceId: semanticControlScope?.renderInstanceId, draftSaveFeedback: props.draftSaveFeedback, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }) }));
 }
 /** See `themeScopeRef` — the scope element must not generate a box. */

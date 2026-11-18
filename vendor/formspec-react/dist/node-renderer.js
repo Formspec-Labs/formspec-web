@@ -1,6 +1,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Recursive LayoutNode renderer — dispatches to field or layout components. */
+import { Workspace } from './workspace';
 import { useMemo, useCallback, useEffect, useId, useRef, useState, } from 'react';
 import { signal as createSignal } from '@preact/signals-core';
 import { invokeResponseAction, } from '@formspec-org/engine';
@@ -41,8 +42,11 @@ const FALLBACK_MAP = {
 };
 /** Render a single LayoutNode, recursing into children. */
 export function FormspecNode({ node: plannedNode }) {
+    const { layoutPlan, workspacePages } = useFormspecContext();
     const node = useLocalizedNode(plannedNode);
     const renderChild = useCallback((child) => _jsx(FormspecNode, { node: child }), []);
+    if (plannedNode === layoutPlan && workspacePages)
+        return _jsx(Workspace, { root: node, pages: workspacePages });
     if (node.isRepeatTemplate && node.repeatPath) {
         return _jsx(RepeatGroup, { node: node, renderChild: renderChild });
     }

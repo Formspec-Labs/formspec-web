@@ -6,6 +6,7 @@ import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, T
 import { admitFieldHelpUri } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
 import type { SemanticControlScope, SemanticResponseBinding } from './semantic-controls';
+import { type WorkspacePage } from './plan-page-mode';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
 export type { ActionRefFinding, ActionResolution, ResponseAction, ResponseActionInvocationResult, };
 export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
@@ -110,12 +111,28 @@ export interface FormspecContextValue {
     fieldHelpLabel: string;
     /** Effective formPresentation (definition merged with component document). */
     formPresentation?: Record<string, unknown>;
+    /** @internal Shared workspace pages and the optional navigation host. */
+    workspacePages?: WorkspacePage[];
+    workspaceNavigation?: WorkspaceNavigationProps;
     /** Synchronize the `show-validation-summary` attribute from `.formspec-container`. */
     setShowValidationSummaryAttr?: (show: boolean) => void;
 }
 /** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
 export declare const FormspecContext: React.Context<FormspecContextValue | null>;
-export interface FormspecProviderProps {
+export interface WorkspaceNavigationProps {
+    /** A supplied value (including undefined) makes the host own section selection. */
+    activeSection?: string | undefined;
+    onActiveSectionChange?: ((section: string) => void) | undefined;
+    /** Suppress section focus while another form owns the host's active location. */
+    sectionNavigationActive?: boolean | undefined;
+    /** Format a link for normal browser behavior such as opening a new tab. */
+    hrefForSection?: ((section: string) => string | undefined) | undefined;
+    /** Let a host compose the page title. An undefined title clears the current section. */
+    onSectionTitleChange?: ((title: string | undefined) => void) | undefined;
+    /** Opt in to prefixing the document title with the active section when no title callback is supplied. */
+    updateDocumentTitle?: boolean | undefined;
+}
+export interface FormspecProviderProps extends WorkspaceNavigationProps {
     /** Pre-built FormEngine instance. Mutually exclusive with `definition`. */
     engine?: IFormEngine;
     /** Raw definition JSON. Will create a FormEngine internally. */

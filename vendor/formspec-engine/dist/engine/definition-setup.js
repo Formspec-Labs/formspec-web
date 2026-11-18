@@ -1,17 +1,28 @@
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { wasmAnalyzeFel, wasmGetFelDependencies, wasmResolveOptionSetsOnDefinition, } from '../wasm-bridge-runtime.js';
-import { detectNamedCycle, parentPathOf, resolveRelativeDependency, toBasePath, } from './helpers.js';
+import { detectNamedCycle, getScopeAncestors, parentPathOf, resolveRelativeDependency, toBasePath, } from './helpers.js';
 export function resolveOptionSetsOnDefinition(definition) {
     return parseJsonExact(wasmResolveOptionSetsOnDefinition(JSON.stringify(definition)));
 }
-export function validateVariableDefinitionCycles(variableDefs) {
+export function validateVariableDefinitionCycles(variableDefs, resolveScope) {
+    const scopes = new Map();
+    for (const definition of variableDefs) {
+        const scope = resolveScope(definition.scope);
+        if (!scopes.has(scope))
+            scopes.set(scope, new Set());
+        scopes.get(scope)?.add(definition.name);
+    }
     const graph = new Map();
-    for (const variableDef of variableDefs) {
+    for (const definition of variableDefs) {
+        const scope = resolveScope(definition.scope);
+        const visible = ['#', ...getScopeAncestors(scope)].reverse();
         const deps = new Set();
-        for (const name of wasmAnalyzeFel(variableDef.expression).variables) {
-            deps.add(name);
+        for (const name of wasmAnalyzeFel(definition.expression).variables) {
+            const declaration = visible.find(path => scopes.get(path)?.has(name));
+            if (declaration)
+                deps.add(`${declaration}:${name}`);
         }
-        graph.set(variableDef.name, deps);
+        graph.set(`${scope}:${definition.name}`, deps);
     }
     detectNamedCycle(graph, 'Circular variable dependency');
 }

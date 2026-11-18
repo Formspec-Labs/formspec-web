@@ -17,7 +17,7 @@ export { widgetTokenToComponent, KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT
 export { mergeFormPresentationForPlanning } from './form-presentation.js';
 export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, ensureValidationSummary, createNodeIdGenerator, preparePlanContext, } from './planner.js';
 export type { EnsureActionButtonOptions, NodeIdGenerator } from './planner.js';
-export { resolvePageSequence } from './page-sequence.js';
+export { placementCovers, placementKey, resolvePageSequence } from './page-sequence.js';
 export type { PageSequenceEntry, PageSequenceOptions } from './page-sequence.js';
 export * from './form-progress.js';
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';

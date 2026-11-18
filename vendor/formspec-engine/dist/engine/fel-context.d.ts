@@ -1,6 +1,4 @@
 /** @filedesc Schema and per-evaluation snapshot for the WASM-resident FEL context (ad-hoc reads). */
-import type { FormVariable } from '@formspec-org/types';
-import type { ValidationResult } from '@formspec-org/types';
 import type { EvalResult } from '../diff.js';
 import type { JsonRecord, ResponseSubjectKeys } from '../interfaces.js';
 import type { EngineSignal } from '../reactivity/types.js';
@@ -10,6 +8,7 @@ import type { EngineBindConfig } from './helpers.js';
  * binds render a non-relevant read as `null`. Changes only when the Definition does.
  */
 export interface FelContextSchema {
+    itemPaths: string[];
     dataTypes: Record<string, string>;
     excludedValueNull: string[];
 }
@@ -35,18 +34,11 @@ export interface FelContextSnapshot {
     meta?: Record<string, string | number | boolean>;
     subjectKeys?: ResponseSubjectKeys;
 }
-export declare function felContextSchema(fieldDataTypes: Record<string, string | undefined>, bindConfigs: Record<string, EngineBindConfig>): FelContextSchema;
+export declare function felContextSchema(fieldDataTypes: Record<string, string | undefined>, bindConfigs: Record<string, EngineBindConfig>, itemPaths: string[]): FelContextSchema;
 export interface FelContextSnapshotInput {
     data: JsonRecord;
     fullResult: EvalResult | null;
-    fieldSignals: Record<string, EngineSignal<any>>;
-    validationResults: Record<string, EngineSignal<ValidationResult[]>>;
-    relevantSignals: Record<string, EngineSignal<boolean>>;
-    readonlySignals: Record<string, EngineSignal<boolean>>;
-    requiredSignals: Record<string, EngineSignal<boolean>>;
     repeats: Record<string, EngineSignal<number>>;
-    variableDefs: FormVariable[];
-    variableSignals: Record<string, EngineSignal<any>>;
     instanceData: Record<string, unknown>;
     locale?: string;
     /** The active Locale document's `formats.date` patterns by `formatDate` style (Locale §2.4). */

@@ -1,4 +1,5 @@
 /** @filedesc Opt-in strict validation from every authored render node to an adopted, current Need. */
+import { type RenderedNeedTraceNode as ReportTraceNode } from '@formspec-org/types';
 import { type AppGraphContext, type AppGraphDiagnostic, type AppGraphRenderedNeedTraceRequest, type AppGraphRenderedNeedTraceRecord, type AppGraphSourcePointer, type ResolvedArtifactHandle } from './types.js';
 type JsonRecord = Record<string, unknown>;
 export declare const RENDERED_NEED_TRACE_CODES: {
@@ -7,6 +8,7 @@ export declare const RENDERED_NEED_TRACE_CODES: {
     readonly unresolved: "APP-GRAPH-RENDERED-NEED-UNRESOLVED";
     readonly nonAdopted: "APP-GRAPH-RENDERED-NEED-NON-ADOPTED";
     readonly stale: "APP-GRAPH-RENDERED-NEED-STALE";
+    readonly redundant: "APP-GRAPH-RENDERED-NEED-REDUNDANT";
     readonly scopeUnknown: "APP-GRAPH-RENDERED-NODE-SCOPE-UNKNOWN";
     readonly inventoryInvalid: "APP-GRAPH-RENDERED-NODE-INVENTORY-INVALID";
     readonly navigationImplicit: "APP-GRAPH-RENDERED-NAVIGATION-IMPLICIT";
@@ -41,35 +43,21 @@ export interface RenderedNeedTraceCollectionFailure {
  * `invalidAnchors` preserves explicit but malformed links for the strict
  * validator. Neither list includes a parent or sibling node's generation data.
  */
-export interface RenderedNeedTraceNode {
-    readonly source: AppGraphSourcePointer;
-    readonly kind: string;
+export interface RenderedNeedTraceNode extends ReportTraceNode {
     readonly pointer: string;
-    readonly label: string;
     readonly anchors: readonly RenderedNeedTraceAnchor[];
     readonly invalidAnchors: readonly RenderedNeedTraceInvalidAnchor[];
     readonly typedNeedRefs?: readonly RenderedNeedTraceTypedNeedRef[];
     readonly failure?: RenderedNeedTraceCollectionFailure;
 }
-/**
- * Enumerate every authored node that can render in the normal product.
- *
- * This is the authoritative inventory used by strict rendered-Need validation.
- * Consumers may inspect it for review or reporting, but must not infer anchors
- * from a parent, sibling, mounted slot, or related Experience unit.
- *
- * Preview scenarios are supplied separately because they are preview-only
- * inputs, not App Manifest members. Pass loaded handles whose documents use
- * `$formspecSurfaceScenario: "0.1"` to preserve exact source identity.
- */
+/** Each authored render node, its direct citations, and its effective publication trace. */
 export declare function collectRenderedNeedTraceNodes(context: AppGraphContext, previewScenarios?: readonly ResolvedArtifactHandle[]): readonly RenderedNeedTraceNode[];
 /**
  * Strict data-only authoring profile.
  *
- * The caller must pair at least one valid Needs 1.0 document, and every authored
- * node that directly controls product rendering must carry its own
- * `need:<id>@<revision>` trace. A parent node's anchor never covers a child.
- * The target must be unambiguous, adopted, and pinned to its current revision.
+ * Trace roots and overrides carry direct traces. Other Definition and Screener
+ * nodes inherit through the App Graph owner table. The caller pairs a Needs
+ * 1.0 document and each trace resolves to an unambiguous, adopted, current Need.
  *
  * This validator is intentionally not part of AppGraph's built-in set. General
  * Needs coverage remains report-only; callers opt into this error-severity

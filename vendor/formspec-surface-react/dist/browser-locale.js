@@ -2,6 +2,24 @@
 import { evalFEL, interpolateMessage, LocaleStore, preactReactiveRuntime } from '@formspec-org/engine';
 import { resolveSurfaceLocaleStrings } from '@formspec-org/surface';
 import { targetDefinitionMatches } from '@formspec-org/types';
+/** Build the Definition-targeted cascade without opening a draft or starting a form engine. */
+export function definitionLocaleLookup(documents = [], activeLocale) {
+    const stores = new Map();
+    return (definition, key) => {
+        let store = stores.get(definition);
+        if (!store) {
+            store = new LocaleStore(preactReactiveRuntime, undefined, { kind: 'definition', url: definition.url });
+            for (const document of documents) {
+                if (document.target.kind === 'definition' && targetDefinitionMatches(document.target, definition))
+                    store.loadLocale(document);
+            }
+            if (activeLocale !== undefined)
+                store.setLocale(activeLocale);
+            stores.set(definition, store);
+        }
+        return store.lookupKey(key);
+    };
+}
 function selectLanguage(available, requested) {
     const offered = new Set(available);
     for (const language of requested) {

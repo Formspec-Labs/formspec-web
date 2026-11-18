@@ -30,7 +30,9 @@ import { createFormEngine, createMappingEngine, resolveResponseActionValidationT
 import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
 import { canonicalFiniteJson, loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
+import { DraftDefinitionForm } from './DraftDefinitionForm.js';
 import { Heading, nextLevel } from './heading.js';
+import { FilingStatus } from './FilingStatus.js';
 import { routeIdentity } from './widget-api.js';
 import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, normalizeWidgetActionResult, } from './widget-action-runtime.js';
 import { WidgetEmptyState } from './widgets/empty-state.js';
@@ -169,12 +171,18 @@ export function SurfaceSlotFrame(props) {
         (plan.slotType !== 'experience-unit' || showExperienceNeeds);
     return (_jsxs("section", { className: "fs-surface-slot", "data-slot": plan.slotId, "data-slot-type": plan.slotType, ...needTraceAttributes(plan.needAnchors), ...(showsAuthoredTitle ? { 'aria-label': plan.title } : {}), children: [showsAuthoredTitle && !rendersOwnHeading(plan) && (_jsx(Heading, { level: plan.headingBaseLevel, className: "fs-surface-slot__title", children: plan.title })), _jsx(SurfaceSlot, { ...props })] }));
 }
-export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, }) {
+export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, sectionNavigationActive, }) {
+    const reportSectionTitle = formSession?.workspace?.reportSectionTitle;
+    const onSectionTitleChange = useCallback((title) => {
+        reportSectionTitle?.(plan.slotId, title);
+    }, [reportSectionTitle, plan.slotId]);
     const subjectPrefix = surfaceSemanticOutputSubjectRef(route.routeId, plan.slotId);
     const slotSemanticOutputScope = semanticOutputScope && subjectPrefix
         ? { ...semanticOutputScope, subjectPrefix }
         : undefined;
     switch (plan.slotType) {
+        case 'filing-status':
+            return _jsx(FilingStatus, { plan: plan.tracker, context: filingStatus, level: plan.title === undefined ? plan.headingBaseLevel : nextLevel(plan.headingBaseLevel), text: strings });
         case 'screener': {
             if (plan.status !== 'ready' || !plan.screener)
                 return _jsx(UnavailableSlot, { children: plan.reason ?? 'screener-unavailable' });
@@ -206,6 +214,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
                 grant,
                 route,
                 responseActionsDocument,
+                componentDocument: plan.componentDocument,
                 referencesDocuments: referencesDocuments ?? [],
                 ontologyDocuments: ontologyDocuments ?? [],
                 onDefinitionActionResult,
@@ -213,13 +222,17 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
                 responseActionInvoker: definitionActionInvoker,
                 localeDocuments,
                 activeLocale,
+                onSectionTitleChange,
+                ...(sectionNavigationActive && workspace && { activeSection }),
                 ...(formSession && {
                     appearance: formSession.appearance,
                     previewScope: formSession.previewScope,
+                    draftSession: formSession.drafts,
+                    draftStrings: strings,
                     reportSave: formSession.reportSave,
                 }),
                 ...(workspace && {
-                    activeSection,
+                    sectionNavigationActive,
                     hrefForSection: section => workspace.hrefForSection(plan.slotId, section),
                     onActiveSectionChange: section => workspace.onActiveSectionChange(plan.slotId, section),
                 }),
@@ -234,7 +247,11 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
                 renderInput.semanticControlScope = semanticControlScope;
             }
             if (plan.initialData && plan.initialData.status !== 'ready') {
-                return (_jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }));
+                if (!renderInput.draftSession)
+                    return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
+                const input = { ...renderInput, draftSeed: 'unavailable' };
+                return _jsx(Fragment, { children: renderDefinitionForm ? renderDefinitionForm(input) :
+                        _jsx(DefaultDefinitionFormSlot, { input: input, semanticOutputScope: slotSemanticOutputScope }) }, subjectKey);
             }
             if (plan.initialData?.status === 'ready') {
                 return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
@@ -279,7 +296,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
             // the host's grant — an embedded route cannot restore branding the host
             // refuses. Headings step down a level, which `planRoute` already decided;
             // this renders the level it was handed and re-derives nothing.
-            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, formSession: formSession && { ...formSession, workspace: undefined }, onAdvance: onAdvance }, child.slotId))) }));
+            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, filingStatus: filingStatus, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, formSession: formSession && { ...formSession, workspace: undefined }, onAdvance: onAdvance }, child.slotId))) }));
         }
         case 'unknown':
             return _jsx(UnavailableSlot, { children: strings('slotUnavailableStaticContent') });
@@ -316,6 +333,11 @@ function SurfaceStaticContent({ content, needAnchors, routeId, slotId, semanticO
     }
 }
 export function renderDefaultDefinitionForm(input) {
+    if (input.draftSession) {
+        const key = JSON.stringify([input.plan.definition.url, input.plan.definition.version,
+            input.plan.subject?.type, input.plan.subject?.keys]);
+        return _jsx(DraftDefinitionForm, { input: input, session: input.draftSession, children: (engine, writer) => _jsx(DefaultSurfaceDefinitionForm, { ...input, draftEngine: engine, draftWriter: writer }) }, key);
+    }
     return _jsx(DefaultSurfaceDefinitionForm, { ...input });
 }
 /** Stop later owner phases when this effect retires; host authority stays in the ports. */
@@ -444,30 +466,25 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
         runtimeGeneration,
         validateDataSourcePayload,
     ]);
-    if (delivery.status === 'loading') {
-        return (_jsx("p", { className: "fs-surface-loading", role: "status", "aria-live": "polite", "aria-busy": "true", "data-probe": "definition-form-loading", children: strings('transitionPending') }));
+    if (!input.draftSession) {
+        if (delivery.status === 'loading') {
+            return (_jsx("p", { className: "fs-surface-loading", role: "status", "aria-live": "polite", "aria-busy": "true", "data-probe": "definition-form-loading", children: strings('transitionPending') }));
+        }
+        if (delivery.status === 'unavailable') {
+            return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
+        }
     }
-    if (delivery.status === 'unavailable') {
-        return (_jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }));
-    }
-    const initialData = {
-        ...(delivery.data === undefined ? {} : { data: delivery.data }),
-        ...(delivery.selection === undefined ? {} : { selection: delivery.selection }),
-        freshness: delivery.freshness,
-        ...(delivery.recordId === undefined
-            ? {}
-            : { recordId: delivery.recordId }),
-        ...(delivery.generation === undefined
-            ? {}
-            : { generation: delivery.generation }),
-        ...(delivery.revision === undefined
-            ? {}
-            : { revision: delivery.revision }),
-    };
-    const hydratedInput = {
+    const hydratedInput = delivery.status === 'ready' ? {
         ...input,
-        initialData,
-    };
+        initialData: {
+            ...(delivery.data === undefined ? {} : { data: delivery.data }),
+            ...(delivery.selection === undefined ? {} : { selection: delivery.selection }),
+            freshness: delivery.freshness,
+            ...(delivery.recordId === undefined ? {} : { recordId: delivery.recordId }),
+            ...(delivery.generation === undefined ? {} : { generation: delivery.generation }),
+            ...(delivery.revision === undefined ? {} : { revision: delivery.revision }),
+        },
+    } : { ...input, draftSeed: delivery.status };
     return (_jsx("div", { "data-probe": "definition-form-ready", onInputCapture: () => {
             dirty.current = true;
         }, onChangeCapture: () => {
@@ -482,16 +499,26 @@ function DefaultDefinitionFormSlot({ input, semanticOutputScope, }) {
         : []);
     return renderDefaultDefinitionForm(input);
 }
-function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, }) {
+function DefaultSurfaceDefinitionForm(input) {
+    const { plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, responseSubject, draftEngine, draftWriter, activeSection, sectionNavigationActive, hrefForSection, onActiveSectionChange, onSectionTitleChange, } = input;
     const engine = useMemo(() => {
-        const created = createFormEngine(plan.definition);
+        if (draftEngine)
+            return draftEngine;
+        const created = createFormEngine(plan.definition, responseSubject && { responseSubject });
         if (initialData?.data !== undefined) {
             // Before any field component subscribes; keeps every saved repeat row.
             created.loadResponseData(initialData.data);
         }
         return created;
-    }, [initialData?.data, plan.definition]);
-    useEffect(() => () => engine.dispose(), [engine]);
+    }, [draftEngine, initialData?.data, plan.definition, responseSubject?.id]);
+    useEffect(() => () => { if (!draftEngine)
+        engine.dispose(); }, [draftEngine, engine]);
+    const formVisit = useRef(undefined);
+    const visit = useMemo(() => ({}), [engine]);
+    useLayoutEffect(() => {
+        formVisit.current = visit;
+        return () => { formVisit.current = undefined; };
+    }, [visit]);
     useLayoutEffect(() => {
         for (const locale of localeDocuments ?? []) {
             if (locale.target.kind === 'definition' && targetDefinitionMatches(locale.target, plan.definition)) {
@@ -527,7 +554,9 @@ function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocu
             return [];
         }
     }, [references]);
-    return (_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: responseActionInvoker ?? null, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
+    return (_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, ...('activeSection' in input && { activeSection }), onActiveSectionChange: onActiveSectionChange, sectionNavigationActive: sectionNavigationActive, hrefForSection: hrefForSection, onSectionTitleChange: onSectionTitleChange, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: draftWriter
+            ? input => draftWriter.invoke(input, { invoker: responseActionInvoker, current: () => formVisit.current === visit })
+            : responseActionInvoker ?? null, draftSaveFeedback: draftWriter ? 'external' : undefined, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
             ? {
                 // `onSubmit` requests the renderer's declared submit control. It is
                 // a no-op because durable effects have not reached a terminal yet.
