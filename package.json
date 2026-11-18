@@ -39,6 +39,7 @@
     "test:conformance": "vitest run tests/adapter-conformance",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:install-browser": "node -e \"const packages = require('./package-lock.json').packages; for (const name of ['playwright', 'playwright-core']) if (require(name + '/package.json').version !== packages['node_modules/' + name].version) throw new Error(name + ' must match package-lock.json')\" && playwright install --only-shell chromium",
     "check:testing-plan": "node scripts/check-testing-plan.mjs",
     "check:mvp-audit": "node scripts/check-mvp-audit.mjs",
     "check:upstream-blockers": "node scripts/check-upstream-blockers.mjs",
