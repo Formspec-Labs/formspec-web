@@ -9,6 +9,7 @@ import { validateDataSources } from './data-sources.js';
 import { validateExperienceActionRefs } from './experience-action-refs.js';
 import { validateExperienceReferentialIntegrity } from './experience-referential-integrity.js';
 import { validateExecutableSchemaContracts } from './executable-schema-contracts.js';
+import { missingResponseProjectionChecks } from './instance-projection.js';
 import { validateLocaleAssociations } from './locale-associations.js';
 import { validateNeedsCoverage } from './needs-coverage.js';
 import { runRenderedNeedTrace } from './rendered-need-trace.js';
@@ -269,7 +270,11 @@ function runCrossArtifactValidators(validators, request, handles, schemaResults,
         validateHostWidgetContracts,
         ...(validators ?? []),
     ];
-    return allValidators.flatMap((validator) => validator(crossArtifactContext(request, handles, schemaResults, evidenceResults)));
+    const diagnostics = allValidators.flatMap((validator) => validator(crossArtifactContext(request, handles, schemaResults, evidenceResults)));
+    if (!validators?.some((validator) => validator.checksResponseProjections)) {
+        diagnostics.push(...missingResponseProjectionChecks(handles));
+    }
+    return diagnostics;
 }
 function crossArtifactContext(request, handles, schemaResults, evidenceResults) {
     return {

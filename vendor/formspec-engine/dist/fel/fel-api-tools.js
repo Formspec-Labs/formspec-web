@@ -1,5 +1,6 @@
 /** @filedesc FEL/registry/lint/changelog helpers backed by tools WASM (`wasm-bridge-tools` only; ADR 0050). */
 import { wasmCollectFelRewriteTargets, wasmDeriveJsonLdContext, wasmFindRegistryEntry, wasmGenerateChangelog, wasmLintDocument, wasmListBuiltinFunctions, wasmParseRegistry, wasmPrintFel, wasmRewriteFelForAssembly, wasmRewriteFelReferences, wasmRewriteMessageTemplate, wasmTokenizeFel, wasmTryLiftConditionGroup, wasmValidateExtensionUsage, wasmValidateLifecycleTransition, wasmWellKnownRegistryUrl, } from '../wasm-bridge-tools.js';
+export { checkInstanceProjection } from '../wasm-bridge-tools.js';
 export const tokenizeFEL = wasmTokenizeFel;
 function mapRewriteEntries(entries, rewrite) {
     if (!rewrite || entries.length === 0)

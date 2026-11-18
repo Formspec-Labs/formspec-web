@@ -2,6 +2,7 @@
 import { diagnosticSourceForHandle } from './report.js';
 import { componentTargetUrl } from './locale-associations.js';
 import { handlesByKind, ownProp, record, stringProp } from './surface-widgets.js';
+import { responseProjectionDiagnostics } from './instance-projection.js';
 /** Lint findings keep their canonical codes under this origin. */
 export const DOCUMENT_LINT_ORIGIN = 'x-formspec-lint';
 function severity(value) {
@@ -114,15 +115,23 @@ const LINTED_KINDS = new Set([
 ]);
 /** Lint every supported loaded document, even when its declared target cannot be resolved. */
 export function documentLintValidator(lint, { resolveMappingSourceContext } = {}) {
-    return (context) => context.handles
-        .filter((handle) => handle.status === 'loaded' && LINTED_KINDS.has(handle.artifactKind))
+    const validate = (context) => context.handles
+        .filter((handle) => handle.status === 'loaded')
         .flatMap((handle) => {
+        if (handle.artifactKind === 'dataSources')
+            return responseProjectionDiagnostics(lint, context, handle);
+        if (!LINTED_KINDS.has(handle.artifactKind))
+            return [];
         const lintContext = lintContextFor(context, handle);
         if (handle.artifactKind === 'mapping') {
             const sourceContext = resolveMappingSourceContext?.(handle, context);
             if (sourceContext !== undefined)
                 lintContext.mappingSourceContext = sourceContext;
         }
-        return documentLintDiagnostics(lint, handle, lintContext);
+        const diagnostics = documentLintDiagnostics(lint, handle, lintContext);
+        return handle.artifactKind === 'definition'
+            ? diagnostics.concat(responseProjectionDiagnostics(lint, context, handle))
+            : diagnostics;
     });
+    return Object.assign(validate, { checksResponseProjections: true });
 }

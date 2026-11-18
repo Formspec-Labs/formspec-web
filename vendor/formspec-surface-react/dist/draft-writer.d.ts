@@ -73,6 +73,7 @@ export declare function createDraftWriter(options: DraftWriterOptions): {
     readonly dirty: boolean;
     readonly revision: string | undefined;
     leave: () => Promise<boolean>;
+    waitForSaves: () => Promise<boolean>;
     setMounted(value: boolean): void;
     dispose(): void;
 };

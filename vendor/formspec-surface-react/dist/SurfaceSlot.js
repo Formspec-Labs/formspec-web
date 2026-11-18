@@ -25,12 +25,13 @@ import { NativeScreenerSlot } from './screener-completion.js';
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
 import { selectDataSourceRevisions } from './data-source-revision.js';
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
-import { createFormEngine, createMappingEngine, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
+import { createFormEngine, createMappingEngine, initFormspecEngineTools, isFormspecEngineToolsInitialized, resolveResponseActionValidationTuple, responseSubjectId, } from '@formspec-org/engine';
 import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
 import { canonicalFiniteJson, loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
 import { DraftDefinitionForm } from './DraftDefinitionForm.js';
+import { loadDraftReviewInputs } from './draft-review.js';
 import { Heading, nextLevel } from './heading.js';
 import { FilingStatus } from './FilingStatus.js';
 import { routeIdentity } from './widget-api.js';
@@ -213,6 +214,7 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
                 },
                 grant,
                 route,
+                strings,
                 responseActionsDocument,
                 componentDocument: plan.componentDocument,
                 referencesDocuments: referencesDocuments ?? [],
@@ -249,14 +251,12 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
             if (plan.initialData && plan.initialData.status !== 'ready') {
                 if (!renderInput.draftSession)
                     return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
-                const input = { ...renderInput, draftSeed: 'unavailable' };
-                return _jsx(Fragment, { children: renderDefinitionForm ? renderDefinitionForm(input) :
-                        _jsx(DefaultDefinitionFormSlot, { input: input, semanticOutputScope: slotSemanticOutputScope }) }, subjectKey);
+                return _jsx(DefinitionFormSlot, { input: { ...renderInput, draftSeed: 'unavailable' }, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey);
             }
             if (plan.initialData?.status === 'ready') {
-                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
+                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
             }
-            return (_jsx(Fragment, { children: renderDefinitionForm ? renderDefinitionForm(renderInput) : (_jsx(DefaultDefinitionFormSlot, { input: renderInput, semanticOutputScope: slotSemanticOutputScope })) }, subjectKey));
+            return (_jsx(DefinitionFormSlot, { input: renderInput, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
         }
         case 'experience-unit': {
             const { unit } = plan;
@@ -277,7 +277,7 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
             // A resolved-but-undeclared widget still renders — the host supplied a
             // component. `WIDGET-UNDECLARED` is already in the plan's diagnostics
             // (§3.3): a shell MAY render it, and MUST say it did.
-            return (_jsx(SurfaceWidgetSlot, { plan: plan, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, responseActionsDocuments: responseActionsDocuments ?? [], transitions: transitions ?? [], widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onAdvance: onAdvance, semanticOutputScope: slotSemanticOutputScope }));
+            return (_jsx(SurfaceWidgetSlot, { plan: plan, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, draftSession: plan.draftReview ? formSession?.drafts : undefined, localeDocuments: plan.draftReview ? localeDocuments : undefined, activeLocale: plan.draftReview ? activeLocale : undefined, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, responseActionsDocuments: responseActionsDocuments ?? [], transitions: transitions ?? [], widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onAdvance: onAdvance, semanticOutputScope: slotSemanticOutputScope }));
         }
         case 'static-content': {
             const { content } = plan;
@@ -333,12 +333,7 @@ function SurfaceStaticContent({ content, needAnchors, routeId, slotId, semanticO
     }
 }
 export function renderDefaultDefinitionForm(input) {
-    if (input.draftSession) {
-        const key = JSON.stringify([input.plan.definition.url, input.plan.definition.version,
-            input.plan.subject?.type, input.plan.subject?.keys]);
-        return _jsx(DraftDefinitionForm, { input: input, session: input.draftSession, children: (engine, writer) => _jsx(DefaultSurfaceDefinitionForm, { ...input, draftEngine: engine, draftWriter: writer }) }, key);
-    }
-    return _jsx(DefaultSurfaceDefinitionForm, { ...input });
+    return _jsx(DefaultDefinitionFormSlot, { input: input });
 }
 /** Stop later owner phases when this effect retires; host authority stays in the ports. */
 function currentEffectDataSourcePorts(isCurrent, { loader, authorize, validatePayload }) {
@@ -376,7 +371,8 @@ function executeDefinitionFormMapping({ mapping, value, }) {
  * Load before first mount. A later generation may refresh a clean form, but a
  * bubbled form edit permanently protects the mounted engine from late data.
  */
-function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, runtimeGeneration, onRuntimeDiagnosticsChange, renderDefinitionForm, semanticOutputScope, }) {
+function DefinitionFormDataSlot({ input, initialDataPlan, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, runtimeGeneration, onRuntimeDiagnosticsChange, renderDefinitionForm, semanticOutputScope, }) {
+    const { strings } = input;
     const [delivery, setDelivery] = useState({
         status: 'loading',
     });
@@ -468,7 +464,7 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
     ]);
     if (!input.draftSession) {
         if (delivery.status === 'loading') {
-            return (_jsx("p", { className: "fs-surface-loading", role: "status", "aria-live": "polite", "aria-busy": "true", "data-probe": "definition-form-loading", children: strings('transitionPending') }));
+            return _jsx(DefinitionFormLoading, { children: strings('transitionPending') });
         }
         if (delivery.status === 'unavailable') {
             return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
@@ -489,30 +485,74 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
             dirty.current = true;
         }, onChangeCapture: () => {
             dirty.current = true;
-        }, children: renderDefinitionForm
-            ? renderDefinitionForm(hydratedInput)
-            : (_jsx(DefaultDefinitionFormSlot, { input: hydratedInput, semanticOutputScope: semanticOutputScope })) }));
+        }, children: _jsx(DefinitionFormSlot, { input: hydratedInput, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: semanticOutputScope }) }));
+}
+function DefinitionFormLoading({ children }) {
+    return (_jsx("p", { className: "fs-surface-loading", role: "status", "aria-live": "polite", "aria-busy": "true", "data-probe": "definition-form-loading", children: children }));
+}
+function DefinitionFormSlot({ input, renderDefinitionForm, semanticOutputScope, }) {
+    const { plan: { subject }, strings } = input;
+    const needsSubject = subject !== undefined;
+    const [toolsStatus, setToolsStatus] = useState(() => isFormspecEngineToolsInitialized() ? 'ready' : 'loading');
+    useEffect(() => {
+        if (!needsSubject || toolsStatus !== 'loading')
+            return;
+        let current = true;
+        void initFormspecEngineTools().then(() => { if (current)
+            setToolsStatus('ready'); }, () => { if (current)
+            setToolsStatus('unavailable'); });
+        return () => { current = false; };
+    }, [needsSubject, toolsStatus]);
+    const responseSubject = useMemo(() => {
+        if (!subject || toolsStatus !== 'ready')
+            return undefined;
+        try {
+            return { ...subject, id: responseSubjectId(subject.type, subject.keys) };
+        }
+        catch {
+            return undefined;
+        }
+    }, [subject, toolsStatus]);
+    if (needsSubject && !responseSubject) {
+        return toolsStatus === 'loading'
+            ? _jsx(DefinitionFormLoading, { children: strings('transitionPending') })
+            : _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
+    }
+    const resolvedInput = { ...input, responseSubject };
+    return renderDefinitionForm
+        ? renderDefinitionForm(resolvedInput)
+        : _jsx(DefaultDefinitionFormSlot, { input: resolvedInput, semanticOutputScope: semanticOutputScope });
 }
 function DefaultDefinitionFormSlot({ input, semanticOutputScope, }) {
-    useSurfaceSemanticOutputs(semanticOutputScope, semanticOutputScope
-        ? [{ subjectRef: semanticOutputScope.subjectPrefix }]
-        : []);
-    return renderDefaultDefinitionForm(input);
+    if (input.draftSession) {
+        const key = JSON.stringify([input.plan.definition.url, input.plan.definition.version,
+            input.plan.subject?.type, input.plan.subject?.keys]);
+        return _jsx(DraftDefinitionForm, { input: input, session: input.draftSession, children: (engine, writer) => _jsx(DefaultSurfaceDefinitionForm, { ...input, draftEngine: engine, draftWriter: writer, semanticOutputScope: semanticOutputScope }) }, key);
+    }
+    return _jsx(DefaultSurfaceDefinitionForm, { ...input, semanticOutputScope: semanticOutputScope });
 }
 function DefaultSurfaceDefinitionForm(input) {
-    const { plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, responseSubject, draftEngine, draftWriter, activeSection, sectionNavigationActive, hrefForSection, onActiveSectionChange, onSectionTitleChange, } = input;
+    const { plan, grant, strings, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, responseSubject, draftEngine, draftWriter, semanticOutputScope, activeSection, sectionNavigationActive, hrefForSection, onActiveSectionChange, onSectionTitleChange, } = input;
     const engine = useMemo(() => {
         if (draftEngine)
             return draftEngine;
-        const created = createFormEngine(plan.definition, responseSubject && { responseSubject });
+        let created;
+        try {
+            created = createFormEngine(plan.definition, responseSubject && { responseSubject });
+        }
+        catch (error) {
+            console.warn('Formspec Surface could not create the form engine.', error);
+            return undefined;
+        }
         if (initialData?.data !== undefined) {
             // Before any field component subscribes; keeps every saved repeat row.
             created.loadResponseData(initialData.data);
         }
         return created;
+        // Core's subject id covers both type and keys, even when a replan allocates a new object.
     }, [draftEngine, initialData?.data, plan.definition, responseSubject?.id]);
     useEffect(() => () => { if (!draftEngine)
-        engine.dispose(); }, [draftEngine, engine]);
+        engine?.dispose(); }, [draftEngine, engine]);
     const formVisit = useRef(undefined);
     const visit = useMemo(() => ({}), [engine]);
     useLayoutEffect(() => {
@@ -520,6 +560,8 @@ function DefaultSurfaceDefinitionForm(input) {
         return () => { formVisit.current = undefined; };
     }, [visit]);
     useLayoutEffect(() => {
+        if (!engine)
+            return;
         for (const locale of localeDocuments ?? []) {
             if (locale.target.kind === 'definition' && targetDefinitionMatches(locale.target, plan.definition)) {
                 engine.loadLocale(locale);
@@ -528,6 +570,8 @@ function DefaultSurfaceDefinitionForm(input) {
         if (activeLocale !== undefined)
             engine.setLocale(activeLocale);
     }, [engine, localeDocuments, activeLocale, plan.definition]);
+    const renderedScope = engine ? semanticOutputScope : undefined;
+    useSurfaceSemanticOutputs(renderedScope, renderedScope ? [{ subjectRef: renderedScope.subjectPrefix }] : []);
     // Human help is References-spec resolution alone: this form never renders
     // agent-audience entries or Ontology concepts.
     const references = useMemo(() => referencesDocuments.filter((document) => targetDefinitionMatches(document.targetDefinition, plan.definition)), [plan.definition, referencesDocuments]);
@@ -554,6 +598,9 @@ function DefaultSurfaceDefinitionForm(input) {
             return [];
         }
     }, [references]);
+    if (!engine) {
+        return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
+    }
     return (_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, ...('activeSection' in input && { activeSection }), onActiveSectionChange: onActiveSectionChange, sectionNavigationActive: sectionNavigationActive, hrefForSection: hrefForSection, onSectionTitleChange: onSectionTitleChange, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: draftWriter
             ? input => draftWriter.invoke(input, { invoker: responseActionInvoker, current: () => formVisit.current === visit })
             : responseActionInvoker ?? null, draftSaveFeedback: draftWriter ? 'external' : undefined, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
@@ -577,8 +624,12 @@ const READY_WITH_NO_DATA = {
     degradedInputs: [],
     diagnostics: [],
 };
-function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
-    const [delivery, setDelivery] = useState(plan.dataInputs.length === 0 ? READY_WITH_NO_DATA : { status: 'loading' });
+function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, draftSession, localeDocuments, activeLocale, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
+    const draftVisit = useMemo(() => plan.draftReview ? {} : undefined, [plan.draftReview, draftSession, runtimeGeneration, localeDocuments, activeLocale]);
+    const [settled, setSettled] = useState({
+        draftVisit, delivery: plan.dataInputs.length === 0 && !plan.draftReview ? READY_WITH_NO_DATA : { status: 'loading' },
+    });
+    const delivery = settled.draftVisit === draftVisit ? settled.delivery : { status: 'loading' };
     const [dataLoadAttempt, setDataLoadAttempt] = useState(0);
     const responseContexts = useRef(undefined);
     const activeGeneration = useRef(runtimeGeneration);
@@ -602,11 +653,16 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
                 sessionGeneration: runtimeGeneration } }] : []), dataSourceRevision);
     useEffect(() => {
         let current = true;
+        const controller = new AbortController();
+        const setDelivery = (delivery) => setSettled({ draftVisit, delivery });
         responseContexts.current = undefined;
-        if (plan.dataInputs.length > 0)
+        if (plan.dataInputs.length > 0 || plan.draftReview)
             setDelivery({ status: 'loading' });
         onRuntimeDiagnosticsChange?.(dataDiagnosticScope, []);
-        void loadWidgetDataInputs({
+        const site = { surfaceId: route.surfaceId, routeId: route.routeId, slotId: plan.slotId };
+        const load = plan.draftReview ? loadDraftReviewInputs(plan.draftReview, {
+            session: draftSession, site, signal: controller.signal, localeDocuments, activeLocale,
+        }) : loadWidgetDataInputs({
             inputs: plan.dataInputs.map(input => input.status === 'ready'
                 && sourceRevisions.failures.some(failure => failure.descriptor.catalogRef === input.descriptor.catalogRef
                     && failure.descriptor.sourceRef === input.descriptor.sourceRef)
@@ -628,12 +684,9 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
                 authorize: authorizeDataSource,
                 validatePayload: validateDataSourcePayload,
             }),
-            site: {
-                surfaceId: route.surfaceId,
-                routeId: route.routeId,
-                slotId: plan.slotId,
-            },
-        }).then(async (result) => {
+            site,
+        });
+        void load.then(async (result) => {
             if (!current)
                 return;
             if (result.status === 'ready') {
@@ -678,15 +731,21 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
         });
         return () => {
             current = false;
+            controller.abort();
             onRuntimeDiagnosticsChange?.(dataDiagnosticScope, []);
         };
     }, [
         authorizeDataSource,
         dataDiagnosticScope,
         dataSourceLoader,
+        draftSession,
+        draftVisit,
+        localeDocuments,
+        activeLocale,
         sourceRevisions.key,
         onRuntimeDiagnosticsChange,
         plan.dataInputs,
+        plan.draftReview,
         plan.actionOutputs,
         plan.key.moduleId,
         plan.key.widgetName,
@@ -928,7 +987,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
         const technicalFailure = delivery.failures.some((failure) => failure.reason === 'load-failed' ||
             failure.reason === 'stale-disallowed' ||
             failure.reason === 'payload-invalid');
-        return stateView(technicalFailure ? 'error' : 'unavailable', (_jsx("div", { "data-widget-data": "unavailable", "data-widget-failure-mode": modes.join(' '), children: _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }) })));
+        return stateView(technicalFailure ? 'error' : 'unavailable', (_jsx("div", { "data-widget-data": "unavailable", "data-draft-review-reason": 'draftReviewReason' in delivery ? delivery.draftReviewReason : undefined, "data-widget-failure-mode": modes.join(' '), children: _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }) })));
     }
     if (widgetDataMatchesEmptyWhen(plan.config ?? {}, delivery.data)) {
         return stateView('empty', _jsx(WidgetEmptyState, { children: strings('widgetEmpty') }));

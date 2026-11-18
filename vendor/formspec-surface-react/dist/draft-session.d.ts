@@ -13,6 +13,14 @@ export interface SurfaceDraftStorage {
     };
 }
 export declare function deriveDraftSubject(subject: DataSourceSubject | undefined): Promise<DraftKey['subject']>;
+type CommittedDraft = {
+    status: 'loaded';
+    response: FormResponse;
+    revision: string;
+    key: DraftKey;
+} | {
+    status: 'absent' | 'denied' | 'version-mismatch' | 'unavailable' | 'save-failed';
+};
 type DraftOpen = {
     status: 'ready';
     engine: IFormEngine;
@@ -32,6 +40,13 @@ export declare function createDraftSession(storage: SurfaceDraftStorage, browser
         result: Promise<DraftOpen>;
         release(): void;
     };
+    readCommitted(definition: {
+        url: string;
+        version: string;
+    }, subject: DataSourceSubject | undefined, options?: {
+        afterPendingSaves?: boolean;
+        signal?: AbortSignal;
+    }): Promise<CommittedDraft>;
     leave(): Promise<boolean>;
     writerFor(key: DraftKey, version: string): {
         invoke: (input: Omit<import("@formspec-org/react").ResponseActionInvokerInput<import("@formspec-org/react").SubmitResult>, "ports"> & {
@@ -59,6 +74,7 @@ export declare function createDraftSession(storage: SurfaceDraftStorage, browser
         readonly dirty: boolean;
         readonly revision: string | undefined;
         leave: () => Promise<boolean>;
+        waitForSaves: () => Promise<boolean>;
         setMounted(value: boolean): void;
         dispose(): void;
     } | undefined;

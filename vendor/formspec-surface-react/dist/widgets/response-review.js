@@ -2,7 +2,8 @@ import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-run
 /** @filedesc Lossless frozen Response review with qualified labels and owned attachment previews. */
 import { useCallback, useEffect, useMemo, useRef, useState, } from "react";
 import canonicalize from "canonicalize";
-import { snapshotFiniteJson, } from "@formspec-org/surface";
+import { isQualifiedDraftReview } from '../internal/draft-review-qualification.js';
+import { canonicalFiniteJson, snapshotFiniteJson, } from "@formspec-org/surface";
 import { Heading, nextLevel } from "../heading.js";
 import { WidgetEmptyState } from "./empty-state.js";
 import { RESPONSE_REVIEW_COPY_KEYS, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011, } from './response-review-metadata.js';
@@ -50,8 +51,10 @@ function assertUnicode(value) {
 function capture(props, acceptedSelectionProfile) {
     try {
         // Reject accessors/cycles before reading values; detach everything the display can consume.
-        const data = snapshotFiniteJson(props.data);
-        const config = snapshotFiniteJson(props.config);
+        const dataSnapshot = snapshotFiniteJson(props.data);
+        const configSnapshot = snapshotFiniteJson(props.config);
+        const data = dataSnapshot;
+        const config = configSnapshot;
         const { definition: d, response: r, presentation: p } = data;
         const acceptedAlias = props.widgetName === "AcceptedResponseReview" || props.widgetName === "x-accepted-response-review";
         if (!object(p) || acceptedAlias !== (p.phase === "accepted-record"))
@@ -69,17 +72,17 @@ function capture(props, acceptedSelectionProfile) {
             !object(p) ||
             d.url !== r.definitionUrl ||
             d.version !== r.definitionVersion ||
-            p.definitionUrl !== d.url ||
-            p.definitionVersion !== d.version ||
-            !hash(p.responseHash) ||
             !text(p.locale) ||
-            !object(p.fields) ||
-            !["before-sign", "before-submit", "accepted-record"].includes(p.phase) ||
-            !object(r.displayedLocale) ||
-            r.displayedLocale.locale !== p.locale ||
-            (p.phase === "before-submit" &&
-                (!Array.isArray(r.authoredSignatures) ||
-                    r.authoredSignatures.length === 0)))
+            !object(p.fields))
+            return undefined;
+        if (p.phase === 'draft-review') {
+            if (!isQualifiedDraftReview(props.data) || r.status !== 'in-progress' || !text(p.revision))
+                return undefined;
+        }
+        else if (!['before-sign', 'before-submit', 'accepted-record'].includes(p.phase) ||
+            p.definitionUrl !== d.url || p.definitionVersion !== d.version || !hash(p.responseHash) ||
+            !object(r.displayedLocale) || r.displayedLocale.locale !== p.locale ||
+            (p.phase === 'before-submit' && (!Array.isArray(r.authoredSignatures) || r.authoredSignatures.length === 0)))
             return undefined;
         const selected = own(config, 'fieldSelection');
         if ((acceptedSelectionProfile === 'selected' && !selected) ||
@@ -114,8 +117,8 @@ function capture(props, acceptedSelectionProfile) {
             else if (!text(p.handoffId))
                 return undefined;
         }
-        else if (!text(p.actorRef) || !object(p.draft) || !text(p.draft.id) ||
-            !Number.isSafeInteger(p.draft.version) || p.draft.version < 0 || (own(p, "handoffId") || own(p, "taskSign")))
+        else if (p.phase !== 'draft-review' && (!text(p.actorRef) || !object(p.draft) || !text(p.draft.id) ||
+            !Number.isSafeInteger(p.draft.version) || p.draft.version < 0 || (own(p, "handoffId") || own(p, "taskSign"))))
             return undefined;
         for (const m of Object.values(p.fields)) {
             if (!object(m) ||
@@ -144,11 +147,7 @@ function capture(props, acceptedSelectionProfile) {
             copy,
             nodes,
             attachments,
-            identity: canonicalize({
-                data,
-                config,
-                headingLevel: props.headingLevel,
-            }),
+            identity: canonicalFiniteJson({ data: dataSnapshot, config: configSnapshot, headingLevel: props.headingLevel }),
         };
     }
     catch {
@@ -345,10 +344,11 @@ function AttachmentPreview({ capture: c, descriptor, path, label, read, onStatus
         let url;
         setView({ state: read ? "pending" : "unavailable" });
         onStatus(path, read ? "pending" : "unavailable");
-        if (read)
+        if (read && c.data.presentation.phase !== 'draft-review') {
+            const request = { ...c.data, path, descriptor };
             void (async () => {
                 try {
-                    const blob = await read({ ...c.data, path, descriptor }, { signal: controller.signal });
+                    const blob = await read(request, { signal: controller.signal });
                     if (!active)
                         return;
                     await verifiedPreview(blob, descriptor);
@@ -365,6 +365,7 @@ function AttachmentPreview({ capture: c, descriptor, path, label, read, onStatus
                     }
                 }
             })();
+        }
         return () => {
             active = false;
             activeUrl.current = undefined;
@@ -390,12 +391,14 @@ function AttachmentPreview({ capture: c, descriptor, path, label, read, onStatus
                         : c.copy.attachmentPending })) : null] }));
 }
 function ReviewBody({ capture: c, options, }) {
-    const [admitted, setAdmitted] = useState(false);
+    const { presentation: p, response: r } = c.data;
+    const [admitted, setAdmitted] = useState(p.phase === 'draft-review');
     const [failed, setFailed] = useState(false);
     const [identity, setIdentity] = useState();
     const [previews, setPreviews] = useState({});
-    const { presentation: p, response: r } = c.data;
     const report = useCallback((status, contextIdentity) => {
+        if (p.phase === 'draft-review')
+            return;
         const common = { status, responseHash: p.responseHash, locale: p.locale,
             ...(contextIdentity ? { contextIdentity } : {}) };
         if (p.phase === "accepted-record") {
@@ -408,6 +411,8 @@ function ReviewBody({ capture: c, options, }) {
         }
     }, [options.onReviewState, options.onAcceptedReviewState, p]);
     const readAttachment = useMemo(() => {
+        if (p.phase === 'draft-review')
+            return undefined;
         if (p.phase === "accepted-record") {
             const read = options.readAcceptedAttachment;
             return read ? (request, context) => acceptedAttachment(request)
@@ -419,6 +424,8 @@ function ReviewBody({ capture: c, options, }) {
     }, [p.phase, options.readAttachment, options.readAcceptedAttachment]);
     const onStatus = useCallback((path, status) => setPreviews((previous) => ({ ...previous, [path]: status })), []);
     useEffect(() => {
+        if (p.phase === 'draft-review')
+            return;
         let active = true;
         report("pending");
         void Promise.all([
@@ -460,8 +467,8 @@ function ReviewBody({ capture: c, options, }) {
     if (!admitted)
         return (_jsx(WidgetEmptyState, { children: failed ? c.copy.unavailable : c.copy.pending }));
     const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsx("dd", { children: node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy })) })] }, node.path)));
-    return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
-                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context fs-response-review__meta", children: [p.phase !== "accepted-record" ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel)), _jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] })] }));
+    return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), p.phase !== 'draft-review' && _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
+                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context fs-response-review__meta", children: [p.phase !== "accepted-record" && p.phase !== 'draft-review' ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel)), _jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] })] }));
 }
 function unavailableCopy(props) {
     try {

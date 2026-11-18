@@ -33,7 +33,7 @@
  */
 import { admitScreenerPresentation } from './screener-slot.js';
 import { targetDefinitionMatches } from '@formspec-org/types';
-import { parseRouteSubjectKey, widgetActionScopeMatches } from '@formspec-org/app-graph';
+import { parseRouteSubjectKey, resolveDraftReviewTarget, widgetActionScopeMatches } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
 import { planFilingStatus } from './filing-status.js';
 import { planExperienceUnit, } from './experience-unit.js';
@@ -207,7 +207,9 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
                 : [];
             const dataBindings = ownRecord(binding, 'dataBindings');
             const actionBindings = ownRecord(binding, 'actionBindings');
-            const dataInputs = declaredInputs.map((declared) => {
+            const draftReview = Object.hasOwn(binding, 'draftReview')
+                ? planDraftReview(context, binding, widgetShape) : undefined;
+            const dataInputs = (draftReview ? [] : declaredInputs).map((declared) => {
                 const authored = ownRecord(dataBindings, declared.name);
                 if (!authored) {
                     return {
@@ -291,6 +293,7 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
                 slotType: 'module-widget',
                 key,
                 dataInputs,
+                ...(draftReview && { draftReview }),
                 actionOutputs,
                 resolution,
             };
@@ -414,6 +417,18 @@ function resolveWidgetAction(documents, actionRef, responseInput, inputs, defini
         ...(needAnchors.length > 0 ? { needAnchors } : {}),
     };
     return { action: metadata, ...(responseContext ? { responseContext } : {}) };
+}
+function planDraftReview(context, binding, widgetShape) {
+    const target = resolveDraftReviewTarget(context.handle.surface, context.handle.route, binding, widgetShape);
+    if (target.status === 'unresolved')
+        return target;
+    const definition = context.definitions.get(target.definitionRef);
+    if (!definition)
+        return { status: 'unresolved', reason: 'form-unresolved' };
+    const subject = resolveFormSubject(definition, target.formBinding, context.handle.route, context.params ?? {});
+    if (subject === false)
+        return { status: 'unresolved', reason: 'subject-keys-invalid' };
+    return { status: 'ready', definition, ...(subject && { subject }) };
 }
 function resolveFormSubject(definition, binding, route, params) {
     const hasBinding = Object.hasOwn(binding, 'subjectKeys');

@@ -85,6 +85,8 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     config?: Readonly<Record<string, unknown>>;
     /** Registry-declared inputs after exact qualified-source resolution. */
     dataInputs: readonly WidgetDataInputPlan[];
+    /** Authored supplier for all three committed draft review inputs. */
+    draftReview?: DraftReviewPlan;
     /** Registry-declared outputs with their exact authored mappings, if any. */
     actionOutputs: readonly WidgetActionOutputPlan[];
     resolution: WidgetResolution<TComponent>;
@@ -169,6 +171,14 @@ export interface WidgetActionResponsePlan {
     definition: FormDefinition;
     descriptor: DataSourceDescriptor;
 }
+export type DraftReviewPlan = {
+    status: 'ready';
+    definition: FormDefinition;
+    subject?: DataSourceSubject;
+} | {
+    status: 'unresolved';
+    reason: 'invalid-binding' | 'form-unresolved' | 'subject-keys-invalid';
+};
 export interface RoutePlan<TComponent> {
     handle: SurfaceRouteHandle;
     slots: readonly SlotPlan<TComponent>[];

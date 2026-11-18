@@ -14,12 +14,12 @@ export { resolveComponentRouteTarget, type ComponentRouteSelection, type Compone
 export { validateExperienceActionRefs, } from './experience-action-refs.js';
 export { validateExperienceReferentialIntegrity, } from './experience-referential-integrity.js';
 export { validateExecutableSchemaContracts, } from './executable-schema-contracts.js';
-export { DATA_SOURCE_CONTRACT_CODES, validateDataSources, } from './data-sources.js';
+export { validateDataSources, } from './data-sources.js';
 export { LOCALE_ASSOCIATION_CODES, normalizeLocaleTag, validateLocaleAssociations, } from './locale-associations.js';
 export { validateNeedsCoverage, type NeedsEarlFrame, type NeedStatus, } from './needs-coverage.js';
 export { NEED_COMPLETION_SHAPES, NEED_USABLE_OUTCOME_CODES, validateNeedUsableOutcomes, type NeedCompletionShape, } from './need-usable-outcomes.js';
 export { collectRenderedNeedTraceNodes, RENDERED_NEED_TRACE_CODES, runRenderedNeedTrace, validateRenderedNeedTrace, type RenderedNeedTraceAnchor, type RenderedNeedTraceCollectionFailure, type RenderedNeedTraceInvalidAnchor, type RenderedNeedTraceNode, type RenderedNeedTraceTypedNeedRef, } from './rendered-need-trace.js';
-export { DOCUMENT_LINT_ORIGIN, lintPathToJsonPointer, documentLintDiagnostics, documentLintValidator, type AppGraphDocumentLinter, type AppGraphLintDiagnostic, type AppGraphDocumentLintContext, type AppGraphDocumentLintValidatorOptions, } from './document-lint.js';
+export { DOCUMENT_LINT_ORIGIN, lintPathToJsonPointer, documentLintDiagnostics, documentLintValidator, type AppGraphDocumentLinter, type AppGraphLintDiagnostic, type AppGraphDocumentLintContext, type AppGraphInstanceProjectionDiagnostic, type AppGraphDocumentLintValidatorOptions, } from './document-lint.js';
 export { validateScreenerSurfaceTargets, } from './screener-surface-targets.js';
 export { validateSurfaceDefinitionSlots, } from './surface-definition-slots.js';
 export { validateSurfaceExperienceUnits, } from './surface-experience-units.js';
@@ -34,4 +34,5 @@ export { resolveWidgetContribution, type WidgetContributionEntry, type WidgetCon
 export { ROUTE_CLASS_THEME_AUTHORITY, TENANT_THEMING_REFUSING_ROUTE_CLASSES, validateUiGraphPolicy, } from './ui-graph-policy.js';
 export { artifactHandlesFor, validateAppGraph, } from './validator.js';
 export { parseRouteSubjectKey } from './surface-definition-slots.js';
+export { resolveDraftReviewTarget } from './surface-draft-review.js';
 export { filingStatusEntries, resolveFilingStatusTargets, validateFilingStatusTargets } from './filing-status-targets.js';

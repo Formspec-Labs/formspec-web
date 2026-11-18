@@ -414,7 +414,7 @@ export interface Diagnostic {
  */
 export interface AppGraphObservedPayload {
     subject: QualifiedSubjectRef;
-    relation: 'resolves' | 'mounted' | 'direct-need-trace';
+    relation: 'resolves' | 'mounted' | 'need-trace';
     state: 'present' | 'absent';
 }
 /**
@@ -618,7 +618,7 @@ export interface OutcomeVerificationCase {
             kind?: 'app-graph';
             requiredEvidence?: 'structural';
             subject: QualifiedSubjectRef;
-            relation: 'resolves' | 'mounted' | 'direct-need-trace';
+            relation: 'resolves' | 'mounted' | 'need-trace';
             state: 'present' | 'absent';
         }) | (ExpectedObservationBase & {
             kind?: 'validation-report';
@@ -722,7 +722,7 @@ export interface OutcomeVerificationCase {
             kind?: 'app-graph';
             requiredEvidence?: 'structural';
             subject: QualifiedSubjectRef;
-            relation: 'resolves' | 'mounted' | 'direct-need-trace';
+            relation: 'resolves' | 'mounted' | 'need-trace';
             state: 'present' | 'absent';
         }) | (ExpectedObservationBase & {
             kind?: 'validation-report';

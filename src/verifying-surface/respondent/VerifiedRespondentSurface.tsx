@@ -230,6 +230,7 @@ function AdmittedRespondentSurface({
             themeDocument,
             registryEntries,
             responseActionsDocument: input.responseActionsDocument,
+            responseSubject: input.responseSubject,
             localeDocuments: definitionLocales(input.plan.definition.url),
             activeLocale: locale.activeLocale,
             ...(input.onActionCompleted

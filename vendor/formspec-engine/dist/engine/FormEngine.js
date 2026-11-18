@@ -118,7 +118,7 @@ export class FormEngine {
         }
         this._seedFromGroups = collectSeedFromGroups(this.definition.items);
         this.initializeOptionSignals();
-        this.initializeInstances();
+        this.initializeInstances(options.loadExternalSources !== false);
         this.initializeBindConfigs(this.definition.items);
         this.rejectInstancePathBinds();
         validateVariableDefinitionCycles(this._variableDefs, scope => this.variableScopePath(scope));
@@ -138,7 +138,8 @@ export class FormEngine {
             this.dispose();
             throw error;
         }
-        this.initializeRemoteOptions();
+        if (options.loadExternalSources !== false)
+            this.initializeRemoteOptions();
         // Create form-level view model (after first evaluate so validation is available)
         this._formViewModel = createFormViewModel({
             rx: this._rx,
@@ -977,7 +978,7 @@ export class FormEngine {
         // Resolve a display-only copy; evaluation always receives the authored Definition.
         visit(resolveOptionSetsOnDefinition(this.definition).items);
     }
-    initializeInstances() {
+    initializeInstances(loadExternalSources) {
         const instances = this.definition.instances;
         if (!instances) {
             return;
@@ -988,7 +989,8 @@ export class FormEngine {
                 this.validateInstanceSchema(name, seedData);
                 this.instanceData[name] = seedData;
             }
-            this.initializeInstanceSource(name, instance);
+            if (loadExternalSources)
+                this.initializeInstanceSource(name, instance);
         }
     }
     /**

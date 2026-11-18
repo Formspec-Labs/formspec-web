@@ -161,6 +161,7 @@ export interface ResolvedRespondentFormInput {
   readonly componentDocument?: ComponentDocument;
   /** Surface-qualified pre-mount data; an actual saved response always takes precedence. */
   readonly initialData?: SurfaceDefinitionFormRenderInput['initialData'];
+  readonly responseSubject?: SurfaceDefinitionFormRenderInput['responseSubject'];
   /** Establish ownership after restore and before controls mount; release resources if setup throws. */
   /** Trusted native source policy; supplied before any engine source task starts. */
   readonly instanceSourceResolver?: InstanceSourceResolver;
@@ -616,6 +617,7 @@ function RespondentController({
     form?.localeDocuments,
     form?.registryEntries,
     form?.responseActionsDocument,
+    form?.responseSubject?.id,
     form?.themeDocument,
   ]);
 
@@ -953,7 +955,7 @@ function RespondentController({
         author: respondentState.claim
           ? { id: respondentState.claim.subjectRef }
           : undefined,
-        subject: respondentState.claim
+        subject: respondentState.claim && !form?.responseSubject
           ? { id: respondentState.claim.subjectRef, type: 'respondent' }
           : undefined,
       });
@@ -1584,6 +1586,7 @@ async function createReadyState(
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
     ...(form ? { registryEntries: [...form.registryEntries], instanceSourceResolver: form.instanceSourceResolver,
+      ...(form.responseSubject ? { responseSubject: form.responseSubject } : {}),
       ...(form.instanceSourceResolver && recoveredDraft ? { responseData: recoveredDraft.data as Parameters<IFormEngine['loadResponseData']>[0] } : {}) } : {}),
   });
   let multiPartyState: MultiPartyPersistedState | null;

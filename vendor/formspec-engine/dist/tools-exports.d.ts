@@ -3,6 +3,7 @@ export type { FELConditionBuilderOperator, FELConditionGroupCondition, FELCondit
 export type { ReadonlyEngineSignal } from './reactivity/types.js';
 export { normalizeIndexedPath, itemAtPath, tokenizeFEL, analyzeFEL, normalizePathSegment, splitNormalizedPath, itemLocationAtPath, rewriteFELReferences, rewriteMessageTemplate, lintDocument, parseRegistry, findRegistryEntry, validateLifecycleTransition, wellKnownRegistryUrl, generateChangelog, printFEL, tryLiftConditionGroup, evaluateDefinition, getBuiltinFELFunctionCatalog, getFELDependencies, isValidFELIdentifier, sanitizeFELIdentifier, validateExtensionUsage, createSchemaValidator, rewriteFEL, } from './fel/fel-api.js';
 export type { TreeItemLike, ItemLocation } from './fel/fel-api.js';
+export { checkInstanceProjection, type InstanceProjectionDiagnostic } from './fel/fel-api-tools.js';
 export { createMappingEngine, RuntimeMappingEngine } from './mapping/RuntimeMappingEngine.js';
 export { isValidResponseAuthored, responseSubjectId, selectResponses } from './wasm-bridge-tools.js';
 /** FEL eval for tooling (WASM); returns a JSON-compatible value. */

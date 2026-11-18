@@ -13,6 +13,10 @@ export interface AppGraphDocumentLintContext {
     componentDocuments?: unknown[];
     localeDocuments?: unknown[];
     registryDocuments?: unknown[];
+    /** For a projection request, all loaded Definition documents of the selected URL. */
+    upstreamDefinitions?: readonly unknown[];
+    /** For a projection request, the consuming Definition's subject declaration or null. */
+    consumerSubject?: unknown;
 }
 export interface AppGraphLintDiagnostic {
     code?: string;
@@ -22,9 +26,16 @@ export interface AppGraphLintDiagnostic {
     suggestedFix?: string;
     specRef?: string;
 }
+export interface AppGraphInstanceProjectionDiagnostic {
+    code: string;
+    jsonPointer: string;
+    upstreamVersion: string | null;
+    message: string;
+}
 /** A host injects its document linter, normally the engine's Rust/WASM `lintDocument`. */
 export type AppGraphDocumentLinter = (document: unknown, context: AppGraphDocumentLintContext) => {
     diagnostics?: readonly AppGraphLintDiagnostic[];
+    instanceProjectionDiagnostics?: readonly AppGraphInstanceProjectionDiagnostic[];
 };
 export interface AppGraphDocumentLintValidatorOptions {
     /** Resolve the host input for a loaded Mapping, or return undefined for ordinary Mapping lint. */

@@ -106,8 +106,20 @@ export interface WasmLintDocumentOptions {
     appGraphValidationReport?: unknown;
     schemaOnly?: boolean;
     noFel?: boolean;
+    /** For an AppGraph projection check, pass all loaded Definitions for the selected URL. */
+    upstreamDefinitions?: readonly unknown[];
+    /** Subject declaration of the consuming Definition, or null when there is none. */
+    consumerSubject?: unknown;
 }
-/** Lint a Formspec document. */
+export interface InstanceProjectionDiagnostic {
+    code: string;
+    jsonPointer: string;
+    upstreamVersion: string | null;
+    message: string;
+}
+/** Check an instance or catalog source against every eligible upstream Definition. */
+export declare function checkInstanceProjection(source: unknown, consumerSubject: unknown, upstreamDefinitions: readonly unknown[]): InstanceProjectionDiagnostic[];
+/** Lint a Formspec document, or check a response projection when given upstream Definitions. */
 export declare function wasmLintDocument(doc: unknown, options?: WasmLintDocumentOptions): {
     documentType: string | null;
     valid: boolean;
@@ -116,6 +128,7 @@ export declare function wasmLintDocument(doc: unknown, options?: WasmLintDocumen
         ok: boolean;
         diagnostics: any[];
     };
+    instanceProjectionDiagnostics?: InstanceProjectionDiagnostic[];
 };
 /** @deprecated Use `wasmLintDocument(doc, { registryDocuments })`. */
 export declare function wasmLintDocumentWithRegistries(doc: unknown, registries: unknown[]): {

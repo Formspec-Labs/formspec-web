@@ -12,11 +12,6 @@ interface DefinitionResolution {
     definition?: ResolvedArtifactHandle;
     candidates: ResolvedArtifactHandle[];
 }
-export declare const DATA_SOURCE_CONTRACT_CODES: {
-    readonly definitionSelectionUnresolved: "DATA-SOURCE-DEFINITION-SELECTION-UNRESOLVED";
-    readonly definitionDataSchemaMismatch: "DATA-SOURCE-DEFINITION-DATA-SCHEMA";
-    readonly definitionDataSchemaIndeterminate: "DATA-SOURCE-DEFINITION-DATA-SCHEMA-INDETERMINATE";
-};
 export declare function exactDefinitionResolution(context: AppGraphContext, definitionRef: string): DefinitionResolution;
 export declare function bindingFailure(context: AppGraphContext, widget: SurfaceWidgetSlot, binding: JsonRecord): BindingFailure | undefined;
 /**

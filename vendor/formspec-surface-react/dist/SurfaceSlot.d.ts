@@ -63,6 +63,10 @@ export interface SurfaceDefinitionFormRenderInput {
     plan: ResolvedDefinitionFormPlan;
     grant: ThemeGrant;
     route: SurfaceWidgetRouteContext;
+    /** Resolved shell strings for the active locale. */
+    strings: SurfaceStrings;
+    /** The filing-unit type and typed keys, with the ID derived by Core. */
+    responseSubject?: FormEngineOptions['responseSubject'];
     responseActionsDocument: ReactResponseActionsDocument | undefined;
     referencesDocuments: readonly ReferencesDocument[];
     ontologyDocuments: readonly OntologyDocument[];
@@ -78,7 +82,6 @@ export interface SurfaceDefinitionFormRenderInput {
     /** A new form still needs its authored seed. An existing draft has its own data. */
     draftSeed?: 'loading' | 'unavailable' | undefined;
     draftStrings?: SurfaceStrings | undefined;
-    responseSubject?: FormEngineOptions['responseSubject'];
     /** Report committed saves and failed writes to the single shell live region. */
     reportSave?: ((notice: SurfaceSaveNotice) => void) | undefined;
     activeSection?: string | undefined;
