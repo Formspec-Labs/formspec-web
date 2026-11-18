@@ -463,7 +463,7 @@ function respondentPayload(
         },
         schema: {
           type: 'object',
-          required: ['caseRef', 'submittedAt', 'facts'],
+          required: ['caseRef', 'facts'],
           additionalProperties: false,
           properties: {
             caseRef: { type: 'string' },

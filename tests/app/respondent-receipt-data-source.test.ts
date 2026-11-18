@@ -19,7 +19,7 @@ const CATALOG = 'https://example.gov/data/respondent';
 const RESOURCE = 'https://runtime.example.gov/respondent/receipt';
 
 describe('respondent receipt Data Sources runtime', () => {
-  it('loads the named receipt through the canonical loader, authorization, and schema bridge', async () => {
+  it.each(['2026-07-28T20:30:00.000Z', undefined])('validates receipt with service time %s', async (acceptedAt) => {
     const store = createMemoryRespondentReceiptSessionStore([
       receiptRecordFromConfirmation(
         APP_ID,
@@ -27,7 +27,7 @@ describe('respondent receipt Data Sources runtime', () => {
         {
           referenceNumber: 'CASE-301',
           status: 'accepted',
-          acceptedAt: '2026-07-28T20:30:00.000Z',
+          ...(acceptedAt === undefined ? {} : { acceptedAt }),
           trackingUri: 'https://status.example.gov/CASE-301',
         },
       ),
@@ -51,7 +51,7 @@ describe('respondent receipt Data Sources runtime', () => {
       freshness: 'fresh',
       value: {
         caseRef: 'CASE-301',
-        submittedAt: '2026-07-28T20:30:00.000Z',
+        ...(acceptedAt === undefined ? {} : { submittedAt: acceptedAt }),
         facts: [
           { label: 'Submission status', value: 'accepted' },
           { label: 'Tracking link', value: 'https://status.example.gov/CASE-301' },
@@ -61,6 +61,7 @@ describe('respondent receipt Data Sources runtime', () => {
     expect(JSON.stringify(loaded)).not.toContain('Publisher');
     expect(JSON.stringify(loaded)).not.toContain('issuer');
     if (loaded.status !== 'loaded') return;
+    if (acceptedAt === undefined) expect(loaded.value).not.toHaveProperty('submittedAt');
     expect(await runtime.validateDataSourcePayload({
       descriptor,
       context,
@@ -148,7 +149,8 @@ function receiptDescriptor(): DataSourceDescriptor {
       },
       schema: {
         type: 'object',
-        required: ['caseRef', 'submittedAt', 'facts'],
+        // A confirmed reference and status remain useful when its service supplies no timestamp.
+        required: ['caseRef', 'facts'],
         additionalProperties: false,
         properties: {
           caseRef: { type: 'string' },

@@ -608,7 +608,7 @@ function signedPayload({ appLocaleVersion = '2.1', singletonSubject, keyedSubjec
           },
           schema: {
             type: 'object',
-            required: ['caseRef', 'submittedAt', 'facts'],
+            required: ['caseRef', 'facts'],
             additionalProperties: false,
             properties: {
               caseRef: { type: 'string' },
