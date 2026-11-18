@@ -1968,16 +1968,16 @@ export interface components {
         };
         /** @description Closed CaseAlternative shape from Governance native reference execution. */
         CaseAlternative: {
-            /** @description Retained changes value under referenceDueProcess/1. */
+            /** @description Scalar replacements evaluated together on a private clone of the retained snapshot. */
             changes: components["schemas"]["CaseChange"][];
             /**
              * @description Authored policy text describing this hypothetical set of case changes, copied verbatim into counterfactual provenance; it is not an evaluation result.
              * @example Verified household income at or below the program limit.
              */
             description: string;
-            /** @description Retained id value under referenceDueProcess/1. */
+            /** @description Authored identifier for this alternative within the selected explanation. */
             id: components["schemas"]["Id"];
-            /** @description Retained sourceRefs value under referenceDueProcess/1. */
+            /** @description Retained sources grounding the selection of this alternative and its changes. */
             sourceRefs: components["schemas"]["SourceRef"][];
         };
         /**
@@ -1996,9 +1996,9 @@ export interface components {
         };
         /** @description Closed CaseChange shape from Governance native reference execution. */
         CaseChange: {
-            /** @description Retained casePointer value under referenceDueProcess/1. */
+            /** @description JSON Pointer to the existing scalar field in the determination snapshot to vary. */
             casePointer: components["schemas"]["Pointer"];
-            /** @description Retained value value under referenceDueProcess/1. */
+            /** @description Replacement scalar used only in the isolated counterfactual evaluation. */
             value: components["schemas"]["Scalar"];
         };
         /** @description Receipt returned after a direct case-ledger append commits. */
@@ -2843,58 +2843,58 @@ export interface components {
         DeliveryChannelKind: ("postal" | "email" | "portal" | "sms" | "in-app") | string;
         /** @description Closed DeterminationCounterfactualData shape from Governance native reference execution. */
         DeterminationCounterfactualData: {
-            /** @description Retained alternateEvaluation value under referenceDueProcess/1. */
+            /** @description Decision-table observation obtained after evaluating the isolated alternative. */
             alternateEvaluation: components["schemas"]["NativeDecisionEvaluation"];
-            /** @description Retained alternateSnapshotSha256 value under referenceDueProcess/1. */
+            /** @description Lowercase hexadecimal SHA-256 of the snapshot with the alternative applied. */
             alternateSnapshotSha256: components["schemas"]["SnapshotDigest"];
-            /** @description Retained alternative value under referenceDueProcess/1. */
+            /** @description Selected alternative and its scalar changes applied to a private snapshot clone. */
             alternative: components["schemas"]["CaseAlternative"];
             /**
              * @description The selected alternative's authored description, copied verbatim; the evaluation results are retained separately in originalEvaluation and alternateEvaluation.
              * @example Verified household income at or below the program limit.
              */
             description: string;
-            /** @description Retained factor value under referenceDueProcess/1. */
+            /** @description Authored alternative ID copied into the counterfactual factor field. */
             factor: components["schemas"]["Id"];
-            /** @description Retained originalEvaluation value under referenceDueProcess/1. */
+            /** @description Actual decision-table observation for the original determination. */
             originalEvaluation: components["schemas"]["NativeDecisionEvaluation"];
-            /** @description Retained originalSnapshotSha256 value under referenceDueProcess/1. */
+            /** @description Lowercase hexadecimal SHA-256 of the original retained determination snapshot. */
             originalSnapshotSha256: components["schemas"]["SnapshotDigest"];
             /**
              * @description Identity of the saved determination whose firing the counterfactual evidence describes.
              * @example default_prov_01m5bkbfjke3r9p9589gy8zggh
              */
             relatedTransition: string;
-            /** @description Retained sourceRefs value under referenceDueProcess/1. */
+            /** @description Retained sources carried from the selected counterfactual alternative. */
             sourceRefs: components["schemas"]["SourceRef"][];
-            /** @description Retained tier value under referenceDueProcess/1. */
+            /** @description Audit tier that identifies this native determination counterfactual payload. */
             tier: components["schemas"]["CounterfactualTier"];
-            /** @description Retained kindType value under referenceDueProcess/1. */
+            /** @description Positive outcome change or negative outcome preservation verified for this alternative. */
             type: components["schemas"]["CounterfactualKind"];
         };
         /** @description Closed DeterminationReasoningData shape from Governance native reference execution. */
         DeterminationReasoningData: {
-            /** @description Retained authority value under referenceDueProcess/1. */
+            /** @description Source authority recorded from the selected reason binding. */
             authority: components["schemas"]["SourceAuthority"];
             /**
              * @description The selected row's reason binding description, copied verbatim as policy text; actual inputs and outputs are retained separately in evaluation.
              * @example Countable household income exceeds the program limit.
              */
             description: string;
-            /** @description Retained evaluation value under referenceDueProcess/1. */
+            /** @description Actual decision-table evaluation whose selected row supplied the reason. */
             evaluation: components["schemas"]["NativeDecisionEvaluation"];
             /**
              * @description Identity of the saved determination whose firing the retained reasoning evidence explains.
              * @example default_prov_01m5bkbfjke3r9p9589gy8zggh
              */
             relatedTransition: string;
-            /** @description Retained ruleId value under referenceDueProcess/1. */
+            /** @description Selected reason code corresponding to the actual matched decision-table row. */
             ruleId: components["schemas"]["Id"];
-            /** @description Retained sourceRefs value under referenceDueProcess/1. */
+            /** @description Retained sources carried from the selected reason binding. */
             sourceRefs: components["schemas"]["SourceRef"][];
-            /** @description Retained tier value under referenceDueProcess/1. */
+            /** @description Audit tier that identifies this native determination reasoning payload. */
             tier: components["schemas"]["ReasoningTier"];
-            /** @description Retained timestamp value under referenceDueProcess/1. */
+            /** @description Timestamp of the determining transition this reasoning explains. */
             timestamp: components["schemas"]["Timestamp"];
         };
         /**
@@ -3629,9 +3629,9 @@ export interface components {
         MutationKind: string & (("human-entered" | "human-corrected" | "agent-extracted" | "system-fetched" | "computed" | "self-attested") | unknown);
         /** @description Closed NamedScalar shape from Governance native reference execution. */
         NamedScalar: {
-            /** @description Retained name value under referenceDueProcess/1. */
+            /** @description Name of the decision-table input or output represented by this value. */
             name: components["schemas"]["Id"];
-            /** @description Retained value value under referenceDueProcess/1. */
+            /** @description Scalar actually observed for the named decision-table input or output. */
             value: components["schemas"]["Scalar"];
         };
         /** @description Narrative-tier provenance record (AI integration S13). Non-authoritative model-generated explanation. MUST carry `authoritative: false`. A conformant implementation MUST NOT treat narrative content as dispositive in adjudicative, audit, or due-process contexts (S13.2). */
@@ -3738,20 +3738,20 @@ export interface components {
              * @example true
              */
             guardResult: boolean;
-            /** @description Retained inputs value under referenceDueProcess/1. */
+            /** @description Concrete input names and values passed to the native decision table. */
             inputs: components["schemas"]["NamedScalar"][];
-            /** @description Retained location value under referenceDueProcess/1. */
+            /** @description Exact workflow state and transition index where the guard was evaluated. */
             location: components["schemas"]["TransitionLocation"];
-            /** @description Retained matchedRowIds value under referenceDueProcess/1. */
+            /** @description IDs of the rows the decision table actually matched during evaluation. */
             matchedRowIds: string[];
-            /** @description Retained outputs value under referenceDueProcess/1. */
+            /** @description Concrete output names and values returned by the native decision table. */
             outputs: components["schemas"]["NamedScalar"][];
             /**
              * @description Identifier of the decision table row selected by the retained native evaluation.
              * @example income-over-limit
              */
             selectedRowId?: string;
-            /** @description Retained tableRef value under referenceDueProcess/1. */
+            /** @description Identifier of the native decision table invoked by the guard. */
             tableRef: components["schemas"]["Id"];
         };
         /** @description Native determinationCounterfactual evidence in the counterfactual audit tier. Retains the owning native shape and original metadata; does not fabricate authored explanation fields. */
@@ -4970,14 +4970,14 @@ export interface components {
         SourceAuthority: "statute" | "regulation" | "policy" | "guideline";
         /** @description Closed SourceRef shape from Governance native reference execution. */
         SourceRef: {
-            /** @description Retained retainedSha256 value under referenceDueProcess/1. */
+            /** @description SHA-256 digest of the exact retained bytes addressed by this source reference. */
             retainedSha256: components["schemas"]["Digest"];
             /**
              * @description Section identifier within the retained source version that supports this policy reference.
              * @example eligibility-review
              */
             sectionAnchor: string;
-            /** @description Retained sourceVersion value under referenceDueProcess/1. */
+            /** @description Selected evidence ID used to locate the retained bytes with the required role. */
             sourceVersion: components["schemas"]["Id"];
         };
         /** @description Notification arm for every `type` other than `bundle-completed`. `bundleId` is OPTIONAL (typically absent for non-bundle event families). `type` here is the closed reserved set with `bundle-completed` excluded plus the vendor-prefix extension pattern. */
@@ -5443,7 +5443,7 @@ export interface components {
         TokenKind: "bearer";
         /** @description Closed TransitionLocation shape from Governance native reference execution. */
         TransitionLocation: {
-            /** @description Retained statePointer value under referenceDueProcess/1. */
+            /** @description JSON Pointer to the owning state in the selected workflow. */
             statePointer: components["schemas"]["Pointer"];
             /**
              * @description Zero-based position of the transition in the source state's authored transition list.

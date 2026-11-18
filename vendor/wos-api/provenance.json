@@ -1,6 +1,6 @@
 {
   "sourceRevisions": {
-    "work-spec": "971f369acf04b66c7fcf9ef658f14ed96932a7e1"
+    "work-spec": "8978b4f4749d2a0dde99e42179ace84028fac481"
   },
   "scope": "Exact maintained applicant schema and complete declared API reference closure. Backend owner separately qualifies runtime authority and response behavior.",
   "files": {
@@ -34,11 +34,11 @@
     },
     "wos-reference-due-process.schema.json": {
       "source": "work-spec/schemas/wos-reference-due-process.schema.json",
-      "sha256": "e79aa505de8727ac49a3777183405d334d3553228d120c4dfc06d70a1c13592e"
+      "sha256": "5d2873ad8ffe936d9d8555949549b2783d19fcb0df685585f57884102be2a14d"
     },
     "wos-workflow.schema.json": {
       "source": "work-spec/schemas/wos-workflow.schema.json",
-      "sha256": "dd10e1e8fec8ed9cba109c8ae215278177f3feb91f845f48dc0f2f13b319c9ad"
+      "sha256": "917f9b4790a8d29f6a9f6162d759e1cf3e452a8d22b38b71f02f4ab43a8a70e6"
     }
   }
 }
