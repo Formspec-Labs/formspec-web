@@ -19,9 +19,9 @@ describe('respondent receipt session store', () => {
       {
         referenceNumber: 'CASE-204',
         status: 'accepted',
+        acceptedAt: '2026-07-28T20:00:00.000Z',
         trackingUri: 'https://status.example.gov/CASE-204',
       },
-      '2026-07-28T20:00:00.000Z',
     );
 
     expect(first.write(record)).toBe('stored');
@@ -45,7 +45,6 @@ describe('respondent receipt session store', () => {
       APP_ID,
       RELEASE_A,
       { referenceNumber: 'CASE-205', status: 'accepted' },
-      '2026-07-28T20:00:00.000Z',
     );
 
     expect(store.write(record)).toBe('unavailable');
@@ -57,7 +56,6 @@ describe('respondent receipt session store', () => {
       APP_ID,
       RELEASE_A,
       { referenceNumber: 'CASE-206', status: 'queued' },
-      '2026-07-28T20:00:00.000Z',
     );
     const store = createMemoryRespondentReceiptSessionStore([record]);
 

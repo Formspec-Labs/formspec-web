@@ -701,7 +701,7 @@ async function fulfillFormspecServerRoute(
     if (typeof body.canonical_response?.id !== 'string' || body.response_id !== body.canonical_response.id) {
       throw new Error('E2E submission must preserve the canonical Response identifier');
     }
-    await json(route, { response_id: body.canonical_response.id, status: 'accepted' });
+    await json(route, { response_id: body.canonical_response.id, status: 'accepted', accepted_at: '2026-07-28T20:00:00Z' });
     return;
   }
   if (

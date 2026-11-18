@@ -27,9 +27,9 @@ describe('respondent receipt Data Sources runtime', () => {
         {
           referenceNumber: 'CASE-301',
           status: 'accepted',
+          acceptedAt: '2026-07-28T20:30:00.000Z',
           trackingUri: 'https://status.example.gov/CASE-301',
         },
-        '2026-07-28T20:30:00.000Z',
       ),
     ]);
     const runtime = createRespondentDataSourceRuntime({

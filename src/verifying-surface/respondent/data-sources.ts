@@ -49,7 +49,7 @@ export function createRespondentDataSourceRuntime(
       freshness: 'fresh',
       value: Object.freeze({
         caseRef: record.caseRef,
-        submittedAt: record.submittedAt,
+        ...(record.confirmation.acceptedAt === undefined ? {} : { submittedAt: record.confirmation.acceptedAt }),
         facts: Object.freeze([
           Object.freeze({
             label: 'Submission status',

@@ -21,6 +21,8 @@ export interface SubmitConfirmation {
   referenceNumber: string;
   /** Submission status as reported by the upstream service. */
   status: 'accepted' | 'queued' | 'rejected';
+  /** Timestamp supplied by the accepting service, when known. */
+  acceptedAt?: string;
   /** Optional URI for the respondent to track the submission. */
   trackingUri?: string;
   /**

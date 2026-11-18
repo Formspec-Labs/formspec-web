@@ -6,8 +6,26 @@ import {
 } from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { idempotencyKey, jsonResponse, recordingFetch } from './test-fetch.ts';
+import { receiptRecordFromConfirmation } from '../../../src/verifying-surface/respondent/session-store.ts';
 
 describe('HttpSubmitTransport', () => {
+  it.each([
+    ['known', '2020-04-15T13:00:00Z'],
+    ['unknown', undefined],
+  ] as const)('retains only the service-reported receipt time (%s)', async (_label, acceptedAt) => {
+    const { fetch } = recordingFetch(() => jsonResponse({
+      response_id: 'server-response', status: 'accepted', accepted_at: acceptedAt,
+    }));
+    const transport = new HttpSubmitTransport({
+      baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1',
+    });
+    const confirmation = await transport.submit(sampleIntakeHandoff, generateIdempotencyKey());
+    const record = receiptRecordFromConfirmation('app', 'release', confirmation);
+    expect(record.confirmation.acceptedAt).toBe(acceptedAt);
+    // A browser-side timestamp cannot establish when the service accepted a filing.
+    expect(record).not.toHaveProperty('submittedAt');
+  });
+
   it.each(['inherited', 'accessor'])('refuses %s selector fields before credentials or HTTP effects', async kind => {
     const plain = { selectionHash: `sha256:${'a'.repeat(64)}`, runId: 'fresh-run', runRevision: 1 };
     const getter = vi.fn(() => plain.runId);

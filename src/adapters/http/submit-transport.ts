@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/source-public.d.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
@@ -21,8 +22,7 @@ export interface HttpSubmitTransportConfig extends HttpClientConfig {
 
 type CanonicalResponse = Record<string, unknown> & { data: Record<string, unknown> };
 
-interface ResponseView {
-  response_id: string;
+interface ResponseView extends Pick<components['schemas']['ResponseView'], 'response_id' | 'accepted_at'> {
   status: 'accepted' | 'queued' | 'rejected';
 }
 
@@ -115,6 +115,8 @@ export class HttpSubmitTransport implements SubmitTransport {
       recordKind: 'response',
       referenceNumber: response.response_id,
       status: response.status,
+      ...(typeof response.accepted_at === 'string' && Number.isFinite(Date.parse(response.accepted_at))
+        ? { acceptedAt: response.accepted_at } : {}),
     };
     return confirmation;
   }

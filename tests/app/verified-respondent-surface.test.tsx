@@ -89,7 +89,7 @@ describe('verified respondent Surface integration', () => {
       return render(
         <VerifiedRespondentSurface bundleConfig={bundleConfig} composition={fixture.composition}
           formCompositionFactory={fixture.formCompositionFactory} config={publicPortalProfile}
-          now={() => new Date(CHECKED_AT)} preferredLocales={['en']} />,
+          preferredLocales={['en']} />,
       );
     };
     const findName = () => screen.findByRole<HTMLInputElement>(
@@ -155,7 +155,6 @@ describe('verified respondent Surface integration', () => {
         composition={fixture.composition}
         formCompositionFactory={fixture.formCompositionFactory}
         config={publicPortalProfile}
-        now={() => new Date(CHECKED_AT)}
         preferredLocales={['en']}
         sessionStore={sessionStore}
       />,
@@ -196,7 +195,6 @@ describe('verified respondent Surface integration', () => {
         composition={fixture.composition}
         formCompositionFactory={fixture.formCompositionFactory}
         config={publicPortalProfile}
-        now={() => new Date(CHECKED_AT)}
         preferredLocales={['en']}
         sessionStore={sessionStore}
       />,
@@ -246,7 +244,6 @@ describe('verified respondent Surface integration', () => {
         composition={fixture.composition}
         formCompositionFactory={fixture.formCompositionFactory}
         config={publicPortalProfile}
-        now={() => new Date(CHECKED_AT)}
         preferredLocales={['en']}
         sessionStore={sessionStore}
       />,
@@ -317,6 +314,7 @@ async function createFixture(options: FixtureOptions = {}): Promise<Fixture> {
     }
     return {
       referenceNumber: 'CASE-301',
+      acceptedAt: CHECKED_AT,
       status: 'accepted' as const,
       trackingUri: 'https://status.example.gov/CASE-301',
     };

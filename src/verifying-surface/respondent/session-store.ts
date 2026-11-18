@@ -7,7 +7,6 @@ export interface RespondentReceiptRecord {
   /** Release-qualified snapshot identity; confines this mutable confirmation copy. */
   readonly releaseIdentity: string;
   readonly caseRef: string;
-  readonly submittedAt: string;
   readonly confirmation: SubmitConfirmation;
 }
 
@@ -85,16 +84,15 @@ export function receiptRecordFromConfirmation(
   appId: string,
   releaseIdentity: string,
   confirmation: SubmitConfirmation,
-  submittedAt = new Date().toISOString(),
 ): RespondentReceiptRecord {
   const record = {
     appId,
     releaseIdentity,
     caseRef: confirmation.referenceNumber,
-    submittedAt,
     confirmation: {
       referenceNumber: confirmation.referenceNumber,
       status: confirmation.status,
+      ...(confirmation.acceptedAt === undefined ? {} : { acceptedAt: confirmation.acceptedAt }),
       ...(confirmation.trackingUri ? { trackingUri: confirmation.trackingUri } : {}),
       ...(confirmation.caseUrn ? { caseUrn: confirmation.caseUrn } : {}),
     },
@@ -132,9 +130,7 @@ function assertReceiptRecord(
     throw new Error('Receipt session record identity does not match its storage address.');
   }
   if (
-    typeof value.submittedAt !== 'string'
-    || !Number.isFinite(Date.parse(value.submittedAt))
-    || !isSubmitConfirmation(value.confirmation)
+    !isSubmitConfirmation(value.confirmation)
     || value.confirmation.referenceNumber !== expectedCaseRef
   ) {
     throw new Error('Receipt session record is malformed.');
@@ -150,6 +146,8 @@ function isSubmitConfirmation(value: unknown): value is SubmitConfirmation {
   ) {
     return false;
   }
+  if (value.acceptedAt !== undefined
+    && (typeof value.acceptedAt !== 'string' || !Number.isFinite(Date.parse(value.acceptedAt)))) return false;
   if (value.trackingUri !== undefined && typeof value.trackingUri !== 'string') return false;
   return value.caseUrn === undefined || typeof value.caseUrn === 'string';
 }

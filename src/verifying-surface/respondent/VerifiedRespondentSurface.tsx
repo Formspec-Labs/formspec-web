@@ -47,7 +47,6 @@ export interface VerifiedRespondentSurfaceProps {
   readonly bundleConfig: RespondentSurfaceBundleConfig;
   readonly sessionStore?: RespondentReceiptSessionStore;
   readonly preferredLocales?: readonly string[];
-  readonly now?: () => Date;
 }
 
 export function VerifiedRespondentSurface({
@@ -57,7 +56,6 @@ export function VerifiedRespondentSurface({
   bundleConfig,
   sessionStore: suppliedSessionStore,
   preferredLocales,
-  now = () => new Date(),
 }: VerifiedRespondentSurfaceProps) {
   const [location, navigate] = useBrowserLocation(window.location.pathname);
   const sessionStore = useMemo(
@@ -104,7 +102,6 @@ export function VerifiedRespondentSurface({
           config={config}
           location={location}
           navigate={navigate}
-          now={now}
           preferredLocales={preferredLocales}
           receiptResourceUrl={bundleConfig.receiptResourceUrl}
           sessionStore={sessionStore}
@@ -124,7 +121,6 @@ interface AdmittedRespondentSurfaceProps extends AdmittedSurfaceRenderInput {
   readonly receiptResourceUrl: string;
   readonly sessionStore: RespondentReceiptSessionStore;
   readonly preferredLocales?: readonly string[];
-  readonly now: () => Date;
 }
 
 function AdmittedRespondentSurface({
@@ -133,7 +129,6 @@ function AdmittedRespondentSurface({
   config,
   location,
   navigate,
-  now,
   preferredLocales,
   receiptResourceUrl,
   renderSurface,
@@ -196,10 +191,9 @@ function AdmittedRespondentSurface({
       appId,
       releaseIdentity,
       confirmation,
-      now().toISOString(),
     ));
     setConfirmedCaseRef(confirmation.referenceNumber);
-  }, [appId, now, releaseIdentity, sessionStore]);
+  }, [appId, releaseIdentity, sessionStore]);
 
   const formCompositions = useMemo(() => new Map<string, Composition>(), [config, formCompositionFactory, releaseIdentity]);
 
