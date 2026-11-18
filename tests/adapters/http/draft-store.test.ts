@@ -56,6 +56,36 @@ describe('HttpDraftStore', () => {
     });
   });
 
+  it('retains a known draft when its read is refused or missing', async () => {
+    const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+    const bindingRegistry = retainedRegistry();
+    const original = bindingRegistry.get(key);
+    const { fetch, requests } = recordingFetch(() => jsonResponse({ detail: 'draft not found' }, 404));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.test', fetchImpl: fetch, bindingRegistry });
+
+    await expect(adapter.load(key)).rejects.toMatchObject({ status: 404 });
+    expect(bindingRegistry.get(key)).toEqual(original);
+    expect(requests.map(request => request.method)).toEqual(['GET']);
+  });
+
+  it.each([
+    [3, 'response-first'],
+    [5, 'response-other'],
+  ] as const)('rejects revision %i and Response %s when they contradict the retained draft', async (version, id) => {
+    const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+    const bindingRegistry = createDraftBindingRegistry();
+    bindingRegistry.put(key, { draftId: 'known', draftVersion: 4, responseId: 'response-first' });
+    const original = bindingRegistry.get(key);
+    const { fetch } = recordingFetch(() => jsonResponse({
+      draft_id: 'known', draft_version: version,
+      canonical_response: { ...sampleFormResponse, id }, draft_state: sampleFormResponse.data,
+    }));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.test', fetchImpl: fetch, bindingRegistry });
+
+    await expect(adapter.load(key)).rejects.toThrow('regressed from its retained identity or revision');
+    expect(bindingRegistry.get(key)).toEqual(original);
+  });
+
   it('soft-deletes local draft mappings because formspec-server has no DELETE route', async () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({ draft_id: 'draft-http-1', draft_version: 1, canonical_response: sampleFormResponse, draft_state: sampleFormResponse.data }),

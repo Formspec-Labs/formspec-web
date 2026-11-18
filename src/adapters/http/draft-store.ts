@@ -7,7 +7,7 @@ import canonicalize from 'canonicalize';
 import type { components } from '../../api/generated/source-public.d.ts';
 import type { DraftKey, DraftReadState, DraftResumeState, DraftStore, FormResponse, OwnedDraftResumeSelection, RecoveredDraftInitialization } from '../../ports/draft-store.ts';
 import { copyDraftKey, createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
-import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
+import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 
 export interface HttpDraftStoreConfig extends HttpClientConfig {
@@ -64,7 +64,7 @@ export class HttpDraftStore implements DraftStore {
     if (qualify) {
       this.readState = (suppliedKey, current = () => {}) => {
         const key = copyDraftKey(suppliedKey);
-        return this.read(key, async view => freeze(snapshotWire(await qualify(key, view, current))), current, false);
+        return this.read(key, async view => freeze(snapshotWire(await qualify(key, view, current))), current);
       };
       this.resumeState = async (suppliedKey, suppliedSelection, current = () => {}) => {
         const key = copyDraftKey(suppliedKey), selection = ownedDraftResumeSelection(suppliedSelection);
@@ -73,7 +73,7 @@ export class HttpDraftStore implements DraftStore {
         const result = await this.read<DraftResumeState>(key, async view => {
           if (view.taskDraft !== undefined) throw new Error('Task-owned draft requires its maintained task entry');
           return freeze(snapshotWire(await qualify(key, view, current)));
-        }, current, false, selection, selection.initializationOnly ? view => Promise.resolve({ kind: 'initialized', initialization: {
+        }, current, selection, selection.initializationOnly ? view => Promise.resolve({ kind: 'initialized', initialization: {
           draftId: view.draft_id, draftVersion: view.draft_version, formVersionId: view.form_version_id,
           subjectRef: view.subject_ref, isInitializationOnly: true,
         } }) : undefined);
@@ -167,7 +167,7 @@ export class HttpDraftStore implements DraftStore {
     try { return await operation; } finally { if (this.initializations.get(operationKey) === operation) this.initializations.delete(operationKey); }
   }
 
-  private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, missingIsAbsent = true, selection?: OwnedDraftResumeSelection, qualifyInitialization?: (view: InitializedSourceDraftView) => Promise<T>): Promise<T | undefined> {
+  private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, selection?: OwnedDraftResumeSelection, qualifyInitialization?: (view: InitializedSourceDraftView) => Promise<T>): Promise<T | undefined> {
     key = structuredClone(key);
     const generation = this.generation;
     const current = () => { assertSynchronousGuard(assertCurrent); if (generation !== this.generation) throw new Error('Draft state was cleared while loading'); };
@@ -185,7 +185,7 @@ export class HttpDraftStore implements DraftStore {
       const view = await this.client.getJson<SourceDraftView>(`/drafts/${encodeURIComponent(binding.draftId)}`, {
         headers: bearerHeaders(token),
         assertCurrent: current,
-        ...(!missingIsAbsent ? { successStatuses: [200] } : {}),
+        successStatuses: [200],
       });
       current();
       const response = view.canonical_response;
@@ -216,8 +216,8 @@ export class HttpDraftStore implements DraftStore {
       }
       const expectedResponseId = selection?.expectedResponseId ?? binding.responseId;
       if (selection && (!expectedResponseId?.trim() || response.id !== expectedResponseId)) throw new Error('Owned draft resume Response identity differs');
-      if (!missingIsAbsent && ((binding.draftVersion !== undefined && view.draft_version < binding.draftVersion)
-        || (binding.responseId !== undefined && response.id !== binding.responseId))) {
+      if ((binding.draftVersion !== undefined && view.draft_version < binding.draftVersion)
+        || (binding.responseId !== undefined && response.id !== binding.responseId)) {
         throw new Error('Owned draft state regressed from its retained identity or revision');
       }
       current();
@@ -228,11 +228,6 @@ export class HttpDraftStore implements DraftStore {
       return result;
     } catch (error) {
       current();
-      if (error instanceof HttpAdapterError && error.status === 404) {
-        if (!missingIsAbsent) throw error;
-        this.bindings.delete(key);
-        return undefined;
-      }
       throw error;
     }
   }
