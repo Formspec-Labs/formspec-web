@@ -1549,10 +1549,11 @@ async function createReadyState(
     throw new HiddenDefinitionRuntimeStateError(definition.url);
   }
 
+  const draftSubjectRef = form?.responseSubject?.id ?? claim?.subjectRef;
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
-    ...(claim ? { subjectRef: claim.subjectRef } : {}),
+    ...(draftSubjectRef !== undefined ? { subjectRef: draftSubjectRef } : {}),
   };
   let recoveredDraft: FormResponse | undefined;
   let recoveredSavedDraft: SavedResponseDraft | undefined;

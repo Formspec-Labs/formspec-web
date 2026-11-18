@@ -72,6 +72,7 @@ const PUBLISHER = 'https://publisher.example.gov/';
 const TENANT_COLOR = '#7A1F3D';
 const CHECKED_AT = '2026-07-28T20:00:00.000Z';
 const RESPONDENT_DEFINITION = definitionWithoutLegacyPresentation(demoSampleForm);
+const FILING_SUBJECT = { type: 'urn:example:filing-unit', keys: {} };
 
 afterEach(() => {
   cleanup();
@@ -81,6 +82,39 @@ afterEach(() => {
 });
 
 describe('verified respondent Surface integration', () => {
+  it('opens a second filing unit without restoring the first unit’s answers', async () => {
+    const fixture = await createFixture({ pendingFirstSubmit: true, keyedSubject: true });
+    const openUnit = (year: number) => {
+      window.history.replaceState({}, '', `/apply/${year}`);
+      return render(
+        <VerifiedRespondentSurface bundleConfig={bundleConfig} composition={fixture.composition}
+          formCompositionFactory={fixture.formCompositionFactory} config={publicPortalProfile}
+          now={() => new Date(CHECKED_AT)} preferredLocales={['en']} />,
+      );
+    };
+    const findName = () => screen.findByRole<HTMLInputElement>(
+      'textbox', { name: /Full name/ }, { timeout: 10000 },
+    );
+    const first = openUnit(2025);
+    await findName();
+    fillRequiredForm('Example First Filing');
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(fixture.submit).toHaveBeenCalledOnce());
+    expect(fixture.draftSave.mock.calls.at(-1)?.[1].subject?.keys).toEqual({ year: 2025 });
+    first.unmount();
+    fixture.rejectFirstSubmit?.(new Error('interrupted before transport confirmation'));
+
+    const second = openUnit(2026);
+    expect((await findName()).value).toBe('');
+    second.unmount();
+
+    const checkpoint = fixture.draftSave.mock.calls.at(-1)!;
+    expect(checkpoint[0].subjectRef).toBe(checkpoint[1].subject?.id);
+    expect(checkpoint[0].subjectRef).not.toBe(checkpoint[1].author?.id);
+    openUnit(2025);
+    expect((await findName()).value).toBe('Example First Filing');
+  });
+
   it.each(['2.0', '2.1'] as const)('admits Locale %s through the production signed Surface gate', async (appLocaleVersion) => {
     const fixture = await createFixture({ appLocaleVersion });
     const reports: unknown[] = [];
@@ -112,7 +146,7 @@ describe('verified respondent Surface integration', () => {
 
   it('resumes a draft checkpoint, submits once, navigates with the real caseRef, and reloads the persisted receipt', async () => {
     window.history.replaceState({}, '', '/apply');
-    const fixture = await createFixture({ pendingFirstSubmit: true });
+    const fixture = await createFixture({ pendingFirstSubmit: true, singletonSubject: true });
     const sessionStore = createMemoryRespondentReceiptSessionStore();
     const pushState = vi.spyOn(window.history, 'pushState');
     const first = render(
@@ -144,6 +178,10 @@ describe('verified respondent Surface integration', () => {
       expect(fixture.submit).toHaveBeenCalledOnce();
     });
     expect(fixture.draftSave).toHaveBeenCalled();
+    expect(fixture.draftSave.mock.calls.at(-1)?.[1].subject).toMatchObject({
+      ...FILING_SUBJECT,
+      id: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
     expect(JSON.stringify(fixture.draftSave.mock.calls.at(-1)?.[1])).toContain(
       'Ada Lovelace',
     );
@@ -224,6 +262,8 @@ describe('verified respondent Surface integration', () => {
 interface FixtureOptions {
   readonly pendingFirstSubmit?: boolean;
   readonly appLocaleVersion?: '2.0' | '2.1';
+  readonly singletonSubject?: boolean;
+  readonly keyedSubject?: boolean;
 }
 
 interface Fixture {
@@ -254,7 +294,7 @@ async function createFixture(options: FixtureOptions = {}): Promise<Fixture> {
     },
   );
   const acquire = vi.fn(async () => snapshot);
-  const verify = vi.fn(async () => verifiedResult(snapshot, options.appLocaleVersion));
+  const verify = vi.fn(async () => verifiedResult(snapshot, options));
   const commitRelease = vi.fn(async () => ({
     status: 'committed' as const,
     releaseCommit: 'not-required' as const,
@@ -361,12 +401,12 @@ function stableAnonymousIdentityProvider(): IdentityProvider {
 
 function verifiedResult(
   snapshot: SurfaceBundleSnapshot,
-  appLocaleVersion: FixtureOptions['appLocaleVersion'],
+  options: FixtureOptions,
 ): SurfaceBundleVerifiedResult {
   return {
     status: 'verified',
     snapshotIdentity: snapshot.identity,
-    payload: signedPayload(appLocaleVersion),
+    payload: signedPayload(options),
     provenance: {
       adapterId: 'urn:formspec-web:test:verifier@1',
       snapshotIdentity: snapshot.identity,
@@ -407,7 +447,7 @@ function verifiedResult(
   };
 }
 
-function signedPayload(appLocaleVersion: NonNullable<FixtureOptions['appLocaleVersion']> = '2.1'): SurfaceBundleSignedPayloadV1 {
+function signedPayload({ appLocaleVersion = '2.1', singletonSubject, keyedSubject }: FixtureOptions): SurfaceBundleSignedPayloadV1 {
   const shellKeys = appLocaleVersion === '2.0'
     ? locale20Schema.$defs.SurfaceShellStringKey.enum
     : SURFACE_STRING_KEYS.map((key) => `${SURFACE_LOCALE_KEY_PREFIX}${key}`);
@@ -440,7 +480,12 @@ function signedPayload(appLocaleVersion: NonNullable<FixtureOptions['appLocaleVe
       modules: [{ id: MODULE, version: '1.0.0' }],
     },
     documents: {
-      [RESPONDENT_DEFINITION.url]: RESPONDENT_DEFINITION,
+      [RESPONDENT_DEFINITION.url]: singletonSubject || keyedSubject
+        ? { ...RESPONDENT_DEFINITION, subject: {
+            ...FILING_SUBJECT,
+            keys: keyedSubject ? { year: { dataType: 'integer' } } : {},
+          } }
+        : RESPONDENT_DEFINITION,
       [ACTIONS]: {
         $formspecResponseActions: '1.0',
         version: '1.0.0',
@@ -496,13 +541,17 @@ function signedPayload(appLocaleVersion: NonNullable<FixtureOptions['appLocaleVe
         routes: [
           {
             id: 'apply',
-            path: '/apply',
+            path: keyedSubject ? '/apply/{year}' : '/apply',
+            ...(keyedSubject && { params: [{ name: 'year', type: 'string' }] }),
             title: 'Apply for benefits',
             routeClass: 'intake',
             slots: [{
               id: 'form',
               slotType: 'definition-form',
-              binding: { definitionRef: RESPONDENT_DEFINITION.url },
+              binding: {
+                definitionRef: RESPONDENT_DEFINITION.url,
+                ...(keyedSubject && { subjectKeys: { year: 'year' } }),
+              },
             }],
             transitions: [{
               trigger: 'submit-intake',
