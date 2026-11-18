@@ -1,3 +1,4 @@
+import { filedReadDefinition } from '../../fixtures/filed-read-definition.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } from '@formspec-org/surface-react';
@@ -144,6 +145,17 @@ async function mockNativePackage(candidate: unknown = nativeBundle(), options: {
 }
 
 describe('hash-pinned native package closure', () => {
+  it.each(['amount', 'missing'])('checks the filed answer %s through pinned package admission', async path => {
+    const candidate = nativeBundle();
+    const form = filedReadDefinition(path);
+    candidate.manifest.definitions.push({ url: form.url, version: form.version });
+    candidate.documents[form.url] = form;
+    await mockNativePackage(candidate);
+    const read = new PinnedPackageDefinitionSource('/package.json').getNativeBundleExport();
+    if (path === 'amount') await expect(read).resolves.toEqual(candidate);
+    else await expect(read).rejects.toThrow('INSTANCE-PROJECTION-PATH-MISSING');
+  });
+
   it.each(['first', 'last'] as const)('preserves a multi-form App with its selected sidecar %s', async position => {
     const candidate = nativeBundle();
     const other = { ...structuredClone(nativeDefinition), url: 'https://example.test/definitions/other' };

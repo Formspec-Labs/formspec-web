@@ -189,6 +189,7 @@ export async function admitSurfaceBundle(
   try {
     validation = await produceBundleExportAppGraphValidationReport({
       ...loadedValidation.config,
+      loadProjectionLinter: async () => (await import('@formspec-org/engine/init-formspec-engine')).loadProjectionLinter(),
       manifest: verification.payload.manifest,
       documents: verification.payload.documents,
       source: `surface-bundle:${snapshot.identity}`,

@@ -1,3 +1,4 @@
+import { filedReadDefinition } from '../fixtures/filed-read-definition.ts';
 import reviewerInboxBundle from '../fixtures/reviewer-inbox-successor-v1.bundle.json';
 import { snapshotFiniteJson, type DataSourceLoader, type DataSourcePayloadValidator, type DataSourceAuthorizer } from '@formspec-org/surface';
 import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA, starterWidgetModule, type SurfaceWidgetModule } from '@formspec-org/surface-react';
@@ -66,6 +67,25 @@ afterEach(() => {
 });
 
 describe('admitSurfaceBundle', () => {
+  it.each(['amount', 'missing'])('checks the filed answer %s before committing a signed bundle', async path => {
+    const definition = filedReadDefinition(path);
+    const fixture = await createFixture({ verificationFactory: snapshot => {
+      const verified = verifiedResult(snapshot);
+      return { ...verified, payload: { ...verified.payload,
+        manifest: { ...verified.payload.manifest, definitions: [{ url: definition.url, version: definition.version }] },
+        documents: { ...verified.payload.documents, [definition.url]: definition },
+      } };
+    } });
+    const codes: string[] = [];
+    const state = await admitSurfaceBundle({
+      source: fixture.source, verifier: fixture.verifier, request: { locator: 'memory:annual' }, validation,
+      onValidationReport: result => codes.push(...result.report.diagnostics.map(finding => finding.code)),
+    });
+    expect(state.status).toBe(path === 'amount' ? 'admitted' : 'failure');
+    expect(fixture.commitRequests).toHaveLength(path === 'amount' ? 1 : 0);
+    if (path === 'missing') expect(codes).toContain('INSTANCE-PROJECTION-PATH-MISSING');
+  });
+
   it('runs acquire → verify → validate → dereference → commit and admits one snapshot', async () => {
     const events: string[] = [];
     const fixture = await createFixture({
