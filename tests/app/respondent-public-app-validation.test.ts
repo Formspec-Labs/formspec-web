@@ -380,6 +380,7 @@ function validContext(): AppGraphContext {
       'en',
       undefined,
       completeShellStrings('English'),
+      '2.1',
     )),
     handle('locales[1]', 'locale', LOCALE_ES, localeDocument(
       LOCALE_ES,
@@ -423,9 +424,10 @@ function localeDocument(
   locale: string,
   fallback: string | undefined,
   strings: Record<string, string>,
+  dialect: '2.0' | '2.1' = '2.0',
 ) {
   return {
-    $formspecLocale: '2.0',
+    $formspecLocale: dialect,
     url,
     version: '1.0.0',
     locale,

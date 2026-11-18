@@ -9,6 +9,8 @@ import type {
   SchemaValidationOutcome,
 } from '@formspec-org/app-graph';
 import type { FormDefinition } from '@formspec-org/types';
+import locale20Schema from '../../../vendor/formspec-schemas/locale-v2.0.schema.json';
+import locale21Schema from '../../../vendor/formspec-schemas/locale.schema.json';
 import { extractSafeAddressPolicy } from '../../../src/policy/extract-form-policy.ts';
 import {
   createSurfaceDataSourcePayloadValidator,
@@ -445,6 +447,21 @@ describe('loadSurfaceBundleSchemaValidators', () => {
       document: { ...native.document, $formspecLocale: '2.0' } }).ok).toBe(false);
     expect(validateArtifact(validate, { ...native,
       document: { ...native.document, target: { kind: 'screener' } } }).ok).toBe(false);
+  });
+
+  it('accepts the added shell keys only in Locale 2.1', async () => {
+    const validate = await schemaValidator();
+    const old = validArtifacts.find(candidate => candidate.artifactKind === 'locale')!;
+    const oldKeys = new Set(locale20Schema.$defs.SurfaceShellStringKey.enum);
+    const addedKeys = locale21Schema.$defs.SurfaceShellStringKey.enum.filter(key => !oldKeys.has(key));
+    expect(addedKeys).toHaveLength(8);
+    for (const key of addedKeys) {
+      const document = { ...old.document, strings: { [key]: 'Localized shell text' } };
+      expect(validateArtifact(validate, { ...old, document }).ok, key).toBe(false);
+      expect(validateArtifact(validate, {
+        ...old, schemaId: locale21Schema.$id, document: { ...document, $formspecLocale: '2.1' },
+      }).ok, key).toBe(true);
+    }
   });
 
   it('fails closed for unknown artifact kinds and unexpected schema ids', async () => {

@@ -33,9 +33,6 @@ import { SurfaceVerificationStatus } from '../SurfaceVerificationStatus.tsx';
 import { createRespondentDataSourceRuntime, proofRouteAddresses } from './data-sources.ts';
 import { localeDocumentsForTarget, useRespondentSurfaceLocale } from './locale.ts';
 import {
-  withRespondentPublicAppValidation,
-} from './public-app-validation.ts';
-import {
   createBrowserRespondentReceiptSessionStore,
   receiptRecordFromConfirmation,
   type RespondentReceiptSessionStore,
@@ -69,9 +66,10 @@ export function VerifiedRespondentSurface({
   );
   const validation = useMemo<SurfaceBundleValidationProvider>(
     () => async () => {
-      const [schemaValidators, payloadSchemaResources] = await Promise.all([
+      const [schemaValidators, payloadSchemaResources, { withRespondentPublicAppValidation }] = await Promise.all([
         loadSurfaceBundleSchemaValidators(),
         loadCanonicalModulePayloadSchemaResources(),
+        import('./public-app-validation.ts'),
       ]);
       return withRespondentPublicAppValidation(
         { schemaValidators, moduleSupport: { payloadSchemaResources } },

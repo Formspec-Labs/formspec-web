@@ -19,6 +19,7 @@ import {
 import type {
   SurfaceBundleSignedPayloadV1,
 } from '@formspec-org/surface-bundle-signing';
+import locale20Schema from '../../vendor/formspec-schemas/locale-v2.0.schema.json';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
   RespondentSurfaceBundleConfig,
@@ -80,8 +81,8 @@ afterEach(() => {
 });
 
 describe('verified respondent Surface integration', () => {
-  it('passes the production schema, AppGraph, actor, dereference, and release-commit gate', async () => {
-    const fixture = await createFixture();
+  it.each(['2.0', '2.1'] as const)('admits Locale %s through the production signed Surface gate', async (appLocaleVersion) => {
+    const fixture = await createFixture({ appLocaleVersion });
     const reports: unknown[] = [];
 
     const state = await admitSurfaceBundle({
@@ -222,6 +223,7 @@ describe('verified respondent Surface integration', () => {
 
 interface FixtureOptions {
   readonly pendingFirstSubmit?: boolean;
+  readonly appLocaleVersion?: '2.0' | '2.1';
 }
 
 interface Fixture {
@@ -252,7 +254,7 @@ async function createFixture(options: FixtureOptions = {}): Promise<Fixture> {
     },
   );
   const acquire = vi.fn(async () => snapshot);
-  const verify = vi.fn(async () => verifiedResult(snapshot));
+  const verify = vi.fn(async () => verifiedResult(snapshot, options.appLocaleVersion));
   const commitRelease = vi.fn(async () => ({
     status: 'committed' as const,
     releaseCommit: 'not-required' as const,
@@ -357,11 +359,14 @@ function stableAnonymousIdentityProvider(): IdentityProvider {
   };
 }
 
-function verifiedResult(snapshot: SurfaceBundleSnapshot): SurfaceBundleVerifiedResult {
+function verifiedResult(
+  snapshot: SurfaceBundleSnapshot,
+  appLocaleVersion: FixtureOptions['appLocaleVersion'],
+): SurfaceBundleVerifiedResult {
   return {
     status: 'verified',
     snapshotIdentity: snapshot.identity,
-    payload: signedPayload(),
+    payload: signedPayload(appLocaleVersion),
     provenance: {
       adapterId: 'urn:formspec-web:test:verifier@1',
       snapshotIdentity: snapshot.identity,
@@ -402,12 +407,15 @@ function verifiedResult(snapshot: SurfaceBundleSnapshot): SurfaceBundleVerifiedR
   };
 }
 
-function signedPayload(): SurfaceBundleSignedPayloadV1 {
-  const shellStrings = Object.fromEntries(SURFACE_STRING_KEYS.map((key) => [
-    `${SURFACE_LOCALE_KEY_PREFIX}${key}`,
-    key === 'transitionContinue'
+function signedPayload(appLocaleVersion: NonNullable<FixtureOptions['appLocaleVersion']> = '2.1'): SurfaceBundleSignedPayloadV1 {
+  const shellKeys = appLocaleVersion === '2.0'
+    ? locale20Schema.$defs.SurfaceShellStringKey.enum
+    : SURFACE_STRING_KEYS.map((key) => `${SURFACE_LOCALE_KEY_PREFIX}${key}`);
+  const shellStrings = Object.fromEntries(shellKeys.map((key) => [
+    key,
+    key === `${SURFACE_LOCALE_KEY_PREFIX}transitionContinue`
       ? 'Continue to {{$target}}'
-      : `Respondent ${key}`,
+      : `Respondent ${key.slice(SURFACE_LOCALE_KEY_PREFIX.length)}`,
   ]));
   return {
     profile: 'formspec-surface-bundle-signing-v1',
@@ -575,7 +583,7 @@ function signedPayload(): SurfaceBundleSignedPayloadV1 {
         }],
       },
       [LOCALE]: {
-        $formspecLocale: '2.0',
+        $formspecLocale: appLocaleVersion,
         url: LOCALE,
         version: '1.0.0',
         locale: 'en',

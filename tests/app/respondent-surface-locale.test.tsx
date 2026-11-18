@@ -15,8 +15,8 @@ const APP = 'https://example.gov/apps/respondent-locale';
 const EN = 'https://example.gov/locales/respondent-locale/en';
 const ES = 'https://example.gov/locales/respondent-locale/es';
 
-describe('verified respondent app Locale 2.0', () => {
-  it('switches target-bounded shell strings, follows same-target fallback, and evaluates FEL interpolation', async () => {
+describe('verified respondent app Locale', () => {
+  it('switches between 2.0 and 2.1, follows same-target fallback, and evaluates FEL interpolation', async () => {
     const bundle = payload();
     const preferred = ['es-MX'];
     const { result } = renderHook(() => useRespondentSurfaceLocale(
@@ -29,6 +29,7 @@ describe('verified respondent app Locale 2.0', () => {
     });
     expect(result.current.activeLocale).toBe('es');
     expect(result.current.strings?.('navigationLabel')).toBe('Paginas de esta solicitud');
+    expect(result.current.strings?.('appearanceLabel')).toBe('English appearanceLabel');
     expect(result.current.strings?.('notFoundTitle')).toBe('English notFoundTitle');
     expect(result.current.strings?.(
       'transitionContinue',
@@ -73,7 +74,7 @@ function payload(): SurfaceBundleSignedPayloadV1 {
     },
     documents: {
       [EN]: {
-        $formspecLocale: '2.0',
+        $formspecLocale: '2.1',
         url: EN,
         version: '1.0.0',
         locale: 'en',

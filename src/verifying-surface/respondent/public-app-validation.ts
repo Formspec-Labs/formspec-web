@@ -1,7 +1,6 @@
 import {
   SURFACE_LOCALE_KEY_PREFIX,
   SURFACE_STRING_KEYS,
-  type SurfaceStringKey,
 } from '@formspec-org/surface';
 import {
   LocaleStore,
@@ -13,9 +12,12 @@ import type {
   AppGraphDiagnostic,
 } from '@formspec-org/app-graph';
 import type { LocaleDocument } from '@formspec-org/types';
+import locale20Schema from '../../../vendor/formspec-schemas/locale-v2.0.schema.json';
 import type { SurfaceBundleValidationConfig } from '../admission.ts';
 
 const PUBLIC_ROUTE_CLASSES = new Set(['intake', 'proof']);
+const SURFACE_LOCALE_20_KEYS = locale20Schema.$defs.SurfaceShellStringKey.enum;
+const SURFACE_LOCALE_21_KEYS = SURFACE_STRING_KEYS.map((key) => `${SURFACE_LOCALE_KEY_PREFIX}${key}`);
 const PUBLIC_STARTER_WIDGETS = new Set([
   'x-intake-banner',
   'IntakeBanner',
@@ -638,7 +640,7 @@ function validateAppLocales(
   if (appLocales.length === 0) {
     return [diagnostic(
       'RESPONDENT-APP-LOCALE-MISSING',
-      'The respondent app must provide an App-target Locale 2.0 document.',
+      'The respondent app must provide an App-target Locale 2.0 or 2.1 document.',
     )];
   }
 
@@ -652,9 +654,12 @@ function validateAppLocales(
   const diagnostics: AppGraphDiagnostic[] = [];
   for (const locale of store.getAvailableLocales({ kind: 'app', url: policy.appId })) {
     store.setLocale(locale);
-    const missing = SURFACE_STRING_KEYS.filter((key) => (
-      store.lookupKey(shellLocaleKey(key)) === null
-    ));
+    const requiredKeys = store.getActiveDocument()?.$formspecLocale === '2.0'
+      ? SURFACE_LOCALE_20_KEYS
+      : SURFACE_LOCALE_21_KEYS;
+    const missing = requiredKeys
+      .filter((key) => store.lookupKey(key) === null)
+      .map((key) => key.slice(SURFACE_LOCALE_KEY_PREFIX.length));
     if (missing.length > 0) {
       diagnostics.push(diagnostic(
         'RESPONDENT-SHELL-LOCALE-INCOMPLETE',
@@ -664,10 +669,6 @@ function validateAppLocales(
     }
   }
   return diagnostics;
-}
-
-function shellLocaleKey(key: SurfaceStringKey): string {
-  return `${SURFACE_LOCALE_KEY_PREFIX}${key}`;
 }
 
 function exactCaseRefTransitionParams(value: unknown): boolean {
@@ -706,7 +707,7 @@ function isLocaleDocument(value: unknown): value is LocaleDocument {
   const document = record(value);
   const target = record(document?.target);
   return (
-    document?.$formspecLocale === '2.0'
+    (document?.$formspecLocale === '2.0' || document?.$formspecLocale === '2.1')
     && typeof document.version === 'string'
     && typeof document.locale === 'string'
     && (target?.kind === 'app' || target?.kind === 'definition')

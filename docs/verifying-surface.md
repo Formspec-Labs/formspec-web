@@ -88,9 +88,10 @@ record is schema-checked and useful for refresh, but it is browser-mutable and
 is not independently authenticated proof. A missing or malformed record
 blocks the receipt widget instead of inventing data.
 
-App-target Locale 2.0 documents supply the closed Surface shell string set and
-same-target fallback. Tenant Theme tokens apply only to the intake route. Proof
-routes and host verification states retain platform styling.
+App-target Locale 2.0 and 2.1 documents supply their dialect's Surface shell
+strings through the same-target fallback chain. Locale 2.1 adds the edition,
+appearance, and save strings. Tenant Theme tokens apply only to the intake
+route. Proof routes and host verification states retain platform styling.
 
 ## Current boundaries
 

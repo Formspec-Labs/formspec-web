@@ -144,9 +144,10 @@ function browserPreferredLocales(): readonly string[] {
 }
 
 function isLocaleDocument(value: unknown): value is LocaleDocument {
-  if (!isRecord(value) || value.$formspecLocale !== '2.0') return false;
+  if (!isRecord(value)) return false;
   if (
-    typeof value.version !== 'string'
+    (value.$formspecLocale !== '2.0' && value.$formspecLocale !== '2.1')
+    || typeof value.version !== 'string'
     || typeof value.locale !== 'string'
     || !isRecord(value.target)
     || (value.target.kind !== 'app' && value.target.kind !== 'definition')

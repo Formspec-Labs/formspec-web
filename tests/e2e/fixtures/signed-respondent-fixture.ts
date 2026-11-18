@@ -485,7 +485,7 @@ function respondentPayload(
       }],
     },
     [APP_LOCALE_EN]: {
-      $formspecLocale: '2.0',
+      $formspecLocale: '2.1',
       url: APP_LOCALE_EN,
       version: '1.0.0',
       locale: 'en',
@@ -493,7 +493,7 @@ function respondentPayload(
       strings: englishStrings,
     },
     [APP_LOCALE_ES]: {
-      $formspecLocale: '2.0',
+      $formspecLocale: '2.1',
       url: APP_LOCALE_ES,
       version: '1.0.0',
       locale: 'es',
