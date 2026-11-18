@@ -21,8 +21,6 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     registryDocuments: unknown[];
     subjectType?: string | null;
     subjectKeys?: ResponseSubjectKeys;
-    /** Authoritative repeat row counts by group base path (matches engine repeat signals). */
-    repeatCounts: Record<string, number>;
 }): {
     nowIso: string;
     trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
@@ -32,7 +30,6 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     registryDocuments: unknown[];
     subjectType?: string | null;
     subjectKeys?: ResponseSubjectKeys;
-    repeatCounts: Record<string, number>;
 };
 export type EvalShapeTiming = 'continuous' | 'submit' | 'demand';
 /** Append engine-owned validations (e.g. extension hooks) after WASM batch evaluation. */

@@ -81,11 +81,11 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                     const engine = createFormEngine(definition, {
                         ...(key.subject && { responseSubject: key.subject }),
                         ...(draftSnapshot && { draftSnapshot }),
+                        ...(!draftSnapshot && seed.initialData?.data !== undefined && {
+                            responseData: seed.initialData.data,
+                        }),
                     });
                     try {
-                        if (!draftSnapshot && seed.initialData?.data !== undefined) {
-                            engine.loadResponseData(seed.initialData.data);
-                        }
                         const writer = createDraftWriter({
                             engine, key, draft, port: storage.port,
                             responseId: response?.id ?? input.semanticControlScope?.responseId,

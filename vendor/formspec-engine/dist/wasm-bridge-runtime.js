@@ -157,6 +157,14 @@ export function wasmItemLocationAtPath(items, path) {
     const result = parseWasmJson(resultJson);
     return result === null ? undefined : result;
 }
+/** Apply creation-time values to a new Response or resolve its pending values. */
+export function wasmCreateResponse(definition, data, context, extensions) {
+    return parseWasmJson(wasm().createResponse(JSON.stringify(definition), JSON.stringify(data), JSON.stringify(context), extensions));
+}
+/** Create a new row at the end of the given repeat. */
+export function wasmCreateRepeatRow(definition, data, groupPath, context, extensions) {
+    return parseWasmJson(wasm().createRepeatRow(JSON.stringify(definition), JSON.stringify(data), groupPath, JSON.stringify(context), extensions));
+}
 /** Evaluate a Formspec definition against provided data. */
 export function wasmEvaluateDefinition(definition, data, context, extensions) {
     const resultJson = wasm().evaluateDefinition(JSON.stringify(definition), JSON.stringify(data), context ? JSON.stringify(context) : undefined, extensions);

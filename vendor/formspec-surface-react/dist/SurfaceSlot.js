@@ -536,19 +536,18 @@ function DefaultSurfaceDefinitionForm(input) {
     const engine = useMemo(() => {
         if (draftEngine)
             return draftEngine;
-        let created;
         try {
-            created = createFormEngine(plan.definition, responseSubject && { responseSubject });
+            return createFormEngine(plan.definition, {
+                ...(responseSubject && { responseSubject }),
+                ...(initialData?.data !== undefined && {
+                    responseData: initialData.data,
+                }),
+            });
         }
         catch (error) {
             console.warn('Formspec Surface could not create the form engine.', error);
             return undefined;
         }
-        if (initialData?.data !== undefined) {
-            // Before any field component subscribes; keeps every saved repeat row.
-            created.loadResponseData(initialData.data);
-        }
-        return created;
         // Core's subject id covers both type and keys, even when a replan allocates a new object.
     }, [draftEngine, initialData?.data, plan.definition, responseSubject?.id]);
     useEffect(() => () => { if (!draftEngine)

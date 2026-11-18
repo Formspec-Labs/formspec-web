@@ -16,7 +16,10 @@ export function captureDraftData(items, fieldValue, repeatCount) {
                 appendItems(children, path, into);
             }
             else if (item.type === 'group' && item.repeatable) {
-                const rows = Array.from({ length: repeatCount(path) }, (_, index) => capture(children, `${path}[${index}]`));
+                const count = repeatCount(path);
+                if (count === undefined)
+                    continue;
+                const rows = Array.from({ length: count }, (_, index) => capture(children, `${path}[${index}]`));
                 into.push([item.key, rows]);
             }
             else if (item.type === 'group') {

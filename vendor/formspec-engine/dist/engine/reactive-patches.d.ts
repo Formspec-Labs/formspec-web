@@ -2,13 +2,11 @@
 import type { EvalDelta } from '../diff.js';
 import type { EngineReactiveRuntime, EngineSignal } from '../reactivity/types.js';
 import type { ValidationResult } from '@formspec-org/types';
-import type { FormItem } from '@formspec-org/types';
 import type { EngineBindConfig } from './helpers.js';
 export declare function patchValueSignalsFromWasm(options: {
     values: Record<string, unknown>;
     signals: Record<string, EngineSignal<any>>;
     data: Record<string, any>;
-    fieldItems: Map<string, FormItem>;
     bindConfigs: Record<string, EngineBindConfig>;
     calculatedFields: Set<string>;
 }): void;

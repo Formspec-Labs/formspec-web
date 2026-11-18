@@ -96,6 +96,16 @@ export function collectFelRewriteTargets(expression: string): string;
 export function computeDependencyGroups(entries_json: string): string;
 
 /**
+ * Initialize one added repeat row in its Response context.
+ */
+export function createRepeatRow(definition_json: string, data_json: string, group_path: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
+
+/**
+ * Create a new Response from host prefill and available sources.
+ */
+export function createResponse(definition_json: string, prefill_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
+
+/**
  * Derive the JSON-LD `@context` for a Definition from an Ontology document's bindings.
  *
  * Returns JSON `{ "context": {...}, "diagnostics": [{ kind, path, key, existingId?, newId? }] }`
@@ -318,6 +328,8 @@ export interface InitOutput {
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly collectFelRewriteTargets: (a: number, b: number, c: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
+    readonly createRepeatRow: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
+    readonly createResponse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly deriveJsonLdContext: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly detectDocumentType: (a: number, b: number, c: number) => void;
     readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;

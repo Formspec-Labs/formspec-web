@@ -11,7 +11,7 @@ import { FetchIssuerFetcher } from '../issuer/IssuerFetcher.js';
 import { IssuerStore } from '../issuer/IssuerStore.js';
 import { createFieldViewModel, resolveItemHelpText, resolveItemLabel, } from '../field-view-model.js';
 import { createFormViewModel } from '../form-view-model.js';
-import { wasmCreateFelContext, wasmEvaluateDefinition, } from '../wasm-bridge-runtime.js';
+import { wasmCreateFelContext, wasmCreateRepeatRow, wasmCreateResponse, wasmEvaluateDefinition, } from '../wasm-bridge-runtime.js';
 import { resolveOptionSetsOnDefinition, validateCalculateBindCycles, validateVariableDefinitionCycles, } from './definition-setup.js';
 import { captureDraftData } from './draft-snapshot.js';
 import { validateInstanceDataAgainstSchema } from './instance-schema.js';
@@ -20,8 +20,7 @@ import { clearRepeatIndexedSubtree, snapshotRepeatRow, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectRelevantValidationResults, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
 import { mergeWasmEvalWithExternalValidations, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
-import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
-import { collectSeedFromGroups, repeatHasHostData, resolvePrePopulateFromInstance, } from './instance-seeding.js';
+import { appendPath, cloneValue, coerceFieldValue, deepEqual, extractInlineBind, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parentPathOf, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
     constructor(definition, options = {}) {
@@ -49,7 +48,6 @@ export class FormEngine {
         this._groupItems = new Map();
         this._shapeTiming = new Map();
         this._displaySignalPaths = new Set();
-        this._seedFromResolvedPaths = new Set();
         this._calculatedFields = new Set();
         this._registryEntries = new Map();
         /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
@@ -58,7 +56,7 @@ export class FormEngine {
         this._remoteOptionsTasks = [];
         this._instanceSourceAbort = new AbortController();
         this._pendingInstanceSources = new Set();
-        this._sourceSeedPreservedFields = new Set();
+        this._pendingCreationPaths = new Set();
         this._instanceSourceOutcomes = Object.create(null);
         this._disposed = false;
         this._instanceSourceTasks = [];
@@ -69,7 +67,7 @@ export class FormEngine {
         this._itemLabelSignals = new Map();
         /** Hint / description signals for Items with no field view model, keyed `<property>:<instance path>`. */
         this._itemHelpTextSignals = new Map();
-        this._data = {};
+        this._data = Object.create(null);
         this._previousEvalResult = null;
         this._fullResult = null;
         this._issuerResolutionEpoch = 0;
@@ -89,11 +87,11 @@ export class FormEngine {
         this._evaluationVersion = this._rx.signal(0);
         this._labelContextSignal = this._rx.signal(null);
         this.definition = cloneValue(definition);
-        if (options.draftSnapshot) {
-            if (options.responseData)
-                throw new Error('Supply draftSnapshot or responseData, not both');
-            this.assertDraftSnapshot(options.draftSnapshot);
+        if ([options.responseData, options.savedResponseData, options.draftSnapshot].filter(value => value !== undefined).length > 1) {
+            throw new Error('Supply one of responseData, savedResponseData, or draftSnapshot');
         }
+        if (options.draftSnapshot)
+            this.assertDraftSnapshot(options.draftSnapshot);
         // Locale store — direction mode from formPresentation.direction or 'ltr'
         const directionMode = definition.formPresentation?.direction ?? 'ltr';
         this._localeStore = new LocaleStore(this._rx, directionMode, {
@@ -116,7 +114,6 @@ export class FormEngine {
             }
             this._registryDocuments = [{ entries: registryEntries }];
         }
-        this._seedFromGroups = collectSeedFromGroups(this.definition.items);
         this.initializeOptionSignals();
         this.initializeInstances(options.loadExternalSources !== false);
         this.initializeBindConfigs(this.definition.items);
@@ -124,14 +121,14 @@ export class FormEngine {
         validateVariableDefinitionCycles(this._variableDefs, scope => this.variableScopePath(scope));
         validateCalculateBindCycles(this._bindConfigs);
         this.registerItems(this.definition.items);
-        if (options.draftSnapshot) {
-            this.loadItemsData(this.definition.items, options.draftSnapshot.data, '', true);
-        }
-        else if (options.responseData) {
-            this.loadItemsData(this.definition.items, options.responseData, '');
-        }
-        this.runInstanceDependentSeeding();
         try {
+            const saved = options.draftSnapshot?.data ?? options.savedResponseData;
+            if (saved !== undefined) {
+                this.loadItemsData(this.definition.items, saved, '');
+            }
+            else {
+                this.createResponseData(options.responseData ?? {});
+            }
             this._evaluate();
         }
         catch (error) {
@@ -269,10 +266,16 @@ export class FormEngine {
         if (item.maxRepeat !== undefined && index >= item.maxRepeat) {
             return undefined;
         }
-        this.appendRepeatRow(path, item);
-        if (item.seedFrom && this._pendingInstanceSources.has(item.seedFrom.instance)) {
-            this._seedFromResolvedPaths.add(path);
-        }
+        const created = wasmCreateRepeatRow(this.definition, this.editingData(), path, this.creationContext(), this._extensionFunctions);
+        if (!created)
+            return undefined;
+        this._rx.batch(() => {
+            this._pendingCreationPaths.delete(path);
+            for (const pending of created.pending)
+                this._pendingCreationPaths.add(pending);
+            this.appendRepeatRow(path, item);
+            this.loadItemsData(item.children ?? [], created.data, `${path}[${index}]`);
+        });
         this._evaluate();
         return index;
     }
@@ -284,24 +287,31 @@ export class FormEngine {
             return;
         }
         this.rebuildRepeatRows(path, item, index);
-        if (item.seedFrom && this._pendingInstanceSources.has(item.seedFrom.instance)) {
-            this._seedFromResolvedPaths.add(path);
-        }
+        const prefix = `${path}[`;
+        this._pendingCreationPaths = new Set([...this._pendingCreationPaths].flatMap(pending => {
+            if (!pending.startsWith(prefix))
+                return [pending];
+            const end = pending.indexOf(']', prefix.length);
+            const row = Number(pending.slice(prefix.length, end));
+            if (row === index)
+                return [];
+            return [row > index ? `${prefix}${row - 1}${pending.slice(end)}` : pending];
+        }));
         this._evaluate();
     }
-    /**
-     * Loads a Response `data` tree with one evaluation. Definition-directed: a repeatable group present in
-     * `data` gets exactly one row per array entry, past `maxRepeat` or below `minRepeat` included, so loaded
-     * data reports MAX_REPEAT / MIN_REPEAT instead of losing rows. Keys absent from `data` keep their state;
-     * calculated fields and undeclared keys are ignored.
-     */
+    /** Resume saved Response data with its exact row counts and answered fields. */
     loadResponseData(data) {
-        this.loadItemsData(this.definition.items, data, '');
-        this._evaluate();
+        this._rx.batch(() => {
+            this._pendingCreationPaths.clear();
+            this.loadItemsData(this.definition.items, data, '', true);
+            this._evaluate(null);
+        });
+    }
+    editingData() {
+        return captureDraftData(this.definition.items, path => this._data[path], path => this._pendingCreationPaths.has(path) ? undefined : this.repeats[path].value);
     }
     getDraftSnapshot() {
-        const data = captureDraftData(this.definition.items, path => !this._calculatedFields.has(toBasePath(path)) && Object.prototype.hasOwnProperty.call(this._data, path)
-            ? this._data[path] : undefined, path => this.repeats[path].value);
+        const data = this.editingData();
         return cloneValue({
             definitionUrl: this.definition.url,
             definitionVersion: this.definition.version,
@@ -310,11 +320,7 @@ export class FormEngine {
     }
     loadDraftSnapshot(snapshot) {
         this.assertDraftSnapshot(snapshot);
-        this._rx.batch(() => {
-            this.loadItemsData(this.definition.items, snapshot.data, '', true);
-            // Restoring a draft starts a new evaluation history. Keep the prior result for the signal diff.
-            this._evaluate(null);
-        });
+        this.loadResponseData(snapshot.data);
     }
     assertDraftSnapshot(snapshot) {
         if (snapshot.definitionUrl !== this.definition.url || snapshot.definitionVersion !== this.definition.version) {
@@ -323,55 +329,62 @@ export class FormEngine {
         if (!isJsonRecord(snapshot.data))
             throw new TypeError('Draft data must be a JSON object');
     }
-    loadItemsData(items, data, prefix, draft = false) {
+    loadItemsData(items, data, prefix, replace = false) {
         for (const item of items) {
             const present = Object.prototype.hasOwnProperty.call(data, item.key);
-            if (!present && !draft)
-                continue;
             const path = prefix ? `${prefix}.${item.key}` : item.key;
             const value = present ? data[item.key] : undefined;
             if (item.type === 'field') {
-                if (draft || this._pendingInstanceSources.size > 0)
-                    this._sourceSeedPreservedFields.add(path);
-                if (draft) {
-                    if (!this._calculatedFields.has(toBasePath(path)))
-                        this.storeFieldValue(path, value);
-                    this.writeSources[path].value = null;
-                    this.loadItemsData(item.children ?? [], data, path, true);
+                if ((present || replace) && !this._calculatedFields.has(toBasePath(path))) {
+                    this.storeFieldValue(path, value);
+                    if (replace)
+                        this.writeSources[path].value = null;
                 }
-                else {
-                    this.writeFieldData(path, value);
-                }
+                this.loadItemsData(item.children ?? [], data, path, replace);
             }
-            else if (item.type === 'group' && item.repeatable && this.repeats[path]) {
-                this._seedFromResolvedPaths.add(path);
-                const rows = Array.isArray(value) ? value : [];
-                if (this.repeats[path].value > rows.length) {
-                    this._rx.batch(() => {
+            else if (item.type === 'group' && (present || replace)) {
+                if (item.repeatable) {
+                    const rows = Array.isArray(value) ? value : [];
+                    if (this.repeats[path].value > rows.length) {
                         this.clearRepeatSubtree(path, rows.length);
                         this.repeats[path].value = rows.length;
                         this.structureVersion.value += 1;
+                    }
+                    while (this.repeats[path].value < rows.length) {
+                        this.appendRepeatRow(path, item);
+                    }
+                    rows.forEach((row, index) => {
+                        this.loadItemsData(item.children ?? [], isJsonRecord(row) ? row : {}, `${path}[${index}]`, replace);
                     });
                 }
-                while (this.repeats[path].value < rows.length) {
-                    this.appendRepeatRow(path, item);
+                else {
+                    this.loadItemsData(item.children ?? [], isJsonRecord(value) ? value : {}, path, replace);
                 }
-                rows.forEach((row, index) => {
-                    if (isJsonRecord(row)) {
-                        this.loadItemsData(item.children ?? [], row, `${path}[${index}]`, draft);
-                    }
-                });
-            }
-            else if (item.type === 'group' && !item.repeatable && (draft || isJsonRecord(value))) {
-                this.loadItemsData(item.children ?? [], isJsonRecord(value) ? value : {}, path, draft);
             }
         }
+    }
+    creationContext(pendingPaths) {
+        return {
+            nowIso: this.nowISO(),
+            instances: this.instanceData,
+            pendingInstances: [...this._pendingInstanceSources],
+            pendingPaths,
+            subjectType: this._responseSubject && (this._responseSubject.type ?? null),
+            subjectKeys: this._responseSubject?.keys,
+        };
+    }
+    createResponseData(data, pendingPaths) {
+        const created = wasmCreateResponse(this.definition, data, this.creationContext(pendingPaths), this._extensionFunctions);
+        this._pendingCreationPaths = new Set(created.pending);
+        for (const message of created.diagnostics)
+            console.warn(message);
+        this.loadItemsData(this.definition.items, created.data, '');
     }
     appendRepeatRow(path, item) {
         const index = this.repeats[path].value;
         this._rx.batch(() => {
             this.repeats[path].value = index + 1;
-            this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
+            this.registerItems(item.children ?? [], `${path}[${index}]`);
             this.structureVersion.value += 1;
         });
     }
@@ -383,9 +396,8 @@ export class FormEngine {
             if (current === removedIndex)
                 continue;
             rows.push(snapshotRepeatRow(children, `${path}[${current}]`, fieldPath => ({
-                value: cloneValue(this.signals[fieldPath]?.value),
+                value: this._data[fieldPath],
                 writeSource: this.writeSources[fieldPath]?.value ?? null,
-                preserveSourceSeed: this._sourceSeedPreservedFields.has(fieldPath),
             }), repeatPath => this.repeats[repeatPath]?.value ?? 0));
         }
         this._rx.batch(() => {
@@ -393,29 +405,26 @@ export class FormEngine {
             this.repeats[path].value = rows.length;
             for (const [index, row] of rows.entries()) {
                 const rowPath = `${path}[${index}]`;
-                this.registerItemChildren(children, rowPath);
+                this.registerItems(children, rowPath);
                 for (const { path: relativePath, item: repeatItem, count } of row.repeats) {
                     const repeatPath = `${rowPath}.${relativePath}`;
                     this.clearRepeatSubtree(repeatPath);
                     this.repeats[repeatPath].value = count;
                     for (let nested = 0; nested < count; nested += 1) {
-                        this.registerItemChildren(repeatItem.children ?? [], `${repeatPath}[${nested}]`);
+                        this.registerItems(repeatItem.children ?? [], `${repeatPath}[${nested}]`);
                     }
                 }
-                for (const { path: relativePath, value, writeSource, preserveSourceSeed } of row.fields) {
+                for (const { path: relativePath, value, writeSource } of row.fields) {
                     const fieldPath = `${rowPath}.${relativePath}`;
-                    this._data[fieldPath] = value;
-                    this.signals[fieldPath].value = value;
+                    this.storeFieldValue(fieldPath, value);
+                    this.signals[fieldPath].value = value ?? null;
                     this.writeSources[fieldPath].value = writeSource;
-                    if (preserveSourceSeed)
-                        this._sourceSeedPreservedFields.add(fieldPath);
                 }
             }
             // The rebuilt signals need their evaluated state even when it matches the old index.
             const previous = this._previousEvalResult;
             if (previous) {
                 const prefix = `${path}[`;
-                // The evaluator pads phantom rows below minRepeat (fs-i731). Keep their prior state.
                 const keepPath = (fieldPath) => !(fieldPath.startsWith(prefix) && Object.prototype.hasOwnProperty.call(this.requiredSignals, fieldPath));
                 const keepFlags = (flags) => Object.fromEntries(Object.entries(flags).filter(([fieldPath]) => keepPath(fieldPath)));
                 this._previousEvalResult = {
@@ -451,6 +460,7 @@ export class FormEngine {
             return;
         }
         if (this.writeFieldData(name, value, basePath)) {
+            this._pendingCreationPaths.delete(name);
             ((_a = this.writeSources)[name] ?? (_a[name] = this._rx.signal(null))).value = options.source ?? 'user';
             this._evaluate();
         }
@@ -654,6 +664,15 @@ export class FormEngine {
         const timestamp = this.nowISO();
         const result = this.evaluateResultForTrigger(trigger, timestamp);
         const data = cloneValue(result.data);
+        for (const path of this._pendingCreationPaths) {
+            if (!this.repeats[path])
+                continue;
+            const parentPath = parentPathOf(path);
+            const parent = getNestedValue(data, parentPath);
+            if (isJsonRecord(parent)) {
+                delete parent[path.slice(parentPath ? parentPath.length + 1 : 0)];
+            }
+        }
         const report = trigger === 'disabled' ? null : buildValidationReportEnvelope((trigger === 'demand'
             ? collectTimedShapeValidationResults(result, this._shapeTiming, 'demand')
             : collectRelevantValidationResults(result)), timestamp, this.definition.url, this.definition.version);
@@ -1034,9 +1053,7 @@ export class FormEngine {
             }
             return;
         }
-        // Only host-loaded sources defer fallback-dependent creation-time seeding.
-        if (resolver)
-            this._pendingInstanceSources.add(name);
+        this._pendingInstanceSources.add(name);
         const signal = this._instanceSourceAbort.signal;
         const request = freezeSourceMetadata(cloneValue({
             instanceName: name, source: instance.source,
@@ -1101,7 +1118,9 @@ export class FormEngine {
                     if (this._disposed)
                         return;
                     this._pendingInstanceSources.delete(name);
-                    this.runInstanceDependentSeeding();
+                    if (this._pendingCreationPaths.size > 0) {
+                        this.createResponseData(this.editingData(), [...this._pendingCreationPaths]);
+                    }
                     this._evaluate();
                     if (installed) {
                         if (!resolver && instance.static)
@@ -1188,7 +1207,7 @@ export class FormEngine {
         return this._groupItems.has(itemPath) ? null : parseInstanceTarget(path);
     }
     registerItems(items, prefix = '') {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         for (const item of items) {
             const path = prefix ? `${prefix}.${item.key}` : item.key;
             this._groupItems.set(path, item);
@@ -1199,146 +1218,26 @@ export class FormEngine {
             (_e = this.writeSources)[path] ?? (_e[path] = this._rx.signal(null));
             (_f = this.errorSignals)[path] ?? (_f[path] = this._rx.signal(null));
             if (item.type === 'field') {
-                this._fieldItems.set(path, item);
-                this.initializeFieldSignal(path, item);
-                this._createFieldVM(path, item);
-                if (item.children) {
-                    this.registerItemChildren(item.children, path);
-                }
-                continue;
-            }
-            if (item.type === 'display') {
-                this._displaySignalPaths.add(path);
-                if (this._bindConfigs[path]?.calculate) {
-                    this.signals[path] = this._rx.signal(null);
-                }
-                continue;
-            }
-            if (item.repeatable) {
-                const count = item.minRepeat ?? 0;
-                this.repeats[path] = this._rx.signal(count);
-                for (let index = 0; index < count; index += 1) {
-                    this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
-                }
-            }
-            else {
-                this.registerItemChildren(item.children ?? [], path);
-            }
-        }
-    }
-    registerItemChildren(items, prefix) {
-        var _a, _b, _c, _d, _e, _f, _g;
-        for (const item of items) {
-            const path = `${prefix}.${item.key}`;
-            this._groupItems.set(path, item);
-            (_a = this.relevantSignals)[path] ?? (_a[path] = this._rx.signal(true));
-            (_b = this.requiredSignals)[path] ?? (_b[path] = this._rx.signal(false));
-            (_c = this.readonlySignals)[path] ?? (_c[path] = this._rx.signal(false));
-            (_d = this.validationResults)[path] ?? (_d[path] = this._rx.signal([]));
-            (_e = this.writeSources)[path] ?? (_e[path] = this._rx.signal(null));
-            (_f = this.errorSignals)[path] ?? (_f[path] = this._rx.signal(null));
-            if (item.type === 'field') {
                 this._fieldItems.set(toBasePath(path), item);
-                this.initializeFieldSignal(path, item);
+                (_g = this.signals)[path] ?? (_g[path] = this._rx.signal(null));
                 this._createFieldVM(path, item);
                 if (item.children) {
-                    this.registerItemChildren(item.children, path);
+                    this.registerItems(item.children, path);
                 }
                 continue;
             }
             if (item.type === 'display') {
                 this._displaySignalPaths.add(path);
                 if (this._bindConfigs[toBasePath(path)]?.calculate) {
-                    (_g = this.signals)[path] ?? (_g[path] = this._rx.signal(null));
+                    (_h = this.signals)[path] ?? (_h[path] = this._rx.signal(null));
                 }
                 continue;
             }
             if (item.repeatable) {
-                const count = item.minRepeat ?? 0;
-                this.repeats[path] = this._rx.signal(count);
-                for (let index = 0; index < count; index += 1) {
-                    this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
-                }
+                this.repeats[path] = this._rx.signal(0);
             }
             else {
-                this.registerItemChildren(item.children ?? [], path);
-            }
-        }
-    }
-    initializeFieldSignal(path, item) {
-        if (this.signals[path]) {
-            return;
-        }
-        const hasExpressionInitial = typeof item.initialValue === 'string' && item.initialValue.startsWith('=');
-        const initial = this.resolveInitialFieldValue(path, item);
-        this.signals[path] = this._rx.signal(cloneValue(initial));
-        if (!hasExpressionInitial) {
-            this._data[path] = cloneValue(initial);
-        }
-    }
-    resolveInitialFieldValue(path, item) {
-        const prePopulate = item.prePopulate;
-        if (prePopulate && !this._pendingInstanceSources.has(prePopulate.instance)) {
-            const resolved = resolvePrePopulateFromInstance(item, path, this._seedFromGroups, (instanceName, instancePath) => this.getInstanceData(instanceName, instancePath), (instanceName) => this.instanceData[instanceName]);
-            if (resolved !== undefined) {
-                return cloneValue(resolved);
-            }
-        }
-        if (typeof item.initialValue === 'string' && item.initialValue.startsWith('=')) {
-            return emptyValueForItem(item);
-        }
-        if (item.initialValue !== undefined) {
-            return coerceInitialValue(item, item.initialValue, this.definition);
-        }
-        return emptyValueForItem(item);
-    }
-    runInstanceDependentSeeding() {
-        for (const { path: groupPath, item, seedFrom } of this._seedFromGroups) {
-            if (this._seedFromResolvedPaths.has(groupPath)) {
-                continue;
-            }
-            const minRepeat = item.minRepeat ?? 0;
-            if (repeatHasHostData(groupPath, this._data, this.signals, minRepeat)) {
-                this._seedFromResolvedPaths.add(groupPath);
-                continue;
-            }
-            if (this._pendingInstanceSources.has(seedFrom.instance))
-                continue;
-            if (this.instanceData[seedFrom.instance] === undefined) {
-                continue;
-            }
-            const array = getNestedValue(this.instanceData[seedFrom.instance], seedFrom.path);
-            const arrayLength = Array.isArray(array) ? array.length : 0;
-            const maxRepeat = item.maxRepeat;
-            const target = Math.max(minRepeat, maxRepeat === undefined ? arrayLength : Math.min(arrayLength, maxRepeat));
-            const repeatSignal = this.repeats[groupPath];
-            if (!repeatSignal) {
-                continue;
-            }
-            this._rx.batch(() => {
-                while (repeatSignal.value < target) {
-                    this.appendRepeatRow(groupPath, item);
-                }
-            });
-            this._seedFromResolvedPaths.add(groupPath);
-        }
-        for (const [basePath, fieldItem] of this._fieldItems.entries()) {
-            if (!fieldItem.prePopulate || this._pendingInstanceSources.has(fieldItem.prePopulate.instance)) {
-                continue;
-            }
-            const paths = Object.keys(this.signals).filter((candidate) => toBasePath(candidate) === basePath);
-            for (const path of paths) {
-                if (this._sourceSeedPreservedFields.has(path) || (this._instanceSourceResolver && this.writeSources[path]?.value != null))
-                    continue;
-                if (!isEmptyValue(this.signals[path]?.value)) {
-                    continue;
-                }
-                const next = this.resolveInitialFieldValue(path, fieldItem);
-                if (isEmptyValue(next)) {
-                    continue;
-                }
-                this.signals[path].value = cloneValue(next);
-                this._data[path] = cloneValue(next);
+                this.registerItems(item.children ?? [], path);
             }
         }
     }
@@ -1441,9 +1340,6 @@ export class FormEngine {
             this._felContext.key = key;
         }
         return this._felContext.handle;
-    }
-    repeatCountsSnapshot() {
-        return Object.fromEntries(Object.entries(this.repeats).map(([path, repeatSignal]) => [path, repeatSignal.value]));
     }
     relevanceBindPathCandidates(path) {
         const parts = splitIndexedPath(path);
@@ -1605,12 +1501,11 @@ export class FormEngine {
         });
     }
     _evaluate(previousResult = this._fullResult) {
-        const baseResult = wasmEvaluateDefinition(this.definition, this._data, wasmEvaluateDefinitionPayload({
+        const baseResult = wasmEvaluateDefinition(this.definition, this.editingData(), wasmEvaluateDefinitionPayload({
             nowIso: this.nowISO(),
             previousResult,
             instances: this.instanceData,
             registryDocuments: this._registryDocuments,
-            repeatCounts: this.repeatCountsSnapshot(),
             subjectType: this._responseSubject && (this._responseSubject.type ?? null),
             subjectKeys: this._responseSubject?.keys,
         }), this._extensionFunctions);
@@ -1632,7 +1527,6 @@ export class FormEngine {
                 values: evalResult.values,
                 signals: this.signals,
                 data: this._data,
-                fieldItems: this._fieldItems,
                 bindConfigs: this._bindConfigs,
                 calculatedFields: this._calculatedFields,
             });
@@ -1653,13 +1547,12 @@ export class FormEngine {
         });
     }
     evaluateResultForTrigger(trigger, nowIso = this.nowISO()) {
-        return this.shapedEvalResult(wasmEvaluateDefinition(this.definition, this._data, wasmEvaluateDefinitionPayload({
+        return this.shapedEvalResult(wasmEvaluateDefinition(this.definition, this.editingData(), wasmEvaluateDefinitionPayload({
             nowIso,
             trigger,
             previousResult: this._fullResult,
             instances: this.instanceData,
             registryDocuments: this._registryDocuments,
-            repeatCounts: this.repeatCountsSnapshot(),
             subjectType: this._responseSubject && (this._responseSubject.type ?? null),
             subjectKeys: this._responseSubject?.keys,
         }), this._extensionFunctions));
@@ -1684,10 +1577,6 @@ export class FormEngine {
             if (includesPath(key.slice(key.indexOf(':') + 1))) {
                 this._itemHelpTextSignals.delete(key);
             }
-        }
-        for (const path of this._sourceSeedPreservedFields) {
-            if (includesPath(path))
-                this._sourceSeedPreservedFields.delete(path);
         }
         clearRepeatIndexedSubtree({
             includesPath,

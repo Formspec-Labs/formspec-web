@@ -21,8 +21,6 @@ export declare function toRuntimeMappingResult(result: {
     rulesApplied: number;
     diagnostics: MappingDiagnostic[];
 }): RuntimeMappingResult;
-export declare function emptyValueForItem(item: FormItem): FormFieldValue;
-export declare function coerceInitialValue(item: FormItem, value: FormFieldValue, definition: FormDefinition): FormFieldValue;
 export declare function coerceFieldValue(item: FormItem, bind: EngineBindConfig | undefined, definition: FormDefinition, value: FormFieldValue): FormFieldValue;
 export declare function validateDataType(value: FormFieldValue, dataType: string): boolean;
 export declare function normalizeWasmValue<T>(value: T): T;

@@ -6,22 +6,14 @@ export function patchValueSignalsFromWasm(options) {
         // Native output can omit non-relevant fields. Their editing values still belong to the primary instance.
         if (!Object.prototype.hasOwnProperty.call(options.values, path)) {
             if (!options.calculatedFields.has(basePath)) {
-                sig.value = normalizeWasmValue(options.data[path]);
+                sig.value = normalizeWasmValue(options.data[path] ?? null);
             }
             continue;
         }
         const value = options.values[path];
-        const item = options.fieldItems.get(basePath);
         const normalizedValue = normalizeWasmValue(value);
-        const hasExpressionInitial = typeof item?.initialValue === 'string' && item.initialValue.startsWith('=');
         if (!options.calculatedFields.has(basePath)
-            && hasExpressionInitial
-            && !(path in options.data)) {
-            options.data[path] = cloneValue(normalizedValue);
-        }
-        else if (!options.calculatedFields.has(basePath)
             && options.bindConfigs[basePath]?.default !== undefined
-            && path in options.data
             && isEmptyValue(options.data[path])
             && !deepEqual(options.data[path], normalizedValue)) {
             options.data[path] = cloneValue(normalizedValue);
@@ -34,7 +26,7 @@ export function patchValueSignalsFromWasm(options) {
         else {
             rawValue = normalizedValue;
         }
-        sig.value = normalizeWasmValue(rawValue);
+        sig.value = normalizeWasmValue(rawValue ?? null);
     }
 }
 export function patchDeltaSignalsFromWasm(rx, delta, options) {

@@ -11,6 +11,8 @@ export const checkInstanceProjection: (a: number, b: number, c: number, d: numbe
 export const coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const collectFelRewriteTargets: (a: number, b: number, c: number) => void;
 export const computeDependencyGroups: (a: number, b: number, c: number) => void;
+export const createRepeatRow: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
+export const createResponse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
 export const deriveJsonLdContext: (a: number, b: number, c: number, d: number, e: number) => void;
 export const detectDocumentType: (a: number, b: number, c: number) => void;
 export const evalFel: (a: number, b: number, c: number, d: number, e: number) => void;

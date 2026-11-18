@@ -8,6 +8,8 @@ export const applyMigrationsToResponseData: (a: number, b: number, c: number, d:
 export const checkFelExtensionName: (a: number, b: number, c: number) => void;
 export const coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const computeDependencyGroups: (a: number, b: number, c: number) => void;
+export const createRepeatRow: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
+export const createResponse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
 export const evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
 export const evalFelWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;

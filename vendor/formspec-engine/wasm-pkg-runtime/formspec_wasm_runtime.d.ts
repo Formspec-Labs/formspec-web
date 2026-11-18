@@ -80,6 +80,16 @@ export function coerceFieldValue(item_json: string, bind_json: string, definitio
 export function computeDependencyGroups(entries_json: string): string;
 
 /**
+ * Initialize one added repeat row in its Response context.
+ */
+export function createRepeatRow(definition_json: string, data_json: string, group_path: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
+
+/**
+ * Create a new Response from host prefill and available sources.
+ */
+export function createResponse(definition_json: string, prefill_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
+
+/**
  * Parse and evaluate a FEL expression with optional field values (JSON object).
  * Returns the result as a JSON string.
  */
@@ -189,6 +199,8 @@ export interface InitOutput {
     readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
+    readonly createRepeatRow: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
+    readonly createResponse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evalFelWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;

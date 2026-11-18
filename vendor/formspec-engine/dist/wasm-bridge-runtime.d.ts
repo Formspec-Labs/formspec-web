@@ -193,6 +193,24 @@ export declare function wasmItemLocationAtPath<T = any>(items: unknown[], path: 
     index: number;
     item: T;
 } | undefined;
+/** Sources and Response context available during creation. */
+export interface WasmCreateOptions {
+    nowIso?: string;
+    instances?: Record<string, unknown>;
+    pendingInstances?: string[];
+    pendingPaths?: string[];
+    subjectType?: string | null;
+    subjectKeys?: import('./interfaces.js').ResponseSubjectKeys;
+}
+export interface WasmCreation {
+    data: import('./interfaces.js').JsonRecord;
+    pending: string[];
+    diagnostics: string[];
+}
+/** Apply creation-time values to a new Response or resolve its pending values. */
+export declare function wasmCreateResponse(definition: unknown, data: Record<string, unknown>, context?: WasmCreateOptions, extensions?: FelExtensionHost): WasmCreation;
+/** Create a new row at the end of the given repeat. */
+export declare function wasmCreateRepeatRow(definition: unknown, data: Record<string, unknown>, groupPath: string, context?: WasmCreateOptions, extensions?: FelExtensionHost): WasmCreation | null;
 /** Evaluate a Formspec definition against provided data. */
 export declare function wasmEvaluateDefinition(definition: unknown, data: Record<string, unknown>, context?: {
     nowIso?: string;
@@ -214,8 +232,6 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
     subjectType?: string | null;
     /** The current Response's filing-unit keys, available to `subject(key)`. */
     subjectKeys?: import('./interfaces.js').ResponseSubjectKeys;
-    /** Repeat row counts by group base path (authoritative for min/max repeat cardinality). */
-    repeatCounts?: Record<string, number>;
     /** Ask for resolved Item text (Core §4.2.1); `localeStrings` are cascade-resolved Locale strings. */
     itemText?: {
         localeStrings?: Record<string, string>;

@@ -40,8 +40,6 @@ export declare class FormEngine implements IFormEngine {
     private readonly _groupItems;
     private readonly _shapeTiming;
     private readonly _displaySignalPaths;
-    private readonly _seedFromGroups;
-    private readonly _seedFromResolvedPaths;
     private readonly _calculatedFields;
     private readonly _registryEntries;
     /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
@@ -52,7 +50,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _instanceSourceResolver?;
     private readonly _instanceSourceAbort;
     private readonly _pendingInstanceSources;
-    private readonly _sourceSeedPreservedFields;
+    private _pendingCreationPaths;
     private readonly _instanceSourceOutcomes;
     private _disposed;
     private readonly _instanceSourceTasks;
@@ -69,7 +67,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _itemHelpTextSignals;
     private _formViewModel;
     private readonly _labelContextSignal;
-    private _data;
+    private readonly _data;
     private _previousEvalResult;
     private _fullResult;
     private _issuerOverride;
@@ -100,17 +98,15 @@ export declare class FormEngine implements IFormEngine {
     /** Appends a row and returns its index; `undefined` when the path is not repeatable or already at `maxRepeat` (Core §4.2.2). */
     addRepeatInstance(itemName: string): number | undefined;
     removeRepeatInstance(itemName: string, index: number): void;
-    /**
-     * Loads a Response `data` tree with one evaluation. Definition-directed: a repeatable group present in
-     * `data` gets exactly one row per array entry, past `maxRepeat` or below `minRepeat` included, so loaded
-     * data reports MAX_REPEAT / MIN_REPEAT instead of losing rows. Keys absent from `data` keep their state;
-     * calculated fields and undeclared keys are ignored.
-     */
+    /** Resume saved Response data with its exact row counts and answered fields. */
     loadResponseData(data: JsonRecord): void;
+    private editingData;
     getDraftSnapshot(): FormDraftSnapshot;
     loadDraftSnapshot(snapshot: FormDraftSnapshot): void;
     private assertDraftSnapshot;
     private loadItemsData;
+    private creationContext;
+    private createResponseData;
     private appendRepeatRow;
     /** Reindex the surviving rows with their nested shape, values and prefill protection. */
     private rebuildRepeatRows;
@@ -219,10 +215,6 @@ export declare class FormEngine implements IFormEngine {
     /** `instances` is a legal Item key, so a path whose `itemPath` names an Item is that Item, never an instance target. */
     private instanceTargetUnlessItem;
     private registerItems;
-    private registerItemChildren;
-    private initializeFieldSignal;
-    private resolveInitialFieldValue;
-    private runInstanceDependentSeeding;
     private initializeRemoteOptions;
     private writeInstanceValue;
     private validateInstanceSchema;
@@ -242,7 +234,6 @@ export declare class FormEngine implements IFormEngine {
      * rather than the size of the form.
      */
     private felContext;
-    private repeatCountsSnapshot;
     private relevanceBindPathCandidates;
     private findGoverningRelevanceBindPath;
     private expressionDependencies;

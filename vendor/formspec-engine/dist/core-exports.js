@@ -21,3 +21,4 @@ export { resolveAuthoredSigningContent, signingContentBytes, hashSigningContent 
 export { jsonNumberText, parseJsonNumber, jsonValueText } from './json-values.js';
 export { clampJsonNumber, stepJsonNumber } from './numeric-input.js';
 export { cloneValue as cloneJsonValue } from './json-values.js';
+export { wasmCreateResponse as createResponse, wasmCreateRepeatRow as createRepeatRow } from './wasm-bridge-runtime.js';
