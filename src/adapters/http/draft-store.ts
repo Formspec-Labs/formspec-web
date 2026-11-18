@@ -4,6 +4,7 @@ import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import { savedSourceDraftView, type SourceDraftView, type SavedSourceDraftView, type InitializedSourceDraftView } from './source-draft-view.ts';
 import canonicalize from 'canonicalize';
+import type { components } from '../../api/generated/source-public.d.ts';
 import type { DraftKey, DraftReadState, DraftResumeState, DraftStore, FormResponse, OwnedDraftResumeSelection, RecoveredDraftInitialization } from '../../ports/draft-store.ts';
 import { copyDraftKey, createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
@@ -131,7 +132,10 @@ export class HttpDraftStore implements DraftStore {
         ? await this.client.getJson<SourceDraftView>(`/drafts/${encodeURIComponent(existing.draftId)}`,
           { headers: bearerHeaders(token), assertCurrent: current })
         : await this.client.postJson<SourceDraftView>(`/runtime/forms/${encodeURIComponent(formId)}/drafts`,
-          { form_version_id: versionId },
+          {
+            form_version_id: versionId,
+            resume_existing: false,
+          } satisfies components['schemas']['InitializeDraftCommand'],
           { headers: { ...bearerHeaders(token), 'Idempotency-Key': attemptKey! }, assertCurrent: current });
       current();
       if (!draft.draft_id?.trim() || !Number.isSafeInteger(draft.draft_version) || draft.draft_version < 1

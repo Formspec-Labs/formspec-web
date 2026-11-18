@@ -1423,6 +1423,7 @@ export interface components {
             form_version_id: string;
             is_initialization_only?: boolean | null;
             status: string;
+            subject?: components["schemas"]["FilingSubject"] | null;
             subject_ref: string;
             taskDraft?: components["schemas"]["TaskDraftView"] | null;
         };
@@ -1452,6 +1453,35 @@ export interface components {
             feature_key: string;
             owner: string;
             visible_in_managed_single_cell: boolean;
+        };
+        /** @description Immutable filing-unit identity saved before the browser authors a Response. */
+        FilingSubject: {
+            id: string;
+            /**
+             * @description String or integer identity keys matching exactly the Definition subject declaration. Integers must lie in the I-JSON interoperable range (RFC 7493 section 2.2). An empty object identifies a per-scope singleton. Scope is not a key.
+             * @example {
+             *       "ffy": 2026,
+             *       "uei": "A"
+             *     }
+             */
+            keys: {
+                [key: string]: string | number;
+            };
+            type: string;
+        };
+        /** @description The binding requested by the caller before the server derives the subject ID. */
+        FilingSubjectInput: {
+            /**
+             * @description String or integer identity keys matching exactly the Definition subject declaration. Integers must lie in the I-JSON interoperable range (RFC 7493 section 2.2). An empty object identifies a per-scope singleton. Scope is not a key.
+             * @example {
+             *       "ffy": 2026,
+             *       "uei": "A"
+             *     }
+             */
+            keys: {
+                [key: string]: string | number;
+            };
+            type: string;
         };
         /** @description Response body for a form version. */
         FormVersionView: {
@@ -1496,6 +1526,13 @@ export interface components {
         /** @description Request body for initializing a draft before any canonical Response exists. */
         InitializeDraftCommand: {
             form_version_id: string;
+            /**
+             * @description Look up an open draft for the complete declared subject without creating one.
+             *     An authorized lookup with no open draft returns 404.
+             * @default false
+             */
+            resume_existing: boolean;
+            subject?: components["schemas"]["FilingSubjectInput"] | null;
         };
         NotificationAuditView: {
             audit_events: string[];
@@ -2523,7 +2560,7 @@ export interface operations {
                     "application/json": components["schemas"]["DraftView"];
                 };
             };
-            /** @description Verified draft owner token required */
+            /** @description Verified respondent token required */
             401: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -2533,7 +2570,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Draft not found */
+            /** @description Draft unavailable to this respondent */
             404: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -2655,6 +2692,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationCaseReceipt"] | null;
                 };
             };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Refusal */
             default: {
                 headers: {
@@ -2692,6 +2749,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationCaseReceipt"];
+                };
+            };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Refusal */
@@ -2733,6 +2810,26 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Refusal */
             default: {
                 headers: {
@@ -2770,6 +2867,26 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Refusal */
@@ -2811,6 +2928,26 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Refusal */
             default: {
                 headers: {
@@ -2850,6 +2987,26 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Refusal */
             default: {
                 headers: {
@@ -2887,6 +3044,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Refusal */
@@ -3021,8 +3198,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Anonymous session token invalid or missing */
+            /** @description Verified respondent token required */
             401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
@@ -4749,6 +4936,26 @@ export interface operations {
                     "application/json": components["schemas"]["AttachmentUploadView"];
                 };
             };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Refusal */
             default: {
                 headers: {
@@ -4786,6 +4993,26 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Refusal */
@@ -5057,7 +5284,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Required stable initialization attempt key; exact retries read the current owned draft */
+                /** @description Stable attempt key; retries reauthorize and return the current open draft */
                 "Idempotency-Key": string;
             };
             path: {
@@ -5072,7 +5299,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created draft */
+            /** @description Current open draft */
             200: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -5092,7 +5319,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Anonymous session token invalid or missing */
+            /** @description Verified respondent token required */
             401: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -5102,8 +5329,38 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Active version not found */
+            /** @description The respondent cannot open the requested filing unit */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Active version or open draft not found */
             404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft initialization conflicts with another open or completed attempt */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft command does not match the request schema */
+            422: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;

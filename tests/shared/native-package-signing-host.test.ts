@@ -590,7 +590,7 @@ describe('generic native package signing session', () => {
       if (request.method === 'GET') return jsonResponse(view());
       if (request.method === 'POST') {
         expect(request.url).toBe('https://server.example.test/runtime/forms/form/drafts');
-        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(request.body).toEqual({ form_version_id: 'publication', resume_existing: false });
         expect(version).toBe(0); version = 1; return jsonResponse(view());
       }
       const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };

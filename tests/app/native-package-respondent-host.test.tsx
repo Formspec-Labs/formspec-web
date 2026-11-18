@@ -611,7 +611,7 @@ describe('maintained native package Surface host', () => {
         return jsonResponse(view());
       }
       if (request.method === 'POST') {
-        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(request.body).toEqual({ form_version_id: 'publication', resume_existing: false });
         expect(revision).toBe(0); revision = 1; return jsonResponse(view());
       }
       const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };

@@ -262,7 +262,7 @@ describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
     await adapter.save(key, sampleFormResponse);
     await expect(adapter.initializeDraft(key)).resolves.toEqual({ draftId: empty.draft_id, isInitializationOnly: false, response: sampleFormResponse });
     expect(requests.map(request => request.method)).toEqual(['POST', 'PATCH', 'GET']);
-    expect(requests[0].body).toEqual({ form_version_id: 'published-version' });
+    expect(requests[0].body).toEqual({ form_version_id: 'published-version', resume_existing: false });
     expect(requests[0].headers.get('Idempotency-Key')).toBeTruthy();
     expect(requests[2].headers.has('Idempotency-Key')).toBe(false);
     expect(requests[1].body).toMatchObject({ expected_draft_version: 1, canonical_response: sampleFormResponse });

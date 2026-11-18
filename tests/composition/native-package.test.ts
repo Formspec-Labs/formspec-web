@@ -107,7 +107,7 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
     if (url.pathname === '/runtime/forms/actual-form/application-lifecycle') return Response.json(capabilities);
     if (url.pathname === '/runtime/forms/actual-form' && method === 'GET') return Response.json(publication);
     if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') {
-      expect(body).toEqual({ form_version_id: publication.form_version_id });
+      expect(body).toEqual({ form_version_id: publication.form_version_id, resume_existing: false });
       expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
       saved = undefined; draftVersion = 1;
     }
@@ -763,7 +763,7 @@ describe('explicit native package composition', () => {
         document, artifactDigest: await computeJcsSha256Digest(document), requestRef: effect.requestRef } }, { assertBeforeDispatch: saveGuard });
     expect(saveGuard).toHaveBeenCalledTimes(2);
     const creates = test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'));
-    expect(creates).toHaveLength(1); expect(creates[0].body).toEqual({ form_version_id: test.publication.form_version_id });
+    expect(creates).toHaveLength(1); expect(creates[0].body).toEqual({ form_version_id: test.publication.form_version_id, resume_existing: false });
     const saves = test.requests.filter(request => request.method === 'PATCH');
     expect(saves).toHaveLength(1); expect(saves[0].body).toMatchObject({ canonical_response: response, expected_draft_version: 1 });
     expect(await current.composition.draftStore.load(key)).toEqual(response);
@@ -989,7 +989,7 @@ describe('explicit native package composition', () => {
     await boot.composition.draftStore.save(key, response); boot.host.dispose();
     const create = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
     expect(create.headers.get('authorization')).toBe('Bearer oidc-bearer');
-    expect(create.body).toEqual({ form_version_id: test.publication.form_version_id });
+    expect(create.body).toEqual({ form_version_id: test.publication.form_version_id, resume_existing: false });
     expect(create.headers.get('idempotency-key')).toBeTruthy();
     test.values.clear(); test.setDraft(response, 'in_progress', 7);
     const count = test.requests.length;

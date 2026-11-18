@@ -176,7 +176,7 @@ describe('composition root smoke', () => {
       }
       if (request.method === 'POST' && path === '/runtime/forms/conformance/drafts') {
         draftCounter += 1;
-        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(request.body).toEqual({ form_version_id: 'publication', resume_existing: false });
         return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1, form_version_id: 'publication',
           subject_ref: 'anon:server-subject', status: 'in_progress', is_initialization_only: true, canonical_response: null, draft_state: {} });
       }
@@ -255,7 +255,7 @@ describe('composition root smoke', () => {
         'POST /drafts/draft-http-1/submit',
       ]);
     expect(requests[0]?.body).toEqual({});
-    expect(requests[2]?.body).toEqual({ form_version_id: 'publication' });
+    expect(requests[2]?.body).toEqual({ form_version_id: 'publication', resume_existing: false });
     expect(requests[2]?.headers.get('Idempotency-Key')).toBeTruthy();
     expect(requests[2]?.headers.get('Authorization')).toBe('Bearer anonymous-token-1');
     expect(requests[3]?.body).toMatchObject({ canonical_response: sampleFormResponse,

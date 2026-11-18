@@ -16,7 +16,7 @@ defineDraftStoreConformance('HTTP DraftStore conformance', () => {
     if (request.method === 'POST' && /\/runtime\/forms\/[^/]+\/drafts$/.test(path)) {
       draftCounter += 1;
       const draftId = `draft-http-${draftCounter}`;
-      if (JSON.stringify(request.body) !== JSON.stringify({ form_version_id: 'publication' })) throw new Error('Initialization body changed');
+      if (JSON.stringify(request.body) !== JSON.stringify({ form_version_id: 'publication', resume_existing: false })) throw new Error('Initialization body changed');
       drafts.set(draftId, { draftVersion: 1, data: {} });
       return jsonResponse({ draft_id: draftId, draft_version: 1, form_version_id: 'publication', subject_ref: 'S-1',
         status: 'in_progress', is_initialization_only: true, canonical_response: null, draft_state: {} });

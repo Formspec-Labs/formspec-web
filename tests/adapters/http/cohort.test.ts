@@ -117,7 +117,7 @@ describe('createHttpAdapterCohort (FW-0064)', () => {
     await cohort.draftStore.save(key, sampleFormResponse);
     await cohort.submitTransport.submit(handoff, generateIdempotencyKey());
 
-    expect(lastDraftBody).toEqual({ form_version_id: 'publication' });
+    expect(lastDraftBody).toEqual({ form_version_id: 'publication', resume_existing: false });
     expect(lastSubmitBody).toMatchObject({ anonymous_session_token: 'token-from-bridge' });
   });
 
@@ -254,7 +254,7 @@ describe('trusted anonymous initialization ownership', () => {
     const { fetch, requests } = recordingFetch(async request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
       if (request.method === 'POST') {
-        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(request.body).toEqual({ form_version_id: 'publication', resume_existing: false });
         expect(request.headers.get('Authorization')).toBe('Bearer owner-token');
         if (held) await new Promise<void>(resolve => { release = resolve; });
       }
