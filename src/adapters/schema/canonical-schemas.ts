@@ -29,7 +29,6 @@ import responseSchemaJson from '../../../vendor/formspec-schemas/response.schema
 import responseActionsSchemaJson from '../../../vendor/formspec-schemas/response-actions.schema.json';
 import screenerSchemaJson from '../../../vendor/formspec-schemas/screener.schema.json';
 import surfaceSchemaJson from '../../../vendor/formspec-schemas/surface.schema.json';
-import surface02SchemaJson from '../../../vendor/formspec-schemas/surface-v0.2.schema.json';
 import themeSchemaJson from '../../../vendor/formspec-schemas/theme.schema.json';
 import validationMappingSchemaJson from '../../../vendor/formspec-schemas/validation-mapping.schema.json';
 import validationResultSchemaJson from '../../../vendor/formspec-schemas/validation-result.schema.json';
@@ -51,7 +50,7 @@ export const ARTIFACT_SCHEMA_DOCUMENTS = Object.freeze({
   references: Object.freeze([referencesSchemaJson]),
   ontology: Object.freeze([ontologySchemaJson]),
   registry: Object.freeze([registrySchemaJson]),
-  surface: Object.freeze([surface02SchemaJson, surfaceSchemaJson]),
+  surface: Object.freeze([surfaceSchemaJson]),
   screener: Object.freeze([screenerSchemaJson]),
   dataSources: Object.freeze([dataSourcesSchemaJson]),
   locale: Object.freeze([locale20SchemaJson, localeSchemaJson]),
@@ -64,7 +63,7 @@ export const ARTIFACT_SCHEMA_IDENTITIES = Object.freeze({
     '2.0': locale20SchemaJson.$id, '2.1': localeSchemaJson.$id,
   }) }),
   surface: Object.freeze({ versionField: '$formspecSurface', versions: Object.freeze({
-    '0.2': surface02SchemaJson.$id, '0.3': surfaceSchemaJson.$id,
+    '0.2': surfaceSchemaJson.$id, '0.3': surfaceSchemaJson.$id, '0.4': surfaceSchemaJson.$id,
   }) }),
 });
 

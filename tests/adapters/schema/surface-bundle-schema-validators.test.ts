@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters/schema';
 import { sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
+import { SURFACE_LOCALE_KEY_PREFIX, SURFACE_STRING_KEYS } from '@formspec-org/surface';
 import type {
   AppGraphSchemaValidator,
   SchemaValidationOutcome,
@@ -22,6 +23,7 @@ import {
 const DEFINITION_URL = 'https://example.gov/forms/intake';
 const RESPONSE_REF = 'https://formspec.org/schemas/response/1.0';
 const CONTENT_REF = 'https://formspec.org/schemas/common/1.0#/$defs/SigningContent';
+const SURFACE_SCHEMA_ID = 'https://formspec.org/schemas/surface/0.4';
 
 describe('public canonical module payload resources', () => {
   it('returns only the exact pinned common root through the public adapter entry', async () => {
@@ -181,7 +183,7 @@ const validArtifacts = Object.freeze([
   },
   {
     artifactKind: 'surface',
-    schemaId: 'https://formspec.org/schemas/surface/0.2',
+    schemaId: SURFACE_SCHEMA_ID,
     document: {
       $formspecSurface: '0.2',
       id: 'intake',
@@ -392,34 +394,55 @@ describe('loadSurfaceBundleSchemaValidators', () => {
     ]));
   });
 
-  it('selects exact authored Surface schema versions and refuses crossed or absent identities', async () => {
+  it('uses the canonical Surface schema for all supported dialects and rejects unknown identities', async () => {
     const validate = await schemaValidator();
     const old = validArtifacts.find(candidate => candidate.artifactKind === 'surface')!;
-    const native = {
-      artifactKind: 'surface', schemaId: 'https://formspec.org/schemas/surface/0.3',
+    const screener = {
+      artifactKind: 'surface', schemaId: SURFACE_SCHEMA_ID,
       document: { $formspecSurface: '0.3', id: 'eligibility', entry: 'screen', routes: [{
         id: 'screen', path: '/', slots: [{ id: 'screen', slotType: 'screener', binding: {
           screenerRef: 'urn:example:screener', allowedTargets: ['surface:intake'],
         } }],
       }] },
     };
-    expect(validateArtifact(validate, old).ok).toBe(true);
-    expect(validateArtifact(validate, native).ok).toBe(true);
-    expect(validateArtifact(validate, { ...native, schemaId: old.schemaId }).ok).toBe(false);
-    expect(validateArtifact(validate, { ...old, schemaId: native.schemaId }).ok).toBe(false);
-    expect(validateArtifact(validate, { ...native, schemaId: undefined }).ok).toBe(true);
-    expect(validateArtifact(validate, { ...old, schemaId: undefined }).ok).toBe(true);
-    expect(validateArtifact(validate, { ...native, schemaId: undefined,
-      document: { ...native.document, $formspecSurface: '0.4' } })).toMatchObject({
-      ok: false, issues: [{ code: 'SURFACE-BUNDLE-SCHEMA-ID-MISMATCH' }],
-    });
-    expect(validateArtifact(validate, { ...native, schemaId: 'https://formspec.org/schemas/surface/0.4' }).ok).toBe(false);
-    const invalid = structuredClone(native);
+    const filingStatus = {
+      artifactKind: 'surface', schemaId: SURFACE_SCHEMA_ID,
+      document: { $formspecSurface: '0.4', id: 'filing', entry: 'overview', routes: [
+        { id: 'overview', path: '/', slots: [{ id: 'tracker', slotType: 'filing-status', binding: {
+          groups: [{ id: 'annual', label: 'Annual forms', forms: [{ routeRef: 'apply', slotRef: 'capture' }] }],
+        } }] },
+        { id: 'apply', path: '/apply', slots: [{ id: 'capture', slotType: 'definition-form', binding: {
+          definitionRef: DEFINITION_URL,
+        } }] },
+      ] },
+    };
+    for (const artifact of [old, screener, filingStatus]) {
+      expect(validateArtifact(validate, { ...artifact, schemaId: undefined }).ok).toBe(true);
+      expect(validateArtifact(validate, artifact).ok).toBe(true);
+    }
+    for (const version of ['0.2', '0.3', '0.5']) {
+      expect(validateArtifact(validate, {
+        ...screener, schemaId: `https://formspec.org/schemas/surface/${version}`,
+      })).toMatchObject({ ok: false, issues: [{ code: 'SURFACE-BUNDLE-SCHEMA-ID-MISMATCH' }] });
+    }
+    for (const version of ['0.5', undefined]) {
+      for (const schemaId of [undefined, SURFACE_SCHEMA_ID]) {
+        expect(validateArtifact(validate, {
+          ...screener, schemaId, document: { ...screener.document, $formspecSurface: version },
+        }).ok).toBe(false);
+      }
+    }
+    const invalid = structuredClone(screener);
     invalid.document.routes[0].slots[0].binding.allowedTargets = [];
     expect(validateArtifact(validate, invalid).ok).toBe(false);
-    const oldWithNativeSlot = { ...native, schemaId: old.schemaId,
-      document: { ...native.document, $formspecSurface: '0.2' } };
-    expect(validateArtifact(validate, oldWithNativeSlot).ok).toBe(false);
+    expect(validateArtifact(validate, {
+      ...screener, document: { ...screener.document, $formspecSurface: '0.2' },
+    }).ok).toBe(false);
+    for (const version of ['0.2', '0.3']) {
+      expect(validateArtifact(validate, {
+        ...filingStatus, document: { ...filingStatus.document, $formspecSurface: version },
+      }).ok).toBe(false);
+    }
   });
 
   it('selects exact authored Locale versions and preserves published 2.0 without a fallback', async () => {
@@ -449,18 +472,20 @@ describe('loadSurfaceBundleSchemaValidators', () => {
       document: { ...native.document, target: { kind: 'screener' } } }).ok).toBe(false);
   });
 
-  it('accepts the added shell keys only in Locale 2.1', async () => {
+  it('accepts all current shell keys in Locale 2.1 and rejects additions in 2.0', async () => {
     const validate = await schemaValidator();
     const old = validArtifacts.find(candidate => candidate.artifactKind === 'locale')!;
     const oldKeys = new Set(locale20Schema.$defs.SurfaceShellStringKey.enum);
-    const addedKeys = locale21Schema.$defs.SurfaceShellStringKey.enum.filter(key => !oldKeys.has(key));
-    expect(addedKeys).toHaveLength(8);
-    for (const key of addedKeys) {
+    const currentKeys = SURFACE_STRING_KEYS.map(key => `${SURFACE_LOCALE_KEY_PREFIX}${key}`);
+    expect(new Set(locale21Schema.$defs.SurfaceShellStringKey.enum)).toEqual(new Set(currentKeys));
+    for (const key of currentKeys) {
       const document = { ...old.document, strings: { [key]: 'Localized shell text' } };
-      expect(validateArtifact(validate, { ...old, document }).ok, key).toBe(false);
       expect(validateArtifact(validate, {
         ...old, schemaId: locale21Schema.$id, document: { ...document, $formspecLocale: '2.1' },
       }).ok, key).toBe(true);
+      if (!oldKeys.has(key)) {
+        expect(validateArtifact(validate, { ...old, document }).ok, key).toBe(false);
+      }
     }
   });
 
