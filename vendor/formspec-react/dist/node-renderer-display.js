@@ -7,6 +7,7 @@ import { computed, signal as createSignal } from '@preact/signals-core';
 import { useChromeText } from './use-chrome-text';
 import { useFormspecContext, findItemByKey } from './context.js';
 import { useSignal } from './use-signal';
+import { useNativeSelect } from './use-native-select';
 import { useRepeatAffordances } from './use-repeat-affordances';
 import { ValidationSummary } from './validation-summary';
 import { DividerLayout } from './defaults/layout/default-layout';
@@ -194,6 +195,7 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, metadata
     const { engine } = useFormspecContext();
     const rawValue = useSignal(engine.signals[signalPath] ?? NO_VALUE);
     const readonly = useSignal(engine.readonlySignals[signalPath] ?? NO_READONLY);
+    const select = useNativeSelect(value => engine.setValue(signalPath, value || null));
     const isEditable = column.editable !== false;
     const dataType = fieldDef?.dataType || column.type;
     const optionSetEntry = fieldDef?.optionSet
@@ -235,7 +237,7 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, metadata
         return (_jsx("td", { ...metadataAttrs, children: _jsx("input", { className: "formspec-datatable-input", type: "checkbox", checked: !!rawValue, "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.checked) }) }));
     }
     if ((dataType === 'choice' || dataType === 'select') && choices.length > 0) {
-        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsxs("select", { className: "formspec-datatable-input", name: signalPath, value: rawValue != null ? jsonValueText(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value || null), children: [_jsx("option", { value: "" }), choices.map((c) => (_jsx("option", { value: c.value, children: c.label ?? c.value }, c.value)))] })) }));
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsxs("select", { className: "formspec-datatable-input", name: signalPath, value: rawValue != null ? jsonValueText(rawValue) : '', "aria-label": column.header, disabled: readonly, ...select, children: [_jsx("option", { value: "" }), choices.map((c) => (_jsx("option", { value: c.value, children: c.label ?? c.value }, c.value)))] })) }));
     }
     if (dataType === 'number' || dataType === 'integer' || dataType === 'decimal' || dataType === 'money') {
         const moneyValue = rawValue != null && typeof rawValue === 'object' && 'amount' in rawValue

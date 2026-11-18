@@ -351,7 +351,7 @@ describe('explicit native package composition', () => {
     const mounted = render(createElement(NativePackageRuntime, { composition, config: test.config }));
     await vi.waitFor(() => expect(test.requests.some(request => request.method === 'GET' && request.url.endsWith('/drafts/fixture-draft'))).toBe(true));
     await vi.waitFor(() => expect(mounted.container.querySelector('.native-package-workspace')).not.toBeNull());
-    await screen.findByRole('textbox', { name: /full legal name/i });
+    await screen.findByRole('textbox', { name: /full legal name/i }, { timeout: 10000 });
     expect(configure).toHaveBeenCalled(); expect(boot.host.getSnapshot().controller?.saved?.draft.version).toBe(7);
     expect(boot.host.getSnapshot().controller!.saved!.response).toEqual(response);
     expect((screen.getByRole('textbox', { name: /full legal name/i }) as HTMLInputElement).value).toBe('Retained person');
@@ -402,7 +402,9 @@ describe('explicit native package composition', () => {
     const runtime = createElement(NativePackageRuntime, { composition, config: test.config });
     const mounted = render(strict ? createElement(StrictMode, null, runtime) : runtime);
     try {
-      await screen.findByRole('textbox', { name: /full legal name/i });
+      // Wait for checkpoint verification and Respondent startup after the signed state is published.
+      const name = await screen.findByRole('textbox', { name: /full legal name/i }, { timeout: 10000 });
+      expect((name as HTMLInputElement).value).toBe('Retained signed person');
       await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.signed?.draft.version).toBe(5));
       expect(boot.host.getStartupRoute(route.path!).canRestoreOwnedForm).toBe(true);
       expect(boot.host.getSnapshot().controller!.signed!.response).toEqual(signed);

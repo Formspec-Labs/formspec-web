@@ -276,23 +276,16 @@ export function collectTimedShapeValidationResults(evalResult, shapeTiming, timi
     }
     return results;
 }
-/** Strip optional cardinality `source`, compute counts, and wrap the spec envelope. */
+/** Compute counts and wrap the evaluator's results in the spec report. */
 export function buildValidationReportEnvelope(results, timestamp, definitionUrl, definitionVersion) {
-    const finalResults = results.map((result) => {
-        if (result.constraintKind === 'cardinality') {
-            const { source: _source, ...rest } = result;
-            return rest;
-        }
-        return result;
-    });
     const counts = { error: 0, warning: 0, info: 0 };
-    for (const result of finalResults) {
+    for (const result of results) {
         counts[result.severity] += 1;
     }
     const report = {
         $formspecValidationReport: '1.0',
         valid: counts.error === 0,
-        results: finalResults,
+        results,
         counts,
         timestamp,
     };

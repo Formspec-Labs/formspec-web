@@ -204,7 +204,7 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
         constraintKind: string;
         code: string;
         message: string;
-        source: string;
+        source?: string;
         shapeId?: string;
         context?: Record<string, unknown>;
     }>;

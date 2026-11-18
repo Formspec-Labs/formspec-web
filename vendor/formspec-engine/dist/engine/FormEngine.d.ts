@@ -40,7 +40,6 @@ export declare class FormEngine implements IFormEngine {
     private readonly _groupItems;
     private readonly _shapeTiming;
     private readonly _displaySignalPaths;
-    private readonly _prePopulateReadonly;
     private readonly _seedFromGroups;
     private readonly _seedFromResolvedPaths;
     private readonly _calculatedFields;

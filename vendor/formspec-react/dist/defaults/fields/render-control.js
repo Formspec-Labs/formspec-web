@@ -1,7 +1,7 @@
 /** @filedesc Standard (non-group) field control switch — dispatches by component type. */
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { jsonValueText, stepJsonNumber } from '@formspec-org/engine';
+import { jsonValueText, parseJsonNumber, stepJsonNumber } from '@formspec-org/engine';
 import { useChromeText } from '../../use-chrome-text';
 import { NativeSelectControl } from './controls/native-select';
 import { ComboboxSelect } from './controls/combobox-select';
@@ -131,5 +131,17 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
  */
 function NativeSelect({ field, common, value, isReadonly, clearable, placeholder }) {
     const chrome = useChromeText();
-    return (_jsxs(NativeSelectControl, { ...common, value: jsonValueText(value), onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, afterControl: clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }));
+    let selected = jsonValueText(value);
+    if (value != null && ['integer', 'decimal', 'number'].includes(field.dataType)) {
+        // Preserve the authored option spelling when the engine canonicalizes its numeric answer.
+        selected = field.options.find(option => {
+            try {
+                return jsonValueText(parseJsonNumber(option.value)) === jsonValueText(value);
+            }
+            catch {
+                return false;
+            }
+        })?.value ?? selected;
+    }
+    return (_jsxs(NativeSelectControl, { ...common, value: selected, onValueChange: isReadonly ? undefined : (value) => field.setValue(value), disabled: isReadonly, afterControl: clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }));
 }

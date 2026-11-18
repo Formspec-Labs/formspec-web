@@ -47,7 +47,6 @@ export class FormEngine {
         this._groupItems = new Map();
         this._shapeTiming = new Map();
         this._displaySignalPaths = new Set();
-        this._prePopulateReadonly = new Set();
         this._seedFromResolvedPaths = new Set();
         this._calculatedFields = new Set();
         this._registryEntries = new Map();
@@ -109,7 +108,6 @@ export class FormEngine {
             }
             this._registryDocuments = [{ entries: registryEntries }];
         }
-        this.definition = resolveOptionSetsOnDefinition(this.definition);
         this._seedFromGroups = collectSeedFromGroups(this.definition.items);
         this.initializeOptionSignals();
         this.initializeInstances();
@@ -904,7 +902,8 @@ export class FormEngine {
                 }
             }
         };
-        visit(this.definition.items);
+        // Resolve a display-only copy; evaluation always receives the authored Definition.
+        visit(resolveOptionSetsOnDefinition(this.definition).items);
     }
     initializeInstances() {
         const instances = this.definition.instances;
@@ -1205,18 +1204,10 @@ export class FormEngine {
     }
     resolveInitialFieldValue(path, item) {
         const prePopulate = item.prePopulate;
-        if (prePopulate?.editable === false)
-            this._prePopulateReadonly.add(path);
         if (prePopulate && !this._pendingInstanceSources.has(prePopulate.instance)) {
             const resolved = resolvePrePopulateFromInstance(item, path, this._seedFromGroups, (instanceName, instancePath) => this.getInstanceData(instanceName, instancePath), (instanceName) => this.instanceData[instanceName]);
             if (resolved !== undefined) {
-                if (prePopulate.editable === false) {
-                    this._prePopulateReadonly.add(path);
-                }
                 return cloneValue(resolved);
-            }
-            if (prePopulate.editable === false) {
-                this._prePopulateReadonly.add(path);
             }
         }
         if (typeof item.initialValue === 'string' && item.initialValue.startsWith('=')) {
@@ -1569,7 +1560,6 @@ export class FormEngine {
                 shapeResults: this.shapeResults,
                 variableSignals: this.variableSignals,
                 variableSignalKeys: this._variableSignalKeys,
-                prePopulateReadonly: this._prePopulateReadonly,
             });
             patchErrorSignalsFromWasm(this._rx, {
                 validationResults: this.validationResults,

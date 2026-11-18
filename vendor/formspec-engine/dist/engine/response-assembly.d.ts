@@ -51,7 +51,7 @@ export declare function buildFormspecResponseEnvelope(options: {
 }): Record<string, unknown>;
 /** Shape validations for a specific timing, from a WASM eval with the matching trigger. */
 export declare function collectTimedShapeValidationResults(evalResult: EvalResult, shapeTiming: Map<string, EvalShapeTiming>, timing: EvalShapeTiming): ValidationResult[];
-/** Strip optional cardinality `source`, compute counts, and wrap the spec envelope. */
+/** Compute counts and wrap the evaluator's results in the spec report. */
 export declare function buildValidationReportEnvelope(results: ValidationResult[], timestamp: string, definitionUrl?: string, definitionVersion?: string): ValidationReport;
 export declare function migrateResponseData(definition: FormDefinition, responseData: Record<string, any>, fromVersion: string, options: {
     nowIso: string;

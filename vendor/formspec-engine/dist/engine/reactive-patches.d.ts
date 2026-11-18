@@ -20,7 +20,6 @@ export declare function patchDeltaSignalsFromWasm(rx: EngineReactiveRuntime, del
     shapeResults: Record<string, EngineSignal<ValidationResult[]>>;
     variableSignals: Record<string, EngineSignal<any>>;
     variableSignalKeys: Map<string, string[]>;
-    prePopulateReadonly: Set<string>;
 }): void;
 export declare function patchErrorSignalsFromWasm(rx: EngineReactiveRuntime, options: {
     validationResults: Record<string, EngineSignal<ValidationResult[]>>;

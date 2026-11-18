@@ -33,7 +33,12 @@ export function useField(path) {
     // Subscribe to touched version for reactivity
     const _touchedVersion = useSignal(touchedVersion);
     const touched = isTouched(vm.instancePath);
-    const touch = useMemo(() => () => touchField(vm.instancePath), [touchField, vm]);
+    // Read-only, calculated and protected fields stay untouched (see UseFieldResult.touch).
+    const touch = useMemo(() => () => {
+        if (vm.readonly.value || (!vm.visible.value && vm.disabledDisplay === 'protected'))
+            return;
+        touchField(vm.instancePath);
+    }, [touchField, vm]);
     const setValue = useMemo(() => (nextValue) => {
         vm.setValue(nextValue);
         advanceSemanticResponseRevision();
@@ -43,12 +48,12 @@ export function useField(path) {
         name: vm.instancePath,
         value: value ?? '',
         onChange: (e) => setValue(e.target.value),
-        onBlur: () => touchField(vm.instancePath),
+        onBlur: touch,
         required,
         readOnly: readonly,
         'aria-invalid': !!firstError,
         'aria-required': required,
-    }), [vm, value, required, readonly, firstError, touchField, setValue]);
+    }), [vm, value, required, readonly, firstError, touch, setValue]);
     return {
         id: vm.id,
         path: vm.instancePath,

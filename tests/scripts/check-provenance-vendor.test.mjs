@@ -1,10 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const stackRoot = resolve(repoRoot, '..');
@@ -21,6 +23,29 @@ describe('check-provenance-vendor', () => {
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+
+  it('validates the native agent declaration using only pinned schemas', () => {
+    const dir = join(repoRoot, 'vendor/wos-api');
+    const read = file => JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    const ajv = new Ajv2020({ strict: false });
+    addFormats(ajv);
+    for (const file of Object.keys(read('provenance.json').files)) ajv.addSchema(read(file));
+
+    const governance = read('governance.schema.json');
+    const validate = ajv.getSchema(governance.$id + '#/$defs/AgentView');
+    const agent = {
+      id: 'screenEligibility',
+      workflowUrl: 'https://workflow.test/current',
+      declaration: {
+        id: 'screenEligibility',
+        agentType: 'deterministic',
+        modelIdentifier: 'screening',
+        modelVersion: '1.0.0',
+      },
+    };
+    expect(validate(agent)).toBe(true);
+    expect(validate({ ...agent, declaration: {} })).toBe(false);
   });
 
   it.skipIf(!existsSync(join(stackRoot, 'stack-common')))('compares every pinned file with the stack sources', () => {

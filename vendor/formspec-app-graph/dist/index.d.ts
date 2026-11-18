@@ -19,7 +19,7 @@ export { LOCALE_ASSOCIATION_CODES, normalizeLocaleTag, validateLocaleAssociation
 export { validateNeedsCoverage, type NeedsEarlFrame, type NeedStatus, } from './needs-coverage.js';
 export { NEED_COMPLETION_SHAPES, NEED_USABLE_OUTCOME_CODES, validateNeedUsableOutcomes, type NeedCompletionShape, } from './need-usable-outcomes.js';
 export { collectRenderedNeedTraceNodes, RENDERED_NEED_TRACE_CODES, runRenderedNeedTrace, validateRenderedNeedTrace, type RenderedNeedTraceAnchor, type RenderedNeedTraceCollectionFailure, type RenderedNeedTraceInvalidAnchor, type RenderedNeedTraceNode, type RenderedNeedTraceTypedNeedRef, } from './rendered-need-trace.js';
-export { LOCALE_LINT_ORIGIN, lintPathToJsonPointer, localeLintValidator, type AppGraphDocumentLinter, type AppGraphLintDiagnostic, type AppGraphLocaleLintContext, } from './locale-lint.js';
+export { DOCUMENT_LINT_ORIGIN, lintPathToJsonPointer, documentLintDiagnostics, documentLintValidator, type AppGraphDocumentLinter, type AppGraphLintDiagnostic, type AppGraphDocumentLintContext, type AppGraphDocumentLintValidatorOptions, } from './document-lint.js';
 export { validateScreenerSurfaceTargets, } from './screener-surface-targets.js';
 export { validateSurfaceDefinitionSlots, } from './surface-definition-slots.js';
 export { validateSurfaceExperienceUnits, } from './surface-experience-units.js';
@@ -28,7 +28,6 @@ export { routeHasWidgetActionSource, validateSurfaceWidgetActions, } from './sur
 export { STRUCTURED_PANEL_CONTRACT_CODES, structuredPanelConfirmationAdmission, validateStructuredPanelContracts, type AdmittedStructuredPanelConfirmation, type StructuredPanelConfirmationAdmission, } from './structured-panel-contracts.js';
 export { UX_AUTHORING_QUALITY_CODES, validateUxAuthoringQuality, } from './ux-authoring-quality.js';
 export { UX_TITLE_DUPLICATE_CODE, validateUxTitleDuplicates, } from './ux-title-duplicates.js';
-export { validateThemeTokenRegistry, } from './theme-token-registry.js';
 export { PLATFORM_BRAND_TOKEN_KEY, PLATFORM_TOKEN_KEYS, } from './platform-token-keys.js';
 export { HOST_WIDGET_CONTRACT_CODES, hostWidgetContractSet, hostWidgetContractVariants, selectHostWidgetContract, validateHostWidgetContracts, widgetContractMismatchReasons, type HostWidgetContractSet, type HostWidgetContracts, type HostWidgetModuleShape, type WidgetRenderedConfigNodeContract, type WidgetRuntimeContract, type WidgetRuntimeContractEntry, type WidgetRuntimeContractMismatchReason, } from './widget-runtime-contract.js';
 export { resolveWidgetContribution, type WidgetContributionEntry, type WidgetContributionIdentity, } from './widget-contribution.js';

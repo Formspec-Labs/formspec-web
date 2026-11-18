@@ -251,6 +251,8 @@ formspec-render {
   --formspec-default-text-subtle: var(--formspec-color-mutedForeground, #736c62);
   --formspec-default-text-faint: var(--formspec-color-foreground-muted, #746c61);
   --formspec-default-text-inverse: var(--formspec-color-primaryForeground, #ffffff);
+  /* What a colour is lightened toward in mixes. White suits only the light appearance. */
+  --formspec-default-tint-base: white;
   --formspec-default-bg: var(--formspec-color-background, #f6f0e6);
   --formspec-default-surface: var(--formspec-color-card, #fdfaf4);
   --formspec-default-surface-muted: var(--formspec-color-surface, #f2ece2);
@@ -261,7 +263,7 @@ formspec-render {
   --formspec-default-border-input: var(--formspec-color-input, #8b8175);
   --formspec-default-border: var(--formspec-color-border, #d1c8ba);
   --formspec-default-border-strong: color-mix(in srgb, var(--formspec-default-border) 82%, #5b5448);
-  --formspec-default-border-subtle: color-mix(in srgb, var(--formspec-default-border) 52%, white);
+  --formspec-default-border-subtle: color-mix(in srgb, var(--formspec-default-border) 52%, var(--formspec-default-tint-base));
   --formspec-default-border-muted: #e7e0d5;
   --formspec-default-border-control: #cdc3b5;
   /* token-registry-spec §2.4 — the brand fan-out. `color.primary` is the ONE
@@ -305,7 +307,7 @@ formspec-render {
   --formspec-default-readonly-input-bg: var(--formspec-readonly-input-bg, #f6f1ea);
   --formspec-default-readonly-input-border: var(--formspec-readonly-input-border, #d8d0c3);
   --formspec-default-readonly-input-text: var(--formspec-readonly-input-text, #4f473d);
-  --formspec-default-danger-surface: color-mix(in srgb, var(--formspec-default-danger) 10%, white);
+  --formspec-default-danger-surface: color-mix(in srgb, var(--formspec-default-danger) 10%, var(--formspec-default-tint-base));
   --formspec-default-error-surface: var(--formspec-default-danger-surface);
   --formspec-default-danger-surface-soft: #fdf1ef;
   --formspec-default-success-surface: #ebf5ef;
@@ -337,12 +339,17 @@ formspec-render {
   --formspec-default-text-muted: var(--formspec-color-dark-muted, #c4b8a7);
   --formspec-default-text-subtle: var(--formspec-color-dark-mutedForeground, #ad9f8d);
   --formspec-default-text-faint: #948676;
-  --formspec-default-text-inverse: var(--formspec-color-dark-primaryForeground, #ffffff);
+  /* Text on fills. The dark fills below keep the saturated light-mode colours, so their label is
+   * the light-mode foreground, which the registry's primary/success/danger label pairs check.
+   * Nothing reads color.dark.primaryForeground: a theme's dark label, picked for the light
+   * color.dark.primary tint, measured 2.0:1 on these fills. */
+  --formspec-default-text-inverse: var(--formspec-color-primaryForeground, #ffffff);
 
   /* Surfaces — base tokens via color.dark.* Layer A */
   --formspec-default-bg: var(--formspec-color-dark-background, #161311);
   --formspec-default-surface: var(--formspec-color-dark-card, #211c19);
   --formspec-default-surface-muted: var(--formspec-color-dark-surface, #2a241f);
+  --formspec-default-tint-base: var(--formspec-default-surface);
   --formspec-default-surface-subtle: #322b25;
   --formspec-default-surface-soft: #2c2621;
   --formspec-default-surface-quiet: #1b1714;
@@ -471,7 +478,7 @@ formspec-render {
   line-height: 1.5;
   letter-spacing: 0.002em;
   color: var(--formspec-default-text);
-  background: color-mix(in srgb, var(--formspec-default-surface) 92%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 92%, var(--formspec-default-tint-base));
   outline: none;
   transition: var(--formspec-default-transition-fast);
 }
@@ -765,7 +772,8 @@ h6.formspec-heading {
 
 .formspec-error {
   min-height: 1.25rem;
-  margin-top: 0.25rem;
+  min-height: 1lh; /* exactly the line a message fills, whatever the container's line-height */
+  margin: 0.25rem 0 0;
   font-size: calc(0.8125rem * var(--formspec-size-scale, 1));
   font-weight: 500;
   color: var(--formspec-default-danger);
@@ -775,9 +783,35 @@ h6.formspec-heading {
   display: none;
 }
 
-.formspec-field--toggle > .formspec-error:empty {
+/* A field's message line keeps its height while empty, so a message appearing moves nothing.
+ * Collapsed, each one pushed every later question down by its line plus the UA <p> margin
+ * (41px), and an action that touches every field (Save draft) moved the whole form. */
+.formspec-field:not(.formspec-field--readonly) > .formspec-error:empty,
+.formspec-fieldset:not(.formspec-field--readonly) > .formspec-error:empty {
   display: block;
   visibility: hidden;
+}
+
+/* The line ending a stacked question sits flush under its control (it takes back the field's `spacing.xs`).
+ * Inline and toggle fields keep it in their row or box; a file-size message above it never moves. */
+:is(.formspec-field:not(.formspec-field--inline), .formspec-fieldset):not(.formspec-field--readonly) > .formspec-error:last-child {
+  margin-top: calc(-1 * var(--formspec-spacing-xs, 0.25rem));
+}
+
+/* Where a visible question or item follows in a column whose gap is this skin's `spacing.field`, that line IS
+ * the gap: it hangs into it instead of adding to it. Reserved on top of the gap, it stood questions 41px apart.
+ * `spacing.field` stays the floor: a Theme that sets it above one line gets that gap, the message at its top.
+ * The hang assumes that gap, so it skips every container whose real gap may differ: an authored gap (renderers
+ * write it inline; a 0 gap put a message 12px into the next question), grid cells, the form root. Fields drawn
+ * as boxes (read-only, assistant-filled) keep the line inside the box. Where it does not hang, the line stays in
+ * its field and the container's own gap or padding follows. A host stylesheet that re-gaps a listed container
+ * by class is not seen. */
+:is(.formspec-stack:not(.grid-row):not(.formspec-stack--horizontal), .formspec-group, .formspec-section,
+  .formspec-repeat-instance, .formspec-card-body, .formspec-collapsible-content, .formspec-wizard-panel):not([style*="gap"])
+  > :is(.formspec-field:not(.formspec-field--inline), .formspec-fieldset):not(.formspec-field--readonly, [data-formspec-agent-filled]):has(~ :not(.formspec-hidden, [hidden]))
+  > .formspec-error:last-child {
+  min-height: max(1lh, var(--formspec-spacing-field, 0.75rem));
+  margin-bottom: calc(-1 * var(--formspec-spacing-field, 0.75rem));
 }
 
 .formspec-required {
@@ -823,7 +857,7 @@ h6.formspec-heading {
   border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-sm);
   overflow: hidden;
-  background: color-mix(in srgb, var(--formspec-default-surface) 92%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 92%, var(--formspec-default-tint-base));
   transition: var(--formspec-default-transition-fast);
 }
 
@@ -844,7 +878,7 @@ h6.formspec-heading {
   padding: 0 0.7rem;
   font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   color: var(--formspec-default-text-subtle);
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 68%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 68%, var(--formspec-default-tint-base));
 }
 
 .formspec-prefix,
@@ -1000,11 +1034,11 @@ h6.formspec-heading {
   align-items: center;
   justify-content: center;
   padding: 0.72rem 1.05rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 84%, white);
+  border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-sm);
   appearance: none;
   -webkit-appearance: none;
-  background: color-mix(in srgb, var(--formspec-default-surface) 78%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 78%, var(--formspec-default-tint-base));
   color: var(--formspec-default-text);
   font: inherit;
   font-size: 0.875rem;
@@ -1124,7 +1158,7 @@ h6.formspec-heading {
   border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-sm);
   overflow: hidden;
-  background: color-mix(in srgb, var(--formspec-default-surface) 92%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 92%, var(--formspec-default-tint-base));
   transition: var(--formspec-default-transition-fast);
 }
 
@@ -1278,7 +1312,7 @@ h6.formspec-heading {
   align-items: stretch;
   border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-sm);
-  background: color-mix(in srgb, var(--formspec-default-surface) 92%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 92%, var(--formspec-default-tint-base));
   transition: var(--formspec-default-transition-fast);
 }
 
@@ -1394,7 +1428,7 @@ h6.formspec-heading {
   padding: 0.3rem 0.58rem;
   border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-pill);
-  background: color-mix(in srgb, var(--formspec-default-primary) 6%, white);
+  background: color-mix(in srgb, var(--formspec-default-primary) 6%, var(--formspec-default-tint-base));
   font-size: calc(0.8rem * var(--formspec-size-scale, 1));
   font-weight: 500;
   line-height: 1.3;
@@ -1535,7 +1569,7 @@ h6.formspec-heading {
 
 .formspec-combobox-option:hover,
 .formspec-combobox-option.formspec-option--highlighted {
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, var(--formspec-default-tint-base));
 }
 
 .formspec-combobox-option.formspec-option--selected {
@@ -1558,7 +1592,7 @@ h6.formspec-heading {
   font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 600;
   color: var(--formspec-default-text-subtle);
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, var(--formspec-default-tint-base));
 }
 
 .formspec-money .formspec-input,
@@ -1649,7 +1683,7 @@ h6.formspec-heading {
 .formspec-stepper-decrement:hover:not(:disabled),
 .formspec-stepper-increment:hover:not(:disabled) {
   color: var(--formspec-default-primary);
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, var(--formspec-default-tint-base));
 }
 
 .formspec-stepper-decrement:active:not(:disabled),
@@ -1761,16 +1795,16 @@ h6.formspec-heading {
   width: 100%;
   padding: 1.4rem 1.35rem;
   box-sizing: border-box;
-  border: 1px dashed color-mix(in srgb, var(--formspec-default-border-control) 92%, white);
+  border: 1px dashed var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-md);
   text-align: left;
-  background: color-mix(in srgb, var(--formspec-default-surface) 80%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 80%, var(--formspec-default-tint-base));
   transition: var(--formspec-default-transition-fast);
 }
 
 .formspec-file-drop-zone--active {
   border-color: var(--formspec-default-primary);
-  background: color-mix(in srgb, var(--formspec-default-primary) 6%, white);
+  background: color-mix(in srgb, var(--formspec-default-primary) 6%, var(--formspec-default-tint-base));
 }
 
 .formspec-file-drop-content {
@@ -1807,9 +1841,9 @@ h6.formspec-heading {
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.6rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-sm);
-  background: color-mix(in srgb, var(--formspec-default-surface-quiet) 80%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-quiet) 80%, var(--formspec-default-tint-base));
   font-size: calc(0.875rem * var(--formspec-size-scale, 1));
 }
 
@@ -1868,7 +1902,7 @@ h6.formspec-heading {
 .formspec-signature-canvas {
   display: block;
   max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 74%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 74%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
   background:
     linear-gradient(180deg, color-mix(in srgb, white 92%, var(--formspec-default-surface)) 0%, color-mix(in srgb, white 66%, var(--formspec-default-surface)) 100%);
@@ -1880,9 +1914,9 @@ h6.formspec-heading {
 .formspec-signature-clear {
   margin-top: 0;
   padding: 0.45rem 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 86%, white);
+  border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-sm);
-  background: color-mix(in srgb, var(--formspec-default-surface) 78%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 78%, var(--formspec-default-tint-base));
   color: var(--formspec-default-text-subtle);
   font-size: calc(0.84rem * var(--formspec-size-scale, 1));
   font-weight: 560;
@@ -1962,13 +1996,13 @@ hr.formspec-divider {
 .formspec-group + .formspec-group {
   margin-top: 0.35rem;
   padding-top: 1.2rem;
-  border-top: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 78%, white);
+  border-top: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 78%, var(--formspec-default-tint-base));
 }
 
 .formspec-panel,
 .formspec-collapsible,
 .formspec-accordion-item {
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, var(--formspec-default-tint-base));
   background: var(--formspec-default-surface);
 }
 
@@ -1976,7 +2010,7 @@ hr.formspec-divider {
 .formspec-repeat-instance {
   gap: var(--formspec-spacing-field, 0.75rem);
   padding: 0.95rem 1rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 86%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 86%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-sm);
   background: color-mix(in srgb, var(--formspec-default-surface) 88%, var(--formspec-default-surface-quiet));
 }
@@ -1984,7 +2018,7 @@ hr.formspec-divider {
 .formspec-repeat-instance-header {
   gap: 0.75rem;
   padding-bottom: 0.6rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-border-muted) 78%, white);
+  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-border-muted) 78%, var(--formspec-default-tint-base));
 }
 
 /* Instance label and Remove share one row: drop UA paragraph and button margins so adapters line them up. */
@@ -2009,7 +2043,7 @@ hr.formspec-divider {
 .formspec-panel-header {
   margin-bottom: 0;
   padding: 1rem 1.125rem 0.875rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-border-muted) 80%, white);
+  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-border-muted) 80%, var(--formspec-default-tint-base));
   background: var(--formspec-default-surface-muted);
   color: var(--formspec-default-text-strong);
   font-weight: 650;
@@ -2031,7 +2065,7 @@ hr.formspec-divider {
   gap: 1rem;
   margin-bottom: 0;
   padding: 1.35rem 1.4rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
   background: var(--formspec-default-surface);
   box-shadow: var(--formspec-default-shadow-elevation-1);
@@ -2141,25 +2175,25 @@ hr.formspec-divider {
 .formspec-alert--info {
   color: var(--formspec-default-info-text);
   background: var(--formspec-default-info-surface-soft);
-  border-color: color-mix(in srgb, var(--formspec-default-info) 22%, white);
+  border-color: color-mix(in srgb, var(--formspec-default-info) 22%, var(--formspec-default-tint-base));
 }
 
 .formspec-alert--warning {
   color: var(--formspec-default-warning-text);
   background: var(--formspec-default-warning-surface-soft);
-  border-color: color-mix(in srgb, var(--formspec-default-warning) 26%, white);
+  border-color: color-mix(in srgb, var(--formspec-default-warning) 26%, var(--formspec-default-tint-base));
 }
 
 .formspec-alert--error {
   color: var(--formspec-default-danger-text);
   background: var(--formspec-default-danger-surface);
-  border-color: color-mix(in srgb, var(--formspec-default-danger) 22%, white);
+  border-color: color-mix(in srgb, var(--formspec-default-danger) 22%, var(--formspec-default-tint-base));
 }
 
 .formspec-alert--success {
   color: var(--formspec-default-success-text);
   background: var(--formspec-default-success-surface);
-  border-color: color-mix(in srgb, var(--formspec-default-success) 22%, white);
+  border-color: color-mix(in srgb, var(--formspec-default-success) 22%, var(--formspec-default-tint-base));
 }
 
 .formspec-alert--dismissible {
@@ -2204,7 +2238,7 @@ hr.formspec-divider {
 
 .formspec-badge--default {
   color: var(--formspec-default-text-subtle);
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 85%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 85%, var(--formspec-default-tint-base));
 }
 
 .formspec-badge--primary {
@@ -2312,7 +2346,7 @@ hr.formspec-divider {
 .formspec-collapsible summary {
   font-size: 0.9375rem;
   font-weight: 560;
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 74%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 74%, var(--formspec-default-tint-base));
 }
 
 .formspec-collapsible summary:hover,
@@ -2338,7 +2372,7 @@ hr.formspec-divider {
 }
 
 .formspec-collapsible[open] > summary {
-  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-border-muted) 80%, white);
+  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-border-muted) 80%, var(--formspec-default-tint-base));
   background: color-mix(in srgb, var(--formspec-default-primary) 4%, var(--formspec-default-surface-muted));
 }
 
@@ -2368,7 +2402,7 @@ hr.formspec-divider {
 }
 
 .formspec-accordion-item summary {
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 74%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 74%, var(--formspec-default-tint-base));
   font-weight: 580;
 }
 
@@ -2464,9 +2498,9 @@ hr.formspec-divider {
 
 .formspec-repeat-add {
   padding: 0.72rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 88%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 88%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-sm);
-  background: color-mix(in srgb, var(--formspec-default-surface) 84%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 84%, var(--formspec-default-tint-base));
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
@@ -2624,7 +2658,7 @@ hr.formspec-divider {
   border-radius: var(--formspec-default-radius-sm);
   appearance: none;
   -webkit-appearance: none;
-  background: color-mix(in srgb, var(--formspec-default-primary) 6%, white);
+  background: color-mix(in srgb, var(--formspec-default-primary) 6%, var(--formspec-default-tint-base));
   color: var(--formspec-default-primary);
   font: inherit;
   font-size: 0.875rem;
@@ -2672,9 +2706,9 @@ hr.formspec-divider {
   gap: 2px;
   margin-bottom: 1rem;
   padding: 0.22rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-pill);
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 76%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 76%, var(--formspec-default-tint-base));
 }
 
 .formspec-tab {
@@ -2696,7 +2730,7 @@ hr.formspec-divider {
 .formspec-tab:hover,
 .formspec-tab:focus-visible {
   color: var(--formspec-default-text);
-  background: color-mix(in srgb, var(--formspec-default-surface) 82%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 82%, var(--formspec-default-tint-base));
 }
 
 .formspec-tab--active {
@@ -2745,9 +2779,9 @@ hr.formspec-divider {
   max-width: 860px;
   margin: 0 auto;
   padding: 1.5rem 1.6rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 70%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 70%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
-  background: color-mix(in srgb, var(--formspec-default-surface) 62%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 62%, var(--formspec-default-tint-base));
   box-shadow: 0 8px 18px rgba(68, 56, 37, 0.03);
 }
 
@@ -2804,13 +2838,13 @@ hr.formspec-divider {
   flex-direction: column;
   gap: var(--formspec-spacing-md, 1rem);
   padding: var(--formspec-spacing-lg, 1.5rem);
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 68%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 68%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
-  background: color-mix(in srgb, var(--formspec-default-surface) 68%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface) 68%, var(--formspec-default-tint-base));
 }
 
 .formspec-wizard--with-sidenav {
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
   background: var(--formspec-default-surface);
   box-shadow: var(--formspec-default-shadow-sm);
@@ -3061,7 +3095,7 @@ hr.formspec-divider {
   border-spacing: 0;
   font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   line-height: 1.45;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
   overflow: hidden;
   background: var(--formspec-default-surface);
@@ -3074,7 +3108,7 @@ hr.formspec-divider {
 }
 
 .formspec-data-table th {
-  background: color-mix(in srgb, var(--formspec-default-surface-muted) 62%, white);
+  background: color-mix(in srgb, var(--formspec-default-surface-muted) 62%, var(--formspec-default-tint-base));
   color: var(--formspec-default-text-strong);
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -3084,7 +3118,6 @@ hr.formspec-divider {
   width: 100%;
   min-width: 4rem;
   padding: 0.5rem 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 82%, white);
   border-radius: var(--formspec-default-radius-sm);
   font: inherit;
   font-size: calc(0.875rem * var(--formspec-size-scale, 1));
@@ -3164,7 +3197,7 @@ hr.formspec-divider {
   flex-direction: column;
   gap: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-danger) 22%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-default-danger) 22%, var(--formspec-default-tint-base));
   border-radius: var(--formspec-default-radius-md);
   background: var(--formspec-default-surface);
 }
@@ -3173,7 +3206,7 @@ hr.formspec-divider {
 .formspec-validation-summary-title {
   margin: 0;
   padding: 0.875rem 1rem 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-danger) 22%, white);
+  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-danger) 22%, var(--formspec-default-tint-base));
   background: var(--formspec-default-danger-surface-soft);
   color: var(--formspec-default-danger-text);
   font-size: 0.9375rem;

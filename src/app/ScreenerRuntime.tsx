@@ -565,17 +565,18 @@ function displayInputValue(
   }
   if (item.dataType === 'boolean') return value === true ? 'Yes' : 'No';
   if (item.dataType === 'money' && typeof value === 'object' && value !== null) {
-    const money = value as { amount?: number; currency?: string };
-    if (typeof money.amount === 'number') {
+    const money = value as { amount?: string; currency?: string };
+    if (typeof money.amount === 'string') {
       // USD fallback for demo only; production catalog adapters declare
       // currency per-money-item (FW-0109).
       const currency = money.currency ?? item.currency ?? 'USD';
       try {
+        // Intl accepts a decimal string and preserves its precision. The TS signature only exposes numbers.
         return new Intl.NumberFormat(undefined, {
           style: 'currency',
           currency,
           maximumFractionDigits: 2,
-        }).format(money.amount);
+        }).format(money.amount as unknown as number);
       } catch {
         return `${currency} ${money.amount}`;
       }

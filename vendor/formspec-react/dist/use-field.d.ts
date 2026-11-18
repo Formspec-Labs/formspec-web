@@ -24,7 +24,11 @@ export interface UseFieldResult {
     };
     disabledDisplay: 'hidden' | 'protected';
     setValue(value: any): void;
-    /** Mark this field as touched (e.g., on blur). */
+    /**
+     * Mark this field as touched by the filer's interaction (e.g., on blur), so its errors show. Does nothing
+     * for a field the filer cannot change: read-only, calculated (read-only through its `calculate` bind), or
+     * protected. Its errors show after an explicit pass over all fields: Save, Submit, a wizard step (Core §5.5).
+     */
     touch(): void;
     inputProps: {
         id: string;

@@ -244,7 +244,10 @@ describe('ScreenerRuntime — disabled by policy', () => {
 });
 
 describe('ScreenerRuntime — answer + reasoning view (J-047 trust load)', () => {
-  it('renders the "these questions, these answers, this reasoning" panel after routing', async () => {
+  it.each([
+    ['5000', '$5,000.00'],
+    ['9007199254740993.12', '$9,007,199,254,740,993.12'],
+  ])('renders the "these questions, these answers, this reasoning" panel after routing for USD %s', async (amount, expected) => {
     const composition = buildComposition();
     render(
       <ScreenerRuntime
@@ -265,7 +268,7 @@ describe('ScreenerRuntime — answer + reasoning view (J-047 trust load)', () =>
     const incomeCheckbox = screen.getByLabelText(/Do you currently have income/i) as HTMLInputElement;
     fireEvent.click(incomeCheckbox);
     const amountField = screen.getByLabelText(/About how much help do you need/i) as HTMLInputElement;
-    fireEvent.change(amountField, { target: { value: '5000' } });
+    fireEvent.change(amountField, { target: { value: amount } });
 
     // Submit
     const submit = screen.getByRole('button', { name: /Find my form/i });
@@ -287,8 +290,8 @@ describe('ScreenerRuntime — answer + reasoning view (J-047 trust load)', () =>
     expect(screen.queryByText('Do you currently have income from a job or benefits?')).not.toBeNull();
     expect(screen.queryByText('Yes')).not.toBeNull();
     expect(screen.queryByText('About how much help do you need?')).not.toBeNull();
-    // Money formatting renders the USD amount.
-    expect(screen.queryByText(/\$5,000/)).not.toBeNull();
+    // Core §3.4.1 represents Money.amount as a decimal string.
+    expect(screen.getByText(expected)).toBeTruthy();
 
     // "Why this form" section renders the matched route's reasoning message
     expect(screen.queryByRole('heading', { name: 'Why this form' })).not.toBeNull();

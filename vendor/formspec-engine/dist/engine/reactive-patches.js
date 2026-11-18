@@ -49,7 +49,7 @@ export function patchDeltaSignalsFromWasm(rx, delta, options) {
     }
     for (const [path, readonly] of Object.entries(delta.readonly)) {
         (_c = options.readonlySignals)[path] ?? (_c[path] = rx.signal(false));
-        options.readonlySignals[path].value = readonly || options.prePopulateReadonly.has(path);
+        options.readonlySignals[path].value = readonly;
     }
     for (const [path, results] of Object.entries(delta.validations)) {
         (_d = options.validationResults)[path] ?? (_d[path] = rx.signal([]));

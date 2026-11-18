@@ -13,166 +13,199 @@ export declare const UI_POLICY: {
         readonly primaryHint: "Section";
         readonly widgets: readonly ["Section"];
         readonly category: "layout";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Stack";
         readonly primaryHint: "Stack";
         readonly widgets: readonly ["Stack"];
         readonly category: "layout";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Grid";
         readonly primaryHint: "Grid";
         readonly widgets: readonly ["Grid"];
         readonly category: "layout";
+        readonly bind: "forbidden";
     }, {
         readonly name: "TextInput";
         readonly primaryHint: "TextInput";
         readonly widgets: readonly ["TextInput"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "NumberInput";
         readonly primaryHint: "NumberInput";
         readonly widgets: readonly ["NumberInput"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "DatePicker";
         readonly primaryHint: "DatePicker";
         readonly widgets: readonly ["DatePicker"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Select";
         readonly primaryHint: "Select";
         readonly widgets: readonly ["Select"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "CheckboxGroup";
         readonly primaryHint: "CheckboxGroup";
         readonly widgets: readonly ["CheckboxGroup"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Toggle";
         readonly primaryHint: "Toggle";
         readonly widgets: readonly ["Toggle"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "FileUpload";
         readonly primaryHint: "FileUpload";
         readonly widgets: readonly ["FileUpload"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Heading";
         readonly primaryHint: "Heading";
         readonly widgets: readonly ["Heading"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Text";
         readonly primaryHint: "Text";
         readonly widgets: readonly ["Text"];
         readonly category: "display";
+        readonly bind: "optional";
     }, {
         readonly name: "Divider";
         readonly primaryHint: "Divider";
         readonly widgets: readonly ["Divider"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Card";
         readonly primaryHint: "Card";
         readonly widgets: readonly ["Card"];
         readonly category: "container";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Collapsible";
         readonly primaryHint: "Collapsible";
         readonly widgets: readonly ["Collapsible"];
         readonly category: "container";
+        readonly bind: "forbidden";
     }, {
         readonly name: "ConditionalGroup";
         readonly primaryHint: "ConditionalGroup";
         readonly widgets: readonly ["ConditionalGroup"];
         readonly category: "container";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Tabs";
         readonly primaryHint: "Tabs";
         readonly widgets: readonly ["Tabs"];
         readonly category: "layout";
+        readonly bind: "forbidden";
     }, {
         readonly name: "ActionButton";
         readonly primaryHint: "ActionButton";
         readonly widgets: readonly ["ActionButton"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Accordion";
         readonly primaryHint: "Accordion";
         readonly widgets: readonly ["Accordion"];
         readonly category: "layout";
+        readonly bind: "optional";
     }, {
         readonly name: "RadioGroup";
         readonly primaryHint: "RadioGroup";
         readonly widgets: readonly ["RadioGroup"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "MoneyInput";
         readonly primaryHint: "MoneyInput";
         readonly widgets: readonly ["MoneyInput"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Slider";
         readonly primaryHint: "Slider";
         readonly widgets: readonly ["Slider"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Rating";
         readonly primaryHint: "Rating";
         readonly widgets: readonly ["Rating"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Signature";
         readonly primaryHint: "Signature";
         readonly widgets: readonly ["Signature"];
         readonly category: "input";
+        readonly bind: "required";
     }, {
         readonly name: "Alert";
         readonly primaryHint: "Alert";
         readonly widgets: readonly ["Alert"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Badge";
         readonly primaryHint: "Badge";
         readonly widgets: readonly ["Badge"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "ProgressBar";
         readonly primaryHint: "ProgressBar";
         readonly widgets: readonly ["ProgressBar"];
         readonly category: "display";
+        readonly bind: "optional";
     }, {
         readonly name: "Summary";
         readonly primaryHint: "Summary";
         readonly widgets: readonly ["Summary"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "ValidationSummary";
         readonly primaryHint: "ValidationSummary";
         readonly widgets: readonly ["ValidationSummary"];
         readonly category: "display";
+        readonly bind: "forbidden";
     }, {
         readonly name: "DataTable";
         readonly primaryHint: "DataTable";
         readonly widgets: readonly ["DataTable"];
         readonly category: "display";
+        readonly bind: "optional";
     }, {
         readonly name: "Panel";
         readonly primaryHint: "Panel";
         readonly widgets: readonly ["Panel"];
         readonly category: "container";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Modal";
         readonly primaryHint: "Modal";
         readonly widgets: readonly ["Modal"];
         readonly category: "container";
+        readonly bind: "forbidden";
     }, {
         readonly name: "Popover";
         readonly primaryHint: "Popover";
         readonly widgets: readonly ["Popover"];
         readonly category: "container";
+        readonly bind: "forbidden";
     }];
     readonly retiredComponentNames: readonly ["Page", "Columns", "Spacer"];
     readonly inputComponents: {
@@ -446,7 +479,8 @@ export declare const UI_POLICY: {
     };
     readonly tokens: {
         readonly customTokenPrefixes: readonly ["x-"];
-        readonly unknownNonExtensionDiagnostic: "W708";
+        readonly unregisteredTokenDiagnostic: "W708";
+        readonly unknownNonExtensionDiagnostic: "W710";
         readonly platformDefaultDiagnostic: "W709";
     };
 };
