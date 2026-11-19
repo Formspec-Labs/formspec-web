@@ -145,6 +145,19 @@ async function mockNativePackage(candidate: unknown = nativeBundle(), options: {
 }
 
 describe('hash-pinned native package closure', () => {
+  it('uses the configured projection loader for an admitted filed read', async () => {
+    const candidate = nativeBundle();
+    const form = filedReadDefinition('amount');
+    candidate.manifest.definitions.push({ url: form.url, version: form.version });
+    candidate.documents[form.url] = form;
+    await mockNativePackage(candidate);
+    const loadProjectionLinter = vi.fn(async () =>
+      (await import('@formspec-org/engine/init-formspec-engine')).loadProjectionLinter());
+    const source = new PinnedPackageDefinitionSource('/package.json', { loadProjectionLinter });
+    await expect(source.getNativeBundleExport()).resolves.toEqual(candidate);
+    expect(loadProjectionLinter).toHaveBeenCalledOnce();
+  });
+
   it.each(['amount', 'missing'])('checks the filed answer %s through pinned package admission', async path => {
     const candidate = nativeBundle();
     const form = filedReadDefinition(path);

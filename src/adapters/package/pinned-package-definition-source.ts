@@ -157,7 +157,8 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
     ]);
     const result = await produceAppGraphValidationReport({
       ...this.nativeValidation,
-      loadProjectionLinter: async () => (await import('@formspec-org/engine/init-formspec-engine')).loadProjectionLinter(),
+      loadProjectionLinter: this.nativeValidation.loadProjectionLinter
+        ?? (async () => (await import('@formspec-org/engine/init-formspec-engine')).loadProjectionLinter()),
       manifest: candidate.manifest,
       schemaValidators: await loadSurfaceBundleSchemaValidators(), source, digest: `sha256:${digest}`,
       loader: ({ artifactKind, ref }) => {
