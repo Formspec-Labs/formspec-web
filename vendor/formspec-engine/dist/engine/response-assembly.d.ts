@@ -47,8 +47,8 @@ export declare function buildFormspecResponseEnvelope(options: {
     };
 }): Record<string, unknown>;
 /** Keep findings visible in the report produced for evaluated response data. */
-export declare function collectRelevantValidationResults(result: EvalResult): ValidationResult[];
-/** Shape validations for a specific timing, from a WASM eval with the matching trigger. */
+export declare function collectRelevantValidationResults(result: EvalResult, validations?: import("../diff.js").EvalValidation[]): ValidationResult[];
+/** Keep refusals alongside findings for the requested Shape timing. */
 export declare function collectTimedShapeValidationResults(evalResult: EvalResult, shapeTiming: Map<string, EvalShapeTiming>, timing: EvalShapeTiming): ValidationResult[];
 /** Compute counts and wrap the evaluator's results in the spec report. */
 export declare function buildValidationReportEnvelope(results: ValidationResult[], timestamp: string, definitionUrl?: string, definitionVersion?: string): ValidationReport;

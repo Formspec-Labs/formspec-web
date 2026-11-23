@@ -52,3 +52,38 @@ export function resolveResponsiveProps(comp, activeBreakpoint, breakpoints) {
     }
     return result;
 }
+/**
+ * Merge Theme and Component breakpoint maps (Component wins on colliding names)
+ * and return numeric `[name, minWidthPx]` pairs sorted ascending by `minWidth`.
+ */
+export function extractBreakpointEntries(themeBreakpoints, componentBreakpoints) {
+    const merged = {
+        ...(themeBreakpoints ?? {}),
+        ...(componentBreakpoints ?? {}),
+    };
+    return Object.entries(merged)
+        .map(([name, bp]) => {
+        const width = typeof bp === 'number'
+            ? bp
+            : bp && typeof bp === 'object' && typeof bp.minWidth === 'number'
+                ? bp.minWidth
+                : null;
+        return width !== null && Number.isFinite(width) ? [name, width] : null;
+    })
+        .filter((entry) => entry !== null)
+        .sort(([, a], [, b]) => a - b);
+}
+/**
+ * Evaluate the largest matching mobile-first breakpoint across merged Theme +
+ * Component breakpoints using a pure `matchesMinWidth` predicate.
+ */
+export function matchBreakpoint(themeBreakpoints, componentBreakpoints, matchesMinWidth) {
+    const entries = extractBreakpointEntries(themeBreakpoints, componentBreakpoints);
+    let active = null;
+    for (const [name, minWidth] of entries) {
+        if (matchesMinWidth(minWidth)) {
+            active = name;
+        }
+    }
+    return active;
+}

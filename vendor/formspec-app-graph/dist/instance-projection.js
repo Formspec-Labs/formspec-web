@@ -20,10 +20,10 @@ function missingProjectionCheck(handle, pointer) {
         primarySource: diagnosticSourceForHandle(handle, pointer),
     };
 }
-function projectionDiagnostics(lint, consumer, pointer, source, consumerSubject, upstream) {
+function projectionDiagnostics(lint, consumer, pointer, source, projectionConsumer, upstream) {
     const { instanceProjectionDiagnostics } = lint(source, {
         upstreamDefinitions: upstream.map((handle) => handle.document),
-        consumerSubject,
+        projectionConsumer,
     });
     if (!instanceProjectionDiagnostics) {
         return [missingProjectionCheck(consumer, pointer)];
@@ -43,13 +43,13 @@ function projectionDiagnostics(lint, consumer, pointer, source, consumerSubject,
         };
     });
 }
-function catalogConsumerSubjects(context, catalog, source, selection) {
+function catalogConsumers(context, catalog, source) {
     const catalogRef = catalog.ref?.url;
     const sourceRef = stringProp(source, 'id');
-    const readsSubject = recordArray(ownProp(selection, 'subject')).some((predicate) => stringProp(record(ownProp(predicate, 'from')), 'subject') !== undefined);
-    if (!readsSubject || !catalogRef || !sourceRef)
+    if (!catalogRef || !sourceRef)
         return [null];
-    const subjects = new Set();
+    const forms = new Map();
+    let widget = false;
     const matchesSource = (binding) => stringProp(record(binding), 'catalogRef') === catalogRef && stringProp(record(binding), 'sourceRef') === sourceRef;
     for (const surface of handlesByKind(context.handles, 'surface')) {
         for (const route of recordArray(ownProp(record(surface.document), 'routes'))) {
@@ -57,17 +57,25 @@ function catalogConsumerSubjects(context, catalog, source, selection) {
                 const binding = record(ownProp(slot, 'binding'));
                 const type = stringProp(slot, 'slotType');
                 if (type === 'definition-form' && matchesSource(ownProp(binding, 'initialData'))) {
-                    for (const definition of definitionsForUrl(context, stringProp(binding, 'definitionRef'))) {
-                        subjects.add(ownProp(record(definition.document), 'subject') ?? null);
+                    const ref = stringProp(binding, 'definitionRef');
+                    const definition = ref === undefined ? undefined : exactDefinitionResolution(context, ref).definition;
+                    if (definition) {
+                        const initialData = record(ownProp(binding, 'initialData'));
+                        const mapped = ownProp(initialData, 'mappingRef') !== undefined;
+                        // One direct binding is enough to check the receiving fields.
+                        forms.set(definition, mapped && (forms.get(definition) ?? true));
                     }
                 }
                 if (type === 'module-widget' && Object.values(record(ownProp(binding, 'dataBindings')) ?? {}).some(matchesSource)) {
-                    subjects.add(null);
+                    widget = true;
                 }
             }
         }
     }
-    return subjects.size > 0 ? [...subjects] : [null];
+    const consumers = Array.from(forms, ([form, mapped]) => ({ kind: 'prefill', definition: form.document, mapped }));
+    if (widget || forms.size === 0)
+        consumers.push(null);
+    return consumers;
 }
 function isDraft(source) {
     return stringProp(record(ownProp(source, 'runtime')), 'delivery') === 'draft';
@@ -81,7 +89,7 @@ function projectionSources(handle) {
         return Object.entries(instances ?? {}).flatMap(([name, value]) => {
             const source = record(value);
             return source && Object.prototype.hasOwnProperty.call(source, 'response')
-                ? [{ source, pointer: `/instances/${escapeJsonPointerToken(name)}` }]
+                ? [{ source, name, pointer: `/instances/${escapeJsonPointerToken(name)}` }]
                 : [];
         });
     }
@@ -94,11 +102,14 @@ function projectionSources(handle) {
         const source = record(value);
         if (!source || stringProp(source, 'kind') !== 'definition-response')
             return [];
-        // An unprojected session draft has no schema or selection to check.
+        // A session draft originates from the exact Definition receiving it.
         if (isDraft(source) && ownProp(source, 'schema') === undefined)
             return [];
         return [{ source, pointer: `/sources/${index}` }];
     });
+}
+export function requiresResponseProjectionCheck(handle) {
+    return projectionSources(handle).length > 0;
 }
 export function missingResponseProjectionChecks(handles) {
     return handles.flatMap((handle) => {
@@ -107,24 +118,26 @@ export function missingResponseProjectionChecks(handles) {
     });
 }
 export function responseProjectionDiagnostics(lint, context, handle) {
-    return projectionSources(handle).flatMap(({ source, pointer }) => {
-        if (handle.artifactKind === 'definition') {
-            const subject = ownProp(record(handle.document), 'subject') ?? null;
+    return projectionSources(handle).flatMap(({ source, pointer, name }) => {
+        if (name !== undefined) {
             const upstream = definitionsForUrl(context, targetUrl(record(ownProp(source, 'response'))));
-            return projectionDiagnostics(lint, handle, pointer, source, subject, upstream);
+            return projectionDiagnostics(lint, handle, pointer, source, { kind: 'instance', definition: handle.document, name }, upstream);
         }
+        let upstream;
         if (isDraft(source)) {
             const ref = stringProp(source, 'definitionRef');
-            // Availability validation already reports unresolved or ambiguous draft Definitions.
-            const definition = ref === undefined ? undefined : exactDefinitionResolution(context, ref).definition;
-            return definition ? projectionDiagnostics(lint, handle, pointer, source, null, [definition]) : [];
+            const resolved = ref === undefined ? undefined : exactDefinitionResolution(context, ref).definition;
+            if (!resolved)
+                return [];
+            upstream = [resolved];
         }
-        const selection = record(ownProp(source, 'responseSelection'));
-        const upstream = definitionsForUrl(context, targetUrl(selection));
+        else {
+            upstream = definitionsForUrl(context, targetUrl(record(ownProp(source, 'responseSelection'))));
+        }
         const seen = new Set();
-        return catalogConsumerSubjects(context, handle, source, selection).flatMap((subject) => projectionDiagnostics(lint, handle, pointer, source, subject, upstream).filter((finding) => {
+        return catalogConsumers(context, handle, source).flatMap((consumer) => projectionDiagnostics(lint, handle, pointer, source, consumer, upstream).filter((finding) => {
             const identity = JSON.stringify([
-                finding.code, finding.primarySource?.jsonPointer, finding.details?.upstreamVersion,
+                finding.code, finding.primarySource?.jsonPointer, finding.details?.upstreamVersion, finding.message,
             ]);
             if (seen.has(identity))
                 return false;

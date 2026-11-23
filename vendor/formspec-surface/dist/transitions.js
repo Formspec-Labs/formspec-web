@@ -58,20 +58,79 @@
  * actual posture.
  */
 import { CLOSED_RESPONSE_ACTION_INTENTS } from '@formspec-org/app-graph';
+import { autoPlacedDefinitionActions, createFormEngine, isFormspecEngineInitialized, isPlainJsonArray, isPlainJsonObject, isValidDefinitionResponseActionsDocument, resolveResponseAction, } from '@formspec-org/engine';
+import { extractBreakpointEntries, matchBreakpoint, planDefinitionLayout, } from '@formspec-org/layout';
 import { surfaceDiagnostic } from './diagnostics.js';
 import { routeHref, routeInSurface, } from './composition.js';
 import { resolveSurfaceStrings } from './strings.js';
 import { generationNeedAnchors } from './need-trace.js';
+export function ownDataPropertyValue(obj, key) {
+    if (!isPlainJsonObject(obj))
+        return { present: false, value: undefined };
+    const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+    if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable) {
+        return { present: false, value: undefined };
+    }
+    return { present: true, value: descriptor.value };
+}
+export function isStrictPlainRecord(obj) {
+    if (!isPlainJsonObject(obj))
+        return false;
+    for (const key of Object.getOwnPropertyNames(obj)) {
+        const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable) {
+            return false;
+        }
+    }
+    return true;
+}
+export function ownPlainActions(document) {
+    if (!isStrictPlainRecord(document))
+        return [];
+    const prop = ownDataPropertyValue(document, 'actions');
+    if (!prop.present || !isPlainJsonArray(prop.value))
+        return [];
+    const actions = [];
+    for (let index = 0; index < prop.value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(prop.value, String(index));
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable)
+            return [];
+        if (!isStrictPlainRecord(descriptor.value))
+            return [];
+        actions.push(descriptor.value);
+    }
+    return actions;
+}
+/**
+ * Find the unique strict plain-JSON action matching `actionRef` across loaded
+ * Response Actions documents without invoking structural getters or trusting
+ * inherited/class/non-plain wrappers. Malformed documents are skipped without
+ * throwing so unrelated broken documents cannot abort valid action lookup.
+ */
+export function findUniquePlainAction(documents, actionRef) {
+    const matches = [];
+    for (const document of documents) {
+        for (const action of ownPlainActions(document)) {
+            const idProp = ownDataPropertyValue(action, 'id');
+            if (idProp.present && idProp.value === actionRef) {
+                matches.push({ document, action });
+            }
+        }
+    }
+    return matches.length === 1 ? matches[0] : undefined;
+}
 function indexTriggers(documents) {
     const byId = new Map();
     const byIntent = new Map();
     for (const document of documents) {
-        for (const action of document.actions ?? []) {
-            const id = typeof action.id === 'string' ? action.id : undefined;
+        for (const action of ownPlainActions(document)) {
+            const idProp = ownDataPropertyValue(action, 'id');
+            const id = idProp.present && typeof idProp.value === 'string' ? idProp.value : undefined;
             if (!id)
                 continue;
             byId.set(id, (byId.get(id) ?? 0) + 1);
-            const intent = typeof action.intent === 'string' ? action.intent : undefined;
+            const intentProp = ownDataPropertyValue(action, 'intent');
+            const intent = intentProp.present && typeof intentProp.value === 'string' ? intentProp.value : undefined;
             if (intent && CLOSED_RESPONSE_ACTION_INTENTS.has(intent)) {
                 byIntent.set(intent, [...(byIntent.get(intent) ?? []), id]);
             }
@@ -80,15 +139,32 @@ function indexTriggers(documents) {
     return { byId, byIntent, documentCount: documents.length };
 }
 function targetDefinitionUrl(document) {
-    const url = document.targetDefinition?.url;
-    return typeof url === 'string' ? url : undefined;
+    if (!isStrictPlainRecord(document))
+        return undefined;
+    const targetProp = ownDataPropertyValue(document, 'targetDefinition');
+    if (!targetProp.present || !isStrictPlainRecord(targetProp.value))
+        return undefined;
+    const urlProp = ownDataPropertyValue(targetProp.value, 'url');
+    return urlProp.present && typeof urlProp.value === 'string' ? urlProp.value : undefined;
 }
 function isApplicationScoped(document) {
-    return document.scope === 'app' && targetDefinitionUrl(document) === undefined;
+    if (!isStrictPlainRecord(document))
+        return false;
+    const scopeProp = ownDataPropertyValue(document, 'scope');
+    const targetProp = ownDataPropertyValue(document, 'targetDefinition');
+    return scopeProp.present && scopeProp.value === 'app' && targetProp.value === undefined;
 }
 function isDefinitionScoped(document) {
-    return ((document.scope === undefined || document.scope === 'response')
-        && targetDefinitionUrl(document) !== undefined);
+    if (!isStrictPlainRecord(document))
+        return false;
+    const hasScope = Object.prototype.hasOwnProperty.call(document, 'scope');
+    if (hasScope) {
+        const scopeProp = ownDataPropertyValue(document, 'scope');
+        if (!scopeProp.present || (scopeProp.value !== undefined && scopeProp.value !== 'response')) {
+            return false;
+        }
+    }
+    return targetDefinitionUrl(document) !== undefined;
 }
 /**
  * The one Response Actions document the form renderer may use for a Definition.
@@ -103,42 +179,51 @@ export function responseActionsDocumentForDefinition(documents, definitionRef) {
     return matching.length === 1 ? matching[0] : undefined;
 }
 /**
- * Every trigger a control **already on this route** can raise.
- *
- * `surface-shell-spec.md` §5.3: "Resolving `supplied-by-slot` is a walk, not a
- * lookup." Two halves, and getting either wrong is the same defect —
- * substituting a shortcut for the resolution rule surface-spec §4 already
- * states:
- *
- * 1. **The scan descends `embed-route` transitively.** An embedded route's
- *    slots render on the host route's surface, so a control it renders is a
- *    control the host route renders — the same transitivity §4.4 applies to the
- *    theme grant. A shell that scans only a route's own `slots[]` reports a
- *    working page as dead.
- * 2. **The check follows the controls this binding actually places.**
- *    `FormspecForm` auto-places each uniquely identified Action with a literal
- *    or Locale-reference label from the one response-scoped document targeting the
- *    rendered Definition. Action ids are always exact; a closed-core intent is
- *    credited only when exactly one loaded Action publishes it.
- *
- * A module widget contributes only through the complete declared chain:
- * Registry action output -> Surface action binding -> exact loaded action.
- * Private widget behaviour and coincident names contribute nothing.
- * `experience-unit` cannot contribute: a Unit's `actionRefs` name actions and
- * do not place controls, and drawing a button from one would derive layout from
- * Experience (experience-spec §1.4.1 prohibition 2).
+ * Collect sorted unique numeric `minWidth` thresholds declared across a route's
+ * granted Theme and all `definition-form` Component documents (descending `embed-route`).
  */
+export function collectSlotBreakpointThresholds(slots, themeDocument) {
+    const thresholds = new Set();
+    const themeBreakpoints = themeDocument?.breakpoints;
+    for (const [, width] of extractBreakpointEntries(themeBreakpoints, undefined)) {
+        thresholds.add(width);
+    }
+    const walk = (entries) => {
+        for (const entry of entries) {
+            if (entry.slotType === 'embed-route') {
+                walk(entry.slots);
+                continue;
+            }
+            if (entry.slotType !== 'definition-form')
+                continue;
+            const componentBreakpoints = entry.componentDocument?.breakpoints;
+            for (const [, width] of extractBreakpointEntries(themeBreakpoints, componentBreakpoints)) {
+                thresholds.add(width);
+            }
+        }
+    };
+    walk(slots);
+    return [...thresholds].sort((a, b) => a - b);
+}
 export function slotSuppliedTriggers(slots, responseActions = [], options = {}) {
     const supplied = new Set();
     if (responseActions.length === 0)
         return supplied;
-    const actionDeclarations = responseActions.flatMap((document) => (document.actions ?? []).map((action) => ({ document, action })));
-    const walk = (entries) => {
+    const actionDeclarations = responseActions.flatMap((document) => ownPlainActions(document).map((action) => ({
+        document,
+        action,
+        id: (() => {
+            const prop = ownDataPropertyValue(action, 'id');
+            return prop.present && typeof prop.value === 'string' ? prop.value : undefined;
+        })(),
+    })));
+    const walk = (entries, prefix = '') => {
         for (const entry of entries) {
+            const slotKey = `${prefix}${entry.slotId}`;
             if (entry.slotType === 'embed-route') {
                 // Transitive. The visited set that terminates cycles lives in
                 // `planRoute`, so by the time a plan exists this walk is finite.
-                walk(entry.slots);
+                walk(entry.slots, `${slotKey}/`);
                 continue;
             }
             if (entry.slotType === 'module-widget') {
@@ -147,7 +232,7 @@ export function slotSuppliedTriggers(slots, responseActions = [], options = {}) 
                 for (const output of entry.actionOutputs) {
                     if (!output.actionRef)
                         continue;
-                    const matches = actionDeclarations.filter(({ action }) => action.id === output.actionRef);
+                    const matches = actionDeclarations.filter(({ id }) => typeof id === 'string' && id === output.actionRef);
                     if (matches.length !== 1)
                         continue;
                     const match = matches[0];
@@ -156,15 +241,9 @@ export function slotSuppliedTriggers(slots, responseActions = [], options = {}) 
                     if (!isApplicationScoped(match.document) && (!output.responseContext
                         || output.responseContext.definition.url !== targetDefinitionUrl(match.document)))
                         continue;
-                    const { action } = match;
-                    if (typeof action.id !== 'string')
+                    if (typeof match.id !== 'string')
                         continue;
-                    supplied.add(action.id);
-                    if (typeof action.intent === 'string') {
-                        const intentMatches = actionDeclarations.filter(({ action: candidate }) => candidate.intent === action.intent);
-                        if (intentMatches.length === 1)
-                            supplied.add(action.intent);
-                    }
+                    supplied.add(match.id);
                 }
                 continue;
             }
@@ -177,39 +256,185 @@ export function slotSuppliedTriggers(slots, responseActions = [], options = {}) 
             const document = responseActionsDocumentForDefinition(responseActions, entry.definitionRef);
             if (!document)
                 continue;
-            for (const action of document.actions ?? []) {
-                if (typeof action.id !== 'string'
-                    || action.id.length === 0
-                    || !hasStructuredActionLabel(action)) {
+            const definitionTarget = entry.definition ?? {
+                $formspec: '1.0',
+                url: entry.definitionRef,
+                version: '1.0.0',
+                title: '',
+                items: [],
+            };
+            const validationTarget = entry.definition
+                ? { url: entry.definitionRef, version: entry.definition.version }
+                : { url: entry.definitionRef };
+            if (!isValidDefinitionResponseActionsDocument(document, validationTarget)) {
+                continue;
+            }
+            const mountedActionRefs = options.slotRenderedActionRefs?.get(slotKey);
+            const slotEngine = options.slotFormEngines?.get(slotKey);
+            const actionRefs = mountedActionRefs ?? plannedDefinitionFormActionRefs(definitionTarget, entry.componentDocument, document, {
+                ...options,
+                ...(slotEngine !== undefined ? { evalEngine: slotEngine } : {}),
+            });
+            for (const actionRef of actionRefs) {
+                if (!resolveResponseAction(document, actionRef).resolved)
                     continue;
-                }
-                const idMatches = actionDeclarations.filter(({ action: candidate }) => candidate.id === action.id);
+                const idMatches = actionDeclarations.filter(({ id }) => typeof id === 'string' && id === actionRef);
                 if (idMatches.length !== 1)
                     continue;
-                supplied.add(action.id);
-                if (typeof action.intent === 'string'
-                    && CLOSED_RESPONSE_ACTION_INTENTS.has(action.intent)) {
-                    const intentMatches = actionDeclarations.filter(({ action: candidate }) => candidate.intent === action.intent);
-                    if (intentMatches.length === 1)
-                        supplied.add(action.intent);
-                }
+                supplied.add(actionRef);
             }
         }
     };
     walk(slots);
     return supplied;
 }
-function hasStructuredActionLabel(action) {
-    const label = action.label;
-    if (!label || typeof label !== 'object' || Array.isArray(label))
-        return false;
-    const structured = label;
-    const hasLiteral = Object.hasOwn(structured, 'literal');
-    const hasReference = Object.hasOwn(structured, 'ref');
-    if (hasLiteral === hasReference)
-        return false;
-    const text = hasLiteral ? structured.literal : structured.ref;
-    return typeof text === 'string' && text.trim().length > 0;
+function layoutNeedsEngineEvaluation(node) {
+    if (typeof node.when === 'string' && node.when.length > 0)
+        return true;
+    if (node.isRepeatTemplate && node.repeatPath)
+        return true;
+    if (node.component === 'Accordion' && typeof node.props?.bind === 'string')
+        return true;
+    if (node.bindPath
+        && node.category !== 'field'
+        && node.category !== 'display'
+        && node.component !== 'ActionButton'
+        && node.component !== 'DataTable') {
+        return true;
+    }
+    return node.children.some(layoutNeedsEngineEvaluation);
+}
+function rewriteRepeatInstance(node, repeatPath, instanceIdx) {
+    const templatePrefix = `${repeatPath}[0]`;
+    const groupScopePrefix = `${repeatPath}.`;
+    const instancePrefix = `${repeatPath}[${instanceIdx}]`;
+    function instantiate(path) {
+        if (path === templatePrefix || path?.startsWith(`${templatePrefix}.`)) {
+            return instancePrefix + path.slice(templatePrefix.length);
+        }
+        if (path?.startsWith(groupScopePrefix)) {
+            return `${instancePrefix}.${path.slice(groupScopePrefix.length)}`;
+        }
+        return path;
+    }
+    const bind = typeof node.props?.bind === 'string' ? node.props.bind : undefined;
+    const resolvedBind = instantiate(bind);
+    const nextBindPath = instantiate(node.bindPath);
+    const nextRepeatPath = instantiate(node.repeatPath);
+    const nextWhenPrefix = instantiate(node.whenPrefix);
+    const { bindPath: _bp, repeatPath: _rp, whenPrefix: _wp, ...rest } = node;
+    return {
+        ...rest,
+        id: `${node.id}-${instanceIdx}`,
+        ...(nextBindPath !== undefined ? { bindPath: nextBindPath } : {}),
+        ...(nextRepeatPath !== undefined ? { repeatPath: nextRepeatPath } : {}),
+        ...(nextWhenPrefix !== undefined ? { whenPrefix: nextWhenPrefix } : {}),
+        props: resolvedBind === bind ? node.props : { ...node.props, bind: resolvedBind },
+        children: node.children.map((child) => rewriteRepeatInstance(child, repeatPath, instanceIdx)),
+    };
+}
+function collectRenderedActionRefs(node, out, evalEngine, inheritedHiddenVisibility = false) {
+    const rawDisplay = typeof node.style?.display === 'string'
+        ? node.style.display.trim().toLowerCase()
+        : '';
+    if (node.props?.hidden === true || rawDisplay === 'none') {
+        return;
+    }
+    const rawVisibility = typeof node.style?.visibility === 'string'
+        ? node.style.visibility.trim().toLowerCase()
+        : '';
+    const hiddenVisibility = rawVisibility === 'hidden' || rawVisibility === 'collapse'
+        ? true
+        : rawVisibility === 'visible' || rawVisibility === 'initial' || rawVisibility === 'revert'
+            ? false
+            : inheritedHiddenVisibility;
+    const repeatPath = node.isRepeatTemplate && node.repeatPath
+        ? node.repeatPath
+        : node.component === 'Accordion' && typeof node.props?.bind === 'string'
+            ? node.props.bind
+            : undefined;
+    if (repeatPath) {
+        if (!evalEngine)
+            return;
+        const count = evalEngine.repeats[repeatPath]?.value ?? 0;
+        for (let index = 0; index < count; index += 1) {
+            for (const child of node.children) {
+                collectRenderedActionRefs(rewriteRepeatInstance(child, repeatPath, index), out, evalEngine, hiddenVisibility);
+            }
+        }
+        return;
+    }
+    if (typeof node.when === 'string' && node.when.length > 0) {
+        if (!evalEngine)
+            return;
+        try {
+            if (!evalEngine.compileExpression(node.when, node.whenPrefix ?? '')()) {
+                return;
+            }
+        }
+        catch {
+            return;
+        }
+    }
+    if (node.bindPath
+        && node.category !== 'field'
+        && node.category !== 'display'
+        && node.component !== 'ActionButton'
+        && node.component !== 'DataTable') {
+        const relevance = evalEngine?.relevantSignals[node.bindPath];
+        if (relevance && !relevance.value) {
+            return;
+        }
+    }
+    if (node.component === 'ActionButton') {
+        if (!hiddenVisibility) {
+            const actionRef = node.props?.actionRef;
+            if (typeof actionRef === 'string' && actionRef.length > 0) {
+                out.add(actionRef);
+            }
+        }
+        // ActionButton is a leaf widget; it never renders `node.children`.
+        return;
+    }
+    for (const child of node.children) {
+        collectRenderedActionRefs(child, out, evalEngine, hiddenVisibility);
+    }
+}
+export function plannedDefinitionFormActionRefs(definition, componentDocument, responseActionsDocument, options = {}) {
+    const themeBreakpoints = options.themeDocument?.breakpoints;
+    const componentBreakpoints = componentDocument?.breakpoints;
+    const activeBreakpoint = options.activeBreakpoint !== undefined
+        ? options.activeBreakpoint
+        : options.matchesMinWidth
+            ? matchBreakpoint(themeBreakpoints, componentBreakpoints, options.matchesMinWidth)
+            : null;
+    const { root } = planDefinitionLayout({
+        definition,
+        componentDocument,
+        themeDocument: options.themeDocument,
+        activeBreakpoint,
+        autoPlacedActionRefs: autoPlacedDefinitionActions(responseActionsDocument, definition).map((action) => action.id),
+        autoPlaceControls: 'always',
+    });
+    const refs = new Set();
+    let ownedEngine;
+    try {
+        let evalEngine = options.evalEngine;
+        if (!evalEngine && layoutNeedsEngineEvaluation(root) && isFormspecEngineInitialized()) {
+            try {
+                ownedEngine = createFormEngine(definition);
+                evalEngine = ownedEngine;
+            }
+            catch {
+                evalEngine = undefined;
+            }
+        }
+        collectRenderedActionRefs(root, refs, evalEngine);
+    }
+    finally {
+        ownedEngine?.dispose();
+    }
+    return refs;
 }
 export function planTransitions(input) {
     const { handle, app } = input;
@@ -303,7 +528,7 @@ export function planTransitions(input) {
                     : 'transitionTriggerUnresolved', { to, trigger }),
             };
         }
-        if (input.slotSuppliedTriggers?.has(trigger)) {
+        if (input.slotSuppliedTriggers?.has(actionId)) {
             return {
                 ...base,
                 actionId,

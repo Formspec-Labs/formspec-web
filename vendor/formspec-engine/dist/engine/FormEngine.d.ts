@@ -1,4 +1,4 @@
-import type { EvaluatedFormState, FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
+import type { EvaluatedFormState, FormDefinition, Explanation, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
 import type { SetValueOptions, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
@@ -7,6 +7,7 @@ import { type LocaleDocument } from '../locale.js';
 import type { IssuerSource, ResolvedIssuer } from '../issuer/types.js';
 import { type FieldViewModel } from '../field-view-model.js';
 import { type FormViewModel } from '../form-view-model.js';
+import { type DraftExplanation, type ExplanationKey, type ExplanationState } from './warning-explanations.js';
 import { type EnabledValidationProfile, type ValidationReportOptions } from '../validation/index.js';
 export declare class FormEngine implements IFormEngine {
     static instanceSourceCache: Map<string, JsonValue>;
@@ -31,6 +32,8 @@ export declare class FormEngine implements IFormEngine {
     readonly localeSignal: ReadonlyEngineSignal<number>;
     private readonly _rx;
     private readonly _evaluationVersion;
+    private readonly _draftEditVersion;
+    private _draftEditDirty;
     private readonly _bindConfigs;
     private readonly _fieldItems;
     /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
@@ -41,16 +44,25 @@ export declare class FormEngine implements IFormEngine {
     private readonly _shapeTiming;
     private readonly _displaySignalPaths;
     private readonly _calculatedFields;
+    private _calculatedPaths;
+    private _indexedBinds;
     private readonly _registryEntries;
     /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
     private readonly _extensionFunctions;
+    private readonly _explanationState;
+    private readonly _explanationRefreshVersion;
+    private _pendingExplanationState;
+    private readonly _explanations;
     private readonly _responseSubject;
+    private readonly _responseInstanceResolutions;
     private _registryDocuments;
     private readonly _remoteOptionsTasks;
     private readonly _instanceSourceResolver?;
     private readonly _instanceSourceAbort;
     private readonly _pendingInstanceSources;
     private _pendingCreationPaths;
+    private readonly _creationDiagnostics;
+    private readonly _failedSeedPaths;
     private readonly _instanceSourceOutcomes;
     private _disposed;
     private readonly _instanceSourceTasks;
@@ -70,6 +82,8 @@ export declare class FormEngine implements IFormEngine {
     private readonly _data;
     private _previousEvalResult;
     private _fullResult;
+    private _refusedInput;
+    private _refusedCreation;
     private _issuerOverride;
     private _resolvedIssuer;
     private _issuerResolutionPromise;
@@ -99,10 +113,26 @@ export declare class FormEngine implements IFormEngine {
     addRepeatInstance(itemName: string): number | undefined;
     removeRepeatInstance(itemName: string, index: number): void;
     /** Resume saved Response data with its exact row counts and answered fields. */
-    loadResponseData(data: JsonRecord): void;
+    loadResponseData(data: JsonRecord, explanations?: DraftExplanation[]): void;
     private editingData;
     getDraftSnapshot(): FormDraftSnapshot;
-    loadDraftSnapshot(snapshot: FormDraftSnapshot): void;
+    loadDraftSnapshot(snapshot: FormDraftSnapshot, explanations?: Explanation[]): void;
+    getExplanationEntries(): DraftExplanation[];
+    getExplanationState(): ExplanationState;
+    private reviewWarnings;
+    private refreshExplanationState;
+    setExplanation(shapeId: string, path: string, answer: {
+        text?: string;
+    }): void;
+    acknowledge(code: string, options?: {
+        expectedBasis?: string;
+    }): boolean;
+    private writeExplanation;
+    removeExplanation(key: ExplanationKey): void;
+    acceptSavedExplanations(entries: Explanation[], options?: {
+        mergeMissing?: boolean;
+        base?: readonly DraftExplanation[];
+    }): void;
     private assertDraftSnapshot;
     private loadItemsData;
     private creationContext;
@@ -114,7 +144,13 @@ export declare class FormEngine implements IFormEngine {
     setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;
     /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
     private writeFieldData;
+    private isCalculated;
+    private bindAt;
     private storeFieldValue;
+    /** Whether the evaluator refused the supplied Response subject. */
+    hasSubjectRefusal(): boolean;
+    /** The evaluator's typed finding for a refused Response subject. */
+    private subjectRefusal;
     getValidationReport(): ValidationReport;
     getValidationReport(options: {
         profile?: EnabledValidationProfile;
@@ -125,7 +161,7 @@ export declare class FormEngine implements IFormEngine {
     getValidationReport(options?: ValidationReportOptions): ValidationReport | null;
     /** Report for `trigger` plus the expression diagnostics of the evaluation that produced it. */
     private produceValidation;
-    private hasSubmitValidation;
+    private collectResponseValidationResults;
     evaluateShape(shapeId: string): ValidationResult[];
     isPathRelevant(path: string): boolean;
     whyRelevant(path: string): RelevanceExplanation;
@@ -135,11 +171,24 @@ export declare class FormEngine implements IFormEngine {
     /** Read the current field flags and the requested validation profile, which defaults to live. */
     getEvaluatedFormState(options?: ValidationReportOptions): EvaluatedFormState;
     getResponse(meta?: Parameters<FormEngine['getResponseSnapshot']>[0]): FormResponse;
-    /** One evaluation and clock for response data and its requested validation report. */
+    /** Capture response data and its requested validation report with one clock. */
     getResponseSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0], validationProfile?: ValidationProfile): {
         response: FormResponse;
         validationReport: ValidationReport | null;
     };
+    /**
+     * Evaluate Submit once at the current clock and either emit the assembled candidate or return
+     * an in-progress snapshot with `pendingExplanationStamps: true` when selected explanations lack stamps.
+     */
+    captureSubmitSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0]): {
+        snapshot: {
+            response: FormResponse;
+            validationReport: ValidationReport | null;
+        };
+        pendingExplanationStamps: boolean;
+    };
+    private captureSnapshotInternal;
+    private draftResponseData;
     getDiagnosticsSnapshot(options?: ValidationReportOptions): FormEngineDiagnosticsSnapshot;
     applyReplayEvent(event: EngineReplayEvent): EngineReplayApplyResult;
     replay(events: EngineReplayEvent[], options?: {
@@ -246,6 +295,7 @@ export declare class FormEngine implements IFormEngine {
     private assertNoRemovedModeOption;
     private assertValidationReportOptions;
     private shapedEvalResult;
+    private isCalculationRefusal;
     private _evaluate;
     private evaluateResultForTrigger;
     private resolveRepeatPath;

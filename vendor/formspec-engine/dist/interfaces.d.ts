@@ -1,6 +1,6 @@
 /** @filedesc Engine public interfaces and shared exported types. */
 import type { EngineSignal, ReadonlyEngineSignal } from './reactivity/types.js';
-import type { EvaluatedFormState, FormDefinition, FormInstance, FormItem, FormResponse, ValidationResult, ValidationReport, ValidationProfile, OptionEntry } from '@formspec-org/types';
+import type { EvaluatedFormState, FormDefinition, Explanation, FormInstance, FormItem, FormResponse, ResponseSelectionDelivery, ValidationResult, ValidationReport, ValidationProfile, OptionEntry } from '@formspec-org/types';
 import type { EnabledValidationProfile, ValidationReportOptions } from './validation/index.js';
 /** JSON-compatible scalar. */
 export type JsonPrimitive = string | number | boolean | null;
@@ -18,6 +18,7 @@ import type { FormViewModel } from './form-view-model.js';
 import type { IssuerFetcher } from './issuer/IssuerFetcher.js';
 import type { IssuerSource, ResolvedIssuer } from './issuer/types.js';
 import type { FelTraceStep } from './fel/fel-api-runtime.js';
+import type { DraftExplanation, ExplanationKey, ExplanationState } from './engine/warning-explanations.js';
 import type { EvalDiagnostic } from './diff.js';
 import type { ExactJsonNumber } from './json-values.js';
 export interface FELBuiltinFunctionCatalogEntry {
@@ -199,16 +200,26 @@ export interface FormEngineOptions {
     savedResponseData?: JsonRecord;
     /** Resume an editable snapshot with a Definition pin. Supply only one data input. */
     draftSnapshot?: FormDraftSnapshot;
-    /** Host-supplied Response identity, available to FEL from the first evaluation. */
-    responseSubject?: Omit<NonNullable<FormResponse['subject']>, 'keys'> & {
+    /** Warning entries from the saved Response paired with these answers. */
+    savedExplanations?: Explanation[];
+    /**
+     * Host-supplied Response identity, available to FEL from the first evaluation. For a subject-declaring
+     * Definition the engine derives `id` once from the validated `type` and `keys` and ignores a supplied
+     * `id`; while the subject is refused (`hasSubjectRefusal()`), Response reads throw and the report keeps the
+     * typed finding. Otherwise `id` is required and names the host entity.
+     */
+    responseSubject?: Partial<Omit<NonNullable<FormResponse['subject']>, 'keys'>> & {
         keys?: ResponseSubjectKeys;
     };
+    /** Available, host-qualified deliveries of Definition Response instances, keyed by instance name. */
+    responseInstanceResolutions?: Readonly<Record<string, ResponseSelectionDelivery>>;
 }
 /** Editable data pinned to a Definition, including hidden answers and exact repeat arrays. */
 export interface FormDraftSnapshot {
     definitionUrl: string;
     definitionVersion: string;
     data: JsonRecord;
+    explanations?: DraftExplanation[];
 }
 /** Filing-unit keys, including exact integers represented by raw JSON numbers. */
 export type ResponseSubjectKeys = Readonly<Record<string, string | number | ExactJsonNumber>>;
@@ -417,14 +428,32 @@ export interface IFormEngine {
     addRepeatInstance(itemName: string): number | undefined;
     removeRepeatInstance(itemName: string, index: number): void;
     /** Resumes saved Response `data`, replacing the current data without creation or repeat padding. */
-    loadResponseData(data: JsonRecord): void;
+    loadResponseData(data: JsonRecord, explanations?: Explanation[]): void;
     /** Restores editable data from a draft pinned to this Definition. */
-    loadDraftSnapshot(snapshot: FormDraftSnapshot): void;
+    loadDraftSnapshot(snapshot: FormDraftSnapshot, explanations?: Explanation[]): void;
     /** Captures editable data without evaluation. Use exact JSON for persistence. */
     getDraftSnapshot(): FormDraftSnapshot;
+    /** Read editing state, including pending answers without server stamps. */
+    getExplanationEntries(): DraftExplanation[];
+    /** Review warning firings evaluated against the Submit data. */
+    getExplanationState(): ExplanationState;
+    setExplanation(shapeId: string, path: string, answer: {
+        text?: string;
+    }): void;
+    /** Record a grouped blank-answer acknowledgement for `code`. When `expectedBasis` is given, returns `false` without mutating if a fresh Submit evaluation no longer matches that basis. */
+    acknowledge(code: string, options?: {
+        expectedBasis?: string;
+    }): boolean;
+    removeExplanation(key: ExplanationKey): void;
+    /** Apply server stamps to matching edits after an acknowledged draft save, optionally 3-way merging against a reviewed `base`. */
+    acceptSavedExplanations(entries: Explanation[], options?: {
+        mergeMissing?: boolean;
+        base?: readonly DraftExplanation[];
+    }): void;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
     setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;
     getValidationReport(): ValidationReport;
+    /** Throws if the on-submit data do not converge. */
     getValidationReport(options: {
         profile?: EnabledValidationProfile;
     }): ValidationReport;
@@ -439,6 +468,7 @@ export interface IFormEngine {
     getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
     getEvaluatedFormState(options?: ValidationReportOptions): EvaluatedFormState;
+    /** Returns data for the Response profile. Throws if on-submit data do not converge. */
     getResponse(meta?: {
         id?: string;
         author?: {
@@ -453,10 +483,25 @@ export interface IFormEngine {
         authoredSignatures?: AuthoredSignatureInput[];
         profile?: ValidationProfile;
     }): FormResponse;
-    /** Capture response data and validation from one evaluation and clock. */
+    /**
+     * Capture data for the Response profile and a report for the validation profile with one clock.
+     * Throws if on-submit data do not converge.
+     */
     getResponseSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0], validationProfile?: ValidationProfile): {
         response: FormResponse;
         validationReport: ValidationReport | null;
+    };
+    /**
+     * Evaluate Submit once at the current clock and return either the assembled completed candidate
+     * or an in-progress draft snapshot when selected candidate explanations still need server stamps.
+     * Preserves unsigned-candidate guards and refreshes visible warning state on pending stamps.
+     */
+    captureSubmitSnapshot?(meta?: Parameters<IFormEngine['getResponse']>[0]): {
+        snapshot: {
+            response: FormResponse;
+            validationReport: ValidationReport | null;
+        };
+        pendingExplanationStamps: boolean;
     };
     getDiagnosticsSnapshot(options?: ValidationReportOptions): FormEngineDiagnosticsSnapshot;
     applyReplayEvent(event: EngineReplayEvent): EngineReplayApplyResult;
@@ -520,7 +565,7 @@ export interface IFormEngine {
     setRegistryEntries?(entries: RegistryEntry[]): void;
     /**
      * Register a FEL extension function (Core §3.12) and re-evaluate. Throws for a FEL built-in or
-     * reserved word. Unregistered calls stay definition errors (`CONSTRAINT_PARSE_ERROR` on binds).
+     * reserved word. Unregistered calls produce the Definition finding `UNDEFINED_FUNCTION`.
      */
     registerExtensionFunction?(name: string, registration: import('./extension-functions.js').FelExtensionFunctionRegistration): void;
     migrateResponse(responseData: JsonRecord, fromVersion: string): JsonRecord;

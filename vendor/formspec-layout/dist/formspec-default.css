@@ -100,7 +100,8 @@
   grid-template-columns: repeat(2, 1fr);
 }
 
-.formspec-grid > * {
+.formspec-grid > *,
+.formspec-auto-grid > * {
   min-width: 0;
 }
 
@@ -246,16 +247,18 @@ formspec-render {
 
 .formspec-workspace__navigation ul,
 .formspec-workspace__findings ul {
+  list-style: none;
   margin-block: var(--formspec-space-sm, 0.5rem);
-  padding-inline-start: 1.25em;
+  padding-inline-start: 0;
 }
 
 .formspec-workspace__navigation [aria-current] {
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .formspec-workspace__navigation input {
   display: block;
+  inline-size: 100%;
   max-inline-size: 100%;
 }
 
@@ -270,13 +273,193 @@ formspec-render {
   margin-block: var(--formspec-space-md, 1rem);
 }
 
+.formspec-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--formspec-space-sm, 0.5rem);
+}
+
+.formspec-workspace__content {
+  container: formspec-form / inline-size;
+}
+
 .formspec-workspace p[role="status"]:empty {
   margin: 0;
 }
 
-@container formspec-workspace (width > 50rem) {
+.formspec-workspace__nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.formspec-workspace__navigation[data-mobile-open="false"] .formspec-workspace__nav-body {
+  display: none;
+}
+
+.formspec-workspace__mobile-findings-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+/* Auto-grid structural flow: 1 column on narrow containers, responsive multi-column on wide containers. */
+.formspec-auto-grid > .formspec-field,
+.formspec-auto-grid > .formspec-fieldset {
+  order: 0;
+}
+
+.formspec-auto-grid > :is(
+  .formspec-group-title,
+  .formspec-repeat-instance-header,
+  .formspec-repeat-heading,
+  .formspec-repeat-undo,
+  .formspec-auto-grid-full,
+  .formspec-text,
+  .formspec-heading,
+  .formspec-alert,
+  .formspec-divider,
+  .formspec-group,
+  .formspec-group-errors,
+  .formspec-repeat,
+  .formspec-fieldset,
+  .formspec-warning-explanation,
+  .formspec-warning-explanations,
+  .formspec-validation-summary,
+  .formspec-action-bar,
+  .formspec-action-control
+) {
+  grid-column: 1 / -1;
+}
+
+/* Keep scalar columns aligned side-by-side on row 1 when any column emits an inline warning region. */
+.formspec-auto-grid > .formspec-warning-explanation,
+.formspec-auto-grid > .formspec-warning-explanations {
+  grid-column: 1 / -1;
+  order: 10;
+}
+
+/* Medium container (e.g. 900x800 IDE pane): 2-column Form + Findings, compact collapsible sections bar above. */
+@container formspec-workspace (width > 48rem) {
   .formspec-workspace {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 17.5rem);
+  }
+
+  .formspec-workspace__navigation {
+    grid-column: 1 / -1;
+  }
+
+  .formspec-workspace__mobile-findings-bar {
+    display: none;
+  }
+}
+
+/* Wide desktop container (> 62rem): full 3-column workspace, or 2-column when single-section. */
+@container formspec-workspace (width > 62rem) {
+  .formspec-workspace {
+    grid-template-columns: minmax(13rem, 16.5rem) minmax(0, 1fr) minmax(14rem, 18rem);
+  }
+
+  .formspec-workspace[data-single-section="true"] {
+    grid-template-columns: minmax(0, 1fr) minmax(14.5rem, 18.5rem);
+  }
+
+  .formspec-workspace__navigation {
+    grid-column: auto;
+  }
+
+  .formspec-workspace__nav-toggle {
+    display: none;
+  }
+
+  .formspec-workspace__navigation[data-mobile-open="false"] .formspec-workspace__nav-body {
+    display: block;
+  }
+}
+
+/* Auto-grid columns inside workspace form column. */
+@container formspec-form (width >= 30rem) {
+  .formspec-auto-grid[data-auto-grid] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formspec-auto-grid[data-auto-grid="3"],
+  .formspec-auto-grid[data-auto-grid="5"],
+  .formspec-auto-grid[data-auto-grid="6"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container formspec-form (width >= 38rem) {
+  .formspec-auto-grid[data-auto-grid="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formspec-auto-grid[data-auto-grid="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .formspec-auto-grid[data-auto-grid="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .formspec-auto-grid[data-auto-grid="5"] {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@container formspec-form (width >= 45rem) {
+  .formspec-auto-grid[data-auto-grid="6"] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Standalone non-workspace form fallback for responsive scalar auto-grid. */
+@media (min-width: 48rem) {
+  .formspec-container:not(:has(.formspec-workspace)) .formspec-auto-grid[data-auto-grid="2"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formspec-container:not(:has(.formspec-workspace)) .formspec-auto-grid[data-auto-grid="3"] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .formspec-container:not(:has(.formspec-workspace)) .formspec-auto-grid[data-auto-grid="4"] {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .formspec-container:not(:has(.formspec-workspace)) .formspec-auto-grid[data-auto-grid="5"] {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .formspec-container:not(:has(.formspec-workspace)) .formspec-auto-grid[data-auto-grid="6"] {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media print {
+  .formspec-workspace,
+  .formspec-workspace[data-single-section="true"] {
+    display: block;
+    grid-template-columns: 1fr;
+  }
+
+  .formspec-workspace__navigation,
+  .formspec-workspace__inline-search,
+  .formspec-workspace__mobile-findings-bar,
+  .formspec-workspace__previous-next,
+  .formspec-action-bar,
+  .formspec-action-control {
+    display: none !important;
   }
 }
 
@@ -285,52 +468,52 @@ formspec-render {
 /* @filedesc Semantic tokens shared by the default Formspec visual skin. */
 
 .formspec-container {
-  font-family: var(--formspec-font-family, "Instrument Sans", "Avenir Next", "Segoe UI", sans-serif);
-  --formspec-default-font-heading: "Fraunces", "Instrument Serif", Georgia, serif;
-  --formspec-default-font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--formspec-font-family, "Archivo", "Helvetica Neue", Arial, sans-serif);
+  --formspec-default-font-heading: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --formspec-default-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 0.96rem;
-  line-height: 1.6;
-  color: var(--formspec-color-foreground, #20241f);
+  line-height: 1.55;
+  color: var(--formspec-color-foreground, #13233A);
   color-scheme: light;
-  --formspec-default-text: var(--formspec-color-foreground, #20241f);
-  --formspec-default-text-strong: #171b17;
-  --formspec-default-text-muted: var(--formspec-color-muted, #686158);
-  --formspec-default-text-subtle: var(--formspec-color-mutedForeground, #736c62);
-  --formspec-default-text-faint: var(--formspec-color-foreground-muted, #746c61);
-  --formspec-default-text-inverse: var(--formspec-color-primaryForeground, #ffffff);
+  --formspec-default-text: var(--formspec-color-foreground, #13233A);
+  --formspec-default-text-strong: #0C1829;
+  --formspec-default-text-muted: var(--formspec-color-muted, #44546B);
+  --formspec-default-text-subtle: var(--formspec-color-mutedForeground, #44546B);
+  --formspec-default-text-faint: var(--formspec-color-foreground-muted, #526279);
+  --formspec-default-text-inverse: var(--formspec-color-primaryForeground, #FFFFFF);
   /* What a colour is lightened toward in mixes. White suits only the light appearance. */
   --formspec-default-tint-base: white;
-  --formspec-default-bg: var(--formspec-color-background, #f6f0e6);
-  --formspec-default-surface: var(--formspec-color-card, #fdfaf4);
-  --formspec-default-surface-muted: var(--formspec-color-surface, #f2ece2);
-  --formspec-default-surface-subtle: #f8f2e9;
-  --formspec-default-surface-soft: #f4ede3;
-  --formspec-default-surface-quiet: #fcf8f1;
-  --formspec-default-primary-soft: var(--formspec-color-primary-light, #e3ece8);
-  --formspec-default-border-input: var(--formspec-color-input, #8b8175);
-  --formspec-default-border: var(--formspec-color-border, #d1c8ba);
-  --formspec-default-border-strong: color-mix(in srgb, var(--formspec-default-border) 82%, #5b5448);
-  --formspec-default-border-subtle: color-mix(in srgb, var(--formspec-default-border) 52%, var(--formspec-default-tint-base));
-  --formspec-default-border-muted: #e7e0d5;
-  --formspec-default-border-control: #cdc3b5;
+  --formspec-default-bg: var(--formspec-color-background, #EDF1EA);
+  --formspec-default-surface: var(--formspec-color-card, #FCFDFB);
+  --formspec-default-surface-muted: var(--formspec-color-surface, #DCE7DA);
+  --formspec-default-surface-subtle: #F2F6F0;
+  --formspec-default-surface-soft: #E6EFE4;
+  --formspec-default-surface-quiet: #F7FAF5;
+  --formspec-default-primary-soft: var(--formspec-color-primary-light, #E2E9FA);
+  --formspec-default-border-input: var(--formspec-color-input, #5B6B7F);
+  --formspec-default-border: var(--formspec-color-border, #B9C7BD);
+  --formspec-default-border-strong: color-mix(in srgb, var(--formspec-default-border) 72%, #2B3A4E);
+  --formspec-default-border-subtle: color-mix(in srgb, var(--formspec-default-border) 62%, var(--formspec-default-tint-base));
+  --formspec-default-border-muted: #D5E0D7;
+  --formspec-default-border-control: #8E9EB0;
   /* token-registry-spec §2.4 — the brand fan-out. `color.primary` is the ONE
    * token a tenant sets; the ring derives from it unless the theme names
    * `color.ring` explicitly. Without this chain a tenant who sets only the
    * brand token gets a platform-coloured focus ring on every input. */
-  --formspec-default-focus: var(--formspec-color-ring, var(--formspec-color-primary, #27594f));
-  --formspec-default-primary: var(--formspec-color-primary, #27594f);
-  --formspec-default-primary-strong: var(--formspec-color-primary-dark, #1d443c);
-  --formspec-default-danger: var(--formspec-color-error, #c1281f);
+  --formspec-default-focus: var(--formspec-color-ring, var(--formspec-color-primary, #1D3FAE));
+  --formspec-default-primary: var(--formspec-color-primary, #1D3FAE);
+  --formspec-default-primary-strong: var(--formspec-color-primary-dark, #152E82);
+  --formspec-default-danger: var(--formspec-color-error, #B4232C);
   --formspec-default-error: var(--formspec-default-danger);
-  --formspec-default-danger-strong: #b1261d;
-  --formspec-default-success: var(--formspec-color-success, #2f855a);
-  --formspec-default-warning: var(--formspec-color-warning, #946112);
-  --formspec-default-info: var(--formspec-color-info, #2b6cb0);
+  --formspec-default-danger-strong: #921B22;
+  --formspec-default-success: var(--formspec-color-success, #1E6B45);
+  --formspec-default-warning: var(--formspec-color-warning, #7A5200);
+  --formspec-default-info: var(--formspec-color-info, #1D3FAE);
   --formspec-default-primary-fill: var(--formspec-default-primary);
   --formspec-default-primary-fill-strong: var(--formspec-default-primary-strong);
   --formspec-default-success-fill: var(--formspec-default-success);
   --formspec-default-danger-fill: var(--formspec-default-danger);
-  --formspec-default-success-text: #1b5e20;
+  --formspec-default-success-text: #155134;
   --formspec-default-warning-text: var(--formspec-default-warning);
   --formspec-default-info-text: var(--formspec-default-info);
   --formspec-default-danger-text: var(--formspec-default-danger);
@@ -338,146 +521,150 @@ formspec-render {
   --formspec-default-badge-primary-text: var(--formspec-default-text-inverse);
   --formspec-default-badge-success-bg: var(--formspec-default-success-fill);
   --formspec-default-badge-success-text: var(--formspec-default-text-inverse);
-  --formspec-default-badge-warning-bg: #fbbc04;
-  --formspec-default-badge-warning-text: #333;
+  --formspec-default-badge-warning-bg: #F2C14E;
+  --formspec-default-badge-warning-text: #13233A;
   --formspec-default-badge-error-bg: var(--formspec-default-danger-fill);
   --formspec-default-badge-error-text: var(--formspec-default-text-inverse);
-  --formspec-default-rating-empty: #d6ccbd;
-  --formspec-default-rating-hover: #cf9440;
-  --formspec-default-rating-active: #b7771f;
-  --formspec-default-readonly-field-bg: var(--formspec-readonly-field-bg, #f7f3ec);
-  --formspec-default-readonly-field-border: var(--formspec-readonly-field-border, #d8d0c3);
-  --formspec-default-readonly-field-accent: var(--formspec-readonly-field-accent, #7d7366);
-  --formspec-default-readonly-badge-border: var(--formspec-readonly-badge-border, #c8beaf);
-  --formspec-default-readonly-badge-bg: var(--formspec-readonly-badge-bg, #efe8dc);
-  --formspec-default-readonly-badge-text: var(--formspec-readonly-badge-text, #564f45);
-  --formspec-default-readonly-input-bg: var(--formspec-readonly-input-bg, #f6f1ea);
-  --formspec-default-readonly-input-border: var(--formspec-readonly-input-border, #d8d0c3);
-  --formspec-default-readonly-input-text: var(--formspec-readonly-input-text, #4f473d);
+  --formspec-default-rating-empty: #C4D0C7;
+  --formspec-default-rating-hover: #C88A1E;
+  --formspec-default-rating-active: #9B6404;
+  --formspec-default-readonly-field-bg: var(--formspec-readonly-field-bg, #EBF0E9);
+  --formspec-default-readonly-field-border: var(--formspec-readonly-field-border, #B3C2B8);
+  --formspec-default-readonly-field-accent: var(--formspec-readonly-field-accent, #44546B);
+  --formspec-default-readonly-badge-border: var(--formspec-readonly-badge-border, #9DAEB8);
+  --formspec-default-readonly-badge-bg: var(--formspec-readonly-badge-bg, #DFE8E0);
+  --formspec-default-readonly-badge-text: var(--formspec-readonly-badge-text, #2B3B50);
+  --formspec-default-readonly-input-bg: var(--formspec-readonly-input-bg, #E3EAE2);
+  --formspec-default-readonly-input-border: var(--formspec-readonly-input-border, #A9B9AE);
+  --formspec-default-readonly-input-text: var(--formspec-readonly-input-text, #38495E);
+  --formspec-default-checkbox-border: #5B6B7F;
+  --formspec-default-checkbox-bg: #FCFDFB;
   --formspec-default-danger-surface: color-mix(in srgb, var(--formspec-default-danger) 10%, var(--formspec-default-tint-base));
   --formspec-default-error-surface: var(--formspec-default-danger-surface);
-  --formspec-default-danger-surface-soft: #fdf1ef;
-  --formspec-default-success-surface: #ebf5ef;
-  --formspec-default-warning-surface: #fff2db;
-  --formspec-default-warning-surface-soft: #fdf5e7;
-  --formspec-default-info-surface: #ecf4fb;
-  --formspec-default-info-surface-soft: #f1f7fc;
-  --formspec-default-radius-sm: var(--formspec-radius-sm, 0.9rem);
-  --formspec-default-radius-md: var(--formspec-radius-md, 1.35rem);
+  --formspec-default-danger-surface-soft: #FCF0F1;
+  --formspec-default-success-surface: #EAF5EF;
+  --formspec-default-warning-surface: #FDF3DC;
+  --formspec-default-warning-surface-soft: #FEF7E8;
+  --formspec-default-info-surface: #ECF1FC;
+  --formspec-default-info-surface-soft: #F2F5FD;
+  --formspec-default-radius-sm: var(--formspec-radius-sm, 2px);
+  --formspec-default-radius-md: var(--formspec-radius-md, 4px);
   --formspec-default-radius-pill: 999px;
-  --formspec-default-shadow-sm: 0 10px 22px rgba(68, 56, 37, 0.045);
-  --formspec-default-shadow-md: 0 24px 48px rgba(68, 56, 37, 0.09), 0 6px 18px rgba(68, 56, 37, 0.06);
-  --formspec-default-shadow-elevation-1: 0 10px 18px rgba(68, 56, 37, 0.05);
-  --formspec-default-shadow-elevation-2: 0 14px 28px rgba(68, 56, 37, 0.08);
-  --formspec-default-shadow-elevation-3: 0 20px 36px rgba(68, 56, 37, 0.1);
-  --formspec-default-shadow-elevation-4: 0 26px 44px rgba(68, 56, 37, 0.12);
-  --formspec-default-shadow-elevation-5: 0 32px 56px rgba(68, 56, 37, 0.14);
-  --formspec-default-focus-shadow: 0 0 0 4px color-mix(in srgb, var(--formspec-default-focus) 14%, transparent);
+  --formspec-default-shadow-sm: 0 1px 2px rgba(19, 35, 58, 0.06);
+  --formspec-default-shadow-md: 0 10px 24px rgba(19, 35, 58, 0.12), 0 2px 6px rgba(19, 35, 58, 0.06);
+  --formspec-default-shadow-elevation-1: 0 1px 3px rgba(19, 35, 58, 0.07);
+  --formspec-default-shadow-elevation-2: 0 4px 10px rgba(19, 35, 58, 0.09);
+  --formspec-default-shadow-elevation-3: 0 8px 18px rgba(19, 35, 58, 0.11);
+  --formspec-default-shadow-elevation-4: 0 14px 26px rgba(19, 35, 58, 0.13);
+  --formspec-default-shadow-elevation-5: 0 20px 36px rgba(19, 35, 58, 0.15);
+  --formspec-default-focus-shadow: 0 0 0 3px color-mix(in srgb, var(--formspec-default-focus) 20%, transparent);
   --formspec-default-transition-fast: border-color 0.15s, box-shadow 0.15s, background-color 0.15s, color 0.15s;
 }
 
 .formspec-container.formspec-appearance-dark {
-  color: var(--formspec-color-dark-foreground, #f3ecdf);
+  color: var(--formspec-color-dark-foreground, #E6ECF2);
   color-scheme: dark;
 
   /* Text — base tokens via color.dark.* Layer A */
-  --formspec-default-text: var(--formspec-color-dark-foreground, #f3ecdf);
-  --formspec-default-text-strong: #fffaf0;
-  --formspec-default-text-muted: var(--formspec-color-dark-muted, #c4b8a7);
-  --formspec-default-text-subtle: var(--formspec-color-dark-mutedForeground, #ad9f8d);
-  --formspec-default-text-faint: #948676;
+  --formspec-default-text: var(--formspec-color-dark-foreground, #E6ECF2);
+  --formspec-default-text-strong: #F4F7FA;
+  --formspec-default-text-muted: var(--formspec-color-dark-muted, #A9B8C8);
+  --formspec-default-text-subtle: var(--formspec-color-dark-mutedForeground, #A9B8C8);
+  --formspec-default-text-faint: #8A9BB0;
   /* Text on fills. The dark fills below keep the saturated light-mode colours, so their label is
    * the light-mode foreground, which the registry's primary/success/danger label pairs check.
    * Nothing reads color.dark.primaryForeground: a theme's dark label, picked for the light
    * color.dark.primary tint, measured 2.0:1 on these fills. */
-  --formspec-default-text-inverse: var(--formspec-color-primaryForeground, #ffffff);
+  --formspec-default-text-inverse: var(--formspec-color-primaryForeground, #FFFFFF);
 
   /* Surfaces — base tokens via color.dark.* Layer A */
-  --formspec-default-bg: var(--formspec-color-dark-background, #161311);
-  --formspec-default-surface: var(--formspec-color-dark-card, #211c19);
-  --formspec-default-surface-muted: var(--formspec-color-dark-surface, #2a241f);
+  --formspec-default-bg: var(--formspec-color-dark-background, #0E1826);
+  --formspec-default-surface: var(--formspec-color-dark-card, #152236);
+  --formspec-default-surface-muted: var(--formspec-color-dark-surface, #1C2D45);
   --formspec-default-tint-base: var(--formspec-default-surface);
-  --formspec-default-surface-subtle: #322b25;
-  --formspec-default-surface-soft: #2c2621;
-  --formspec-default-surface-quiet: #1b1714;
+  --formspec-default-surface-subtle: #1A2A40;
+  --formspec-default-surface-soft: #213450;
+  --formspec-default-surface-quiet: #111D2E;
   --formspec-default-primary-soft: color-mix(in srgb, var(--formspec-default-primary) 20%, var(--formspec-default-bg));
 
   /* Borders — base tokens via color.dark.* Layer A, derivatives computed */
-  --formspec-default-border-input: var(--formspec-color-dark-input, #7b6f61);
-  --formspec-default-border: var(--formspec-color-dark-border, #4f463d);
-  --formspec-default-border-strong: color-mix(in srgb, var(--formspec-default-border) 55%, #c0b4a5);
-  --formspec-default-border-subtle: color-mix(in srgb, var(--formspec-default-border) 70%, var(--formspec-default-bg));
-  --formspec-default-border-muted: #342d27;
-  --formspec-default-border-control: #665a4d;
+  --formspec-default-border-input: var(--formspec-color-dark-input, #7C8DA3);
+  --formspec-default-border: var(--formspec-color-dark-border, #33475F);
+  --formspec-default-border-strong: color-mix(in srgb, var(--formspec-default-border) 55%, #A9B8C8);
+  --formspec-default-border-subtle: color-mix(in srgb, var(--formspec-default-border) 72%, var(--formspec-default-bg));
+  --formspec-default-border-muted: #24354B;
+  --formspec-default-border-control: #4E637D;
 
   /* Accents — base tokens via color.dark.* Layer A */
-  --formspec-default-focus: var(--formspec-color-dark-ring, var(--formspec-color-dark-primary, #8fc6b7));
-  --formspec-default-primary: var(--formspec-color-dark-primary, #8bb8ac);
-  --formspec-default-primary-strong: #b6d7cf;
-  --formspec-default-danger: var(--formspec-color-dark-error, #ff8b7f);
+  --formspec-default-focus: var(--formspec-color-dark-ring, var(--formspec-color-dark-primary, #9DB8FF));
+  --formspec-default-primary: var(--formspec-color-dark-primary, #9DB8FF);
+  --formspec-default-primary-strong: #C2D4FF;
+  --formspec-default-danger: var(--formspec-color-dark-error, #FF9086);
   --formspec-default-error: var(--formspec-default-danger);
-  --formspec-default-danger-strong: #ffb2a9;
-  --formspec-default-success: var(--formspec-color-dark-success, #79c89d);
-  --formspec-default-warning: var(--formspec-color-dark-warning, #e2b35c);
-  --formspec-default-info: var(--formspec-color-dark-info, #82b8f8);
+  --formspec-default-danger-strong: #FFB5AE;
+  --formspec-default-success: var(--formspec-color-dark-success, #7FCFA0);
+  --formspec-default-warning: var(--formspec-color-dark-warning, #F0C04A);
+  --formspec-default-info: var(--formspec-color-dark-info, #9DB8FF);
 
   /* Fills — reference light-mode base tokens (dark buttons use the saturated light-mode colors) */
-  --formspec-default-primary-fill: var(--formspec-color-primary, #27594f);
-  --formspec-default-primary-fill-strong: #2d6f62;
-  --formspec-default-success-fill: var(--formspec-color-success, #2f855a);
-  --formspec-default-danger-fill: var(--formspec-color-error, #c1281f);
+  --formspec-default-primary-fill: var(--formspec-color-primary, #1D3FAE);
+  --formspec-default-primary-fill-strong: #274ECE;
+  --formspec-default-success-fill: var(--formspec-color-success, #1E6B45);
+  --formspec-default-danger-fill: var(--formspec-color-error, #B4232C);
 
   /* Status text */
-  --formspec-default-success-text: #c7efd3;
-  --formspec-default-warning-text: #ffe0a6;
-  --formspec-default-info-text: #d7eaff;
-  --formspec-default-danger-text: #ffc7bf;
+  --formspec-default-success-text: #C3EED4;
+  --formspec-default-warning-text: #FDE5A2;
+  --formspec-default-info-text: #D4E2FF;
+  --formspec-default-danger-text: #FFC9C3;
 
   /* Badges — derived from fills and text */
   --formspec-default-badge-primary-bg: var(--formspec-default-primary-fill);
   --formspec-default-badge-primary-text: var(--formspec-default-text-inverse);
   --formspec-default-badge-success-bg: var(--formspec-default-success-fill);
   --formspec-default-badge-success-text: var(--formspec-default-text-inverse);
-  --formspec-default-badge-warning-bg: #f0c15a;
-  --formspec-default-badge-warning-text: #24160a;
+  --formspec-default-badge-warning-bg: #F0C04A;
+  --formspec-default-badge-warning-text: #0E1826;
   --formspec-default-badge-error-bg: var(--formspec-default-danger-fill);
   --formspec-default-badge-error-text: var(--formspec-default-text-inverse);
 
   /* Rating */
-  --formspec-default-rating-empty: #5f5448;
-  --formspec-default-rating-hover: #f0c15a;
-  --formspec-default-rating-active: #e2b35c;
+  --formspec-default-rating-empty: #41556E;
+  --formspec-default-rating-hover: #F5CD68;
+  --formspec-default-rating-active: #F0C04A;
 
-  /* Readonly */
-  --formspec-default-readonly-field-bg: #1d1916;
-  --formspec-default-readonly-field-border: #463d35;
-  --formspec-default-readonly-field-accent: #9f917f;
-  --formspec-default-readonly-badge-border: #5e5348;
-  --formspec-default-readonly-badge-bg: #2f2823;
-  --formspec-default-readonly-badge-text: #ddd2c4;
-  --formspec-default-readonly-input-bg: #211c18;
-  --formspec-default-readonly-input-border: #4a4037;
-  --formspec-default-readonly-input-text: #d8ccbd;
+  /* Readonly — distinctly recessed/inset vs editable dark-mode cards (#152236) */
+  --formspec-default-readonly-field-bg: #0B1421;
+  --formspec-default-readonly-field-border: #26384E;
+  --formspec-default-readonly-field-accent: #7F93AB;
+  --formspec-default-readonly-badge-border: #485D77;
+  --formspec-default-readonly-badge-bg: #1A2A40;
+  --formspec-default-readonly-badge-text: #D3DFEC;
+  --formspec-default-readonly-input-bg: #0A121E;
+  --formspec-default-readonly-input-border: #2A3D55;
+  --formspec-default-readonly-input-text: #9BAEC2;
+  --formspec-default-checkbox-border: #8FA4BC;
+  --formspec-default-checkbox-bg: #0E1826;
 
   /* Status surfaces — computed from accents and background */
   --formspec-default-danger-surface: color-mix(in srgb, var(--formspec-default-danger) 18%, var(--formspec-default-bg));
   --formspec-default-error-surface: var(--formspec-default-danger-surface);
-  --formspec-default-danger-surface-soft: #2c1c19;
+  --formspec-default-danger-surface-soft: #281721;
   --formspec-default-success-surface: color-mix(in srgb, var(--formspec-default-success) 12%, var(--formspec-default-bg));
   --formspec-default-warning-surface: color-mix(in srgb, var(--formspec-default-warning) 14%, var(--formspec-default-bg));
-  --formspec-default-warning-surface-soft: #241d14;
+  --formspec-default-warning-surface-soft: #231F18;
   --formspec-default-info-surface: color-mix(in srgb, var(--formspec-default-info) 12%, var(--formspec-default-bg));
-  --formspec-default-info-surface-soft: #131c27;
+  --formspec-default-info-surface-soft: #13213A;
 
   /* Shadows */
-  --formspec-default-shadow-sm: 0 10px 22px rgba(0, 0, 0, 0.26);
-  --formspec-default-shadow-md: 0 24px 48px rgba(0, 0, 0, 0.34), 0 6px 18px rgba(0, 0, 0, 0.24);
-  --formspec-default-shadow-elevation-1: 0 10px 18px rgba(0, 0, 0, 0.24);
-  --formspec-default-shadow-elevation-2: 0 14px 28px rgba(0, 0, 0, 0.3);
-  --formspec-default-shadow-elevation-3: 0 20px 36px rgba(0, 0, 0, 0.34);
-  --formspec-default-shadow-elevation-4: 0 26px 44px rgba(0, 0, 0, 0.38);
-  --formspec-default-shadow-elevation-5: 0 32px 56px rgba(0, 0, 0, 0.44);
-  --formspec-default-focus-shadow: 0 0 0 4px color-mix(in srgb, var(--formspec-default-focus) 18%, transparent);
+  --formspec-default-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --formspec-default-shadow-md: 0 12px 28px rgba(0, 0, 0, 0.42), 0 3px 8px rgba(0, 0, 0, 0.28);
+  --formspec-default-shadow-elevation-1: 0 2px 6px rgba(0, 0, 0, 0.28);
+  --formspec-default-shadow-elevation-2: 0 6px 14px rgba(0, 0, 0, 0.34);
+  --formspec-default-shadow-elevation-3: 0 10px 22px rgba(0, 0, 0, 0.38);
+  --formspec-default-shadow-elevation-4: 0 16px 30px rgba(0, 0, 0, 0.42);
+  --formspec-default-shadow-elevation-5: 0 22px 40px rgba(0, 0, 0, 0.48);
+  --formspec-default-focus-shadow: 0 0 0 3px color-mix(in srgb, var(--formspec-default-focus) 24%, transparent);
 }
 
 /* @filedesc Base elements, fields, and shared chrome for the default Formspec skin. */
@@ -536,10 +723,10 @@ formspec-render {
   ):focus,
 .formspec-container :where(textarea):focus,
 .formspec-container :where(select:not(.formspec-select-native)):focus {
-  outline: 2px solid var(--formspec-default-focus);
-  outline-offset: 1px;
+  outline: 3px solid var(--formspec-default-focus);
+  outline-offset: 2px;
   border-color: var(--formspec-default-focus);
-  box-shadow: var(--formspec-default-focus-shadow);
+  box-shadow: none;
 }
 
 .formspec-container :where(input[type="radio"]),
@@ -548,8 +735,21 @@ formspec-render {
   accent-color: var(--formspec-default-primary);
 }
 
-.formspec-field :is(input, select, textarea)[aria-invalid="true"] {
+.formspec-field :is(input, select, textarea)[aria-invalid="true"],
+.formspec-field--invalid .formspec-money,
+.formspec-field--invalid .formspec-money-field,
+.formspec-field--invalid .formspec-input-adornment,
+.formspec-field--invalid .formspec-input-wrapper,
+.formspec-field--invalid .formspec-select-wrapper,
+.formspec-field--invalid .formspec-combobox-row,
+.formspec-field--invalid .formspec-stepper {
   border-color: var(--formspec-default-danger);
+}
+
+.formspec-field--invalid .formspec-radio-group,
+.formspec-field--invalid .formspec-checkbox-group {
+  border-inline-start: 2px solid var(--formspec-default-danger);
+  padding-inline-start: 0.75rem;
 }
 
 .formspec-container :where(label) {
@@ -569,23 +769,23 @@ formspec-render {
 .formspec-container :where(h1) {
   font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   font-size: 1.7rem;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
 }
 
 .formspec-container :where(h2) {
   font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.15;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
 .formspec-container :where(h3) {
   font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   font-size: 1.02rem;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.015em;
 }
@@ -612,6 +812,15 @@ formspec-render {
   flex-direction: column;
   gap: var(--formspec-spacing-xs, 0.25rem);
   margin-bottom: 0;
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
+}
+
+.formspec-field :is(input, select, textarea) {
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
+}
+
+.formspec-container input[type="number"] {
+  font-variant-numeric: tabular-nums;
 }
 
 .formspec-fieldset {
@@ -622,6 +831,7 @@ formspec-render {
   margin: 0;
   padding: 0;
   border: 0;
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
 }
 
 .formspec-legend {
@@ -699,13 +909,40 @@ formspec-render {
 /* When labels wrap to different heights across a grid row, let the label grow
  * so controls align against the bottom edge of the row. */
 .formspec-grid .formspec-field,
-.formspec-grid .formspec-fieldset {
+.formspec-grid .formspec-fieldset,
+.formspec-auto-grid > .formspec-field,
+.formspec-auto-grid > .formspec-fieldset {
   flex: 1;
 }
 
 .formspec-grid .formspec-field > .formspec-label,
-.formspec-grid .formspec-fieldset > .formspec-legend {
+.formspec-grid .formspec-fieldset > .formspec-legend,
+.formspec-auto-grid > .formspec-field > .formspec-label,
+.formspec-auto-grid > .formspec-fieldset > .formspec-legend {
   flex: 1;
+}
+
+.formspec-auto-grid {
+  gap: var(--formspec-spacing-md, 0.875rem) var(--formspec-spacing-field, 0.75rem);
+  align-items: stretch;
+}
+
+.formspec-auto-grid[data-auto-grid="4"] > .formspec-field :where(input:not([type="radio"]):not([type="checkbox"]):not([type="range"]), select),
+.formspec-auto-grid[data-auto-grid="5"] > .formspec-field :where(input:not([type="radio"]):not([type="checkbox"]):not([type="range"]), select),
+.formspec-auto-grid[data-auto-grid="6"] > .formspec-field :where(input:not([type="radio"]):not([type="checkbox"]):not([type="range"]), select) {
+  padding: 0.62rem 0.65rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.formspec-auto-grid[data-auto-grid="4"] > .formspec-field > .formspec-hint,
+.formspec-auto-grid[data-auto-grid="5"] > .formspec-field > .formspec-hint,
+.formspec-auto-grid[data-auto-grid="6"] > .formspec-field > .formspec-hint {
+  font-size: calc(0.78rem * var(--formspec-size-scale, 1));
+  line-height: 1.38;
+}
+
+.formspec-auto-grid > .formspec-field--readonly {
+  padding: 0.55rem 0.65rem;
 }
 
 .formspec-description {
@@ -854,7 +1091,7 @@ h6.formspec-heading {
  * its field and the container's own gap or padding follows. A host stylesheet that re-gaps a listed container
  * by class is not seen. */
 :is(.formspec-stack:not(.grid-row):not(.formspec-stack--horizontal), .formspec-group, .formspec-section,
-  .formspec-repeat-instance, .formspec-card-body, .formspec-collapsible-content, .formspec-wizard-panel):not([style*="gap"])
+  .formspec-repeat-instance, .formspec-card-body, .formspec-collapsible-content, .formspec-wizard-panel):not([style*="gap"]):not(.formspec-auto-grid)
   > :is(.formspec-field:not(.formspec-field--inline), .formspec-fieldset):not(.formspec-field--readonly, [data-formspec-agent-filled]):has(~ :not(.formspec-hidden, [hidden]))
   > .formspec-error:last-child {
   min-height: max(1lh, var(--formspec-spacing-field, 0.75rem));
@@ -864,6 +1101,7 @@ h6.formspec-heading {
 .formspec-required {
   margin-left: 0.125rem;
   color: var(--formspec-default-danger);
+  text-decoration: none;
 }
 
 .formspec-input {
@@ -911,8 +1149,8 @@ h6.formspec-heading {
 .formspec-input-wrapper:focus-within,
 .formspec-input-adornment:focus-within {
   border-color: var(--formspec-default-focus);
-  outline: 2px solid var(--formspec-default-focus);
-  outline-offset: 1px;
+  outline: 3px solid var(--formspec-default-focus);
+  outline-offset: 2px;
   box-shadow: none;
 }
 
@@ -984,11 +1222,87 @@ h6.formspec-heading {
 }
 
 .formspec-field--readonly :is(.formspec-input, input, textarea, select),
+.formspec-field--readonly .formspec-money,
+.formspec-field--readonly .formspec-input-adornment,
 .formspec-field [aria-readonly="true"] {
   color: var(--formspec-default-readonly-input-text);
   background: var(--formspec-default-readonly-input-bg);
   border-color: var(--formspec-default-readonly-input-border);
+  border-style: dashed;
+  box-shadow: inset 0 1px 2px rgba(12, 24, 41, 0.08);
   cursor: default;
+}
+
+.formspec-field--readonly :is(.formspec-money, .formspec-input-adornment) input {
+  border-style: none;
+  box-shadow: none;
+}
+
+/* Long read-only single-line values wrap cleanly across lines while preserving the focusable native <input>. */
+.formspec-readonly-text-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.formspec-readonly-text-wrap[data-readonly-wrapped="true"] {
+  padding: 0.72rem 0.9rem;
+  border: 1px dashed var(--formspec-default-readonly-input-border);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-readonly-input-bg);
+  color: var(--formspec-default-readonly-input-text);
+  box-shadow: inset 0 1px 2px rgba(12, 24, 41, 0.08);
+  box-sizing: border-box;
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-readonly-text-wrap[data-readonly-wrapped="true"]:focus-within {
+  outline: 3px solid var(--formspec-default-focus);
+  outline-offset: 2px;
+  border-color: var(--formspec-default-focus);
+}
+
+.formspec-field--readonly .formspec-input-adornment .formspec-readonly-text-wrap[data-readonly-wrapped="true"] {
+  flex: 1;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.formspec-readonly-text-wrap[data-readonly-wrapped="true"] > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.formspec-readonly-text-value {
+  font-size: calc(0.95rem * var(--formspec-size-scale, 1));
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: inherit;
+}
+
+.formspec-field--readonly input[type="date"]::-webkit-datetime-edit,
+.formspec-field--readonly input[type="datetime-local"]::-webkit-datetime-edit,
+.formspec-field--readonly input[type="time"]::-webkit-datetime-edit,
+.formspec-field--readonly :is(input, textarea)::placeholder {
+  color: var(--formspec-default-text-faint);
+  opacity: 0.8;
+}
+
+.formspec-field--readonly input[type="date"]::-webkit-calendar-picker-indicator,
+.formspec-field--readonly input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.formspec-field--readonly input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .formspec-protected {
@@ -1020,10 +1334,85 @@ h6.formspec-heading {
   align-self: flex-start;
 }
 
+@media print {
+  .formspec-container {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .formspec-workspace__navigation,
+  .formspec-workspace__inline-search,
+  .formspec-workspace__mobile-findings-bar,
+  .formspec-workspace__previous-next,
+  .formspec-action-bar,
+  .formspec-action-control,
+  .formspec-repeat-add,
+  .formspec-repeat-remove,
+  .formspec-repeat-confirm,
+  .formspec-repeat-undo,
+  .formspec-wizard-sidenav,
+  .formspec-wizard-nav,
+  .formspec-wizard-steps,
+  .formspec-tab-bar {
+    display: none !important;
+  }
+
+  .formspec-workspace,
+  .formspec-workspace[data-single-section="true"] {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .formspec-workspace__findings {
+    position: static !important;
+    max-block-size: none !important;
+    overflow: visible !important;
+    margin-top: 1.5rem;
+    border-color: #666;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .formspec-field,
+  .formspec-fieldset,
+  .formspec-repeat-instance,
+  .formspec-card,
+  .formspec-warning-explanation {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  .formspec-container :where(h1, h2, h3, h4),
+  .formspec-group-title,
+  .formspec-section-title,
+  .formspec-repeat-heading {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .formspec-container :where(input, textarea, select),
+  .formspec-field--readonly,
+  .formspec-readonly-text-wrap[data-readonly-wrapped="true"],
+  .formspec-money,
+  .formspec-input-adornment,
+  .formspec-select-wrapper {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #666 !important;
+    box-shadow: none !important;
+  }
+
+  .formspec-container textarea {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}
+
 /* @filedesc Shared utility classes for reusable default-skin interaction patterns. */
 
 .formspec-focus-ring:focus-visible {
-  outline: 2px solid var(--formspec-default-focus);
+  outline: 3px solid var(--formspec-default-focus);
   outline-offset: 2px;
 }
 
@@ -1036,7 +1425,7 @@ h6.formspec-heading {
   input[type="radio"],
   input[type="range"]
 ):focus-visible {
-  outline: 2px solid var(--formspec-default-focus);
+  outline: 3px solid var(--formspec-default-focus);
   outline-offset: 2px;
 }
 
@@ -1219,8 +1608,8 @@ h6.formspec-heading {
 .formspec-money-field:focus-within,
 .formspec-stepper:focus-within {
   border-color: var(--formspec-default-focus);
-  outline: 2px solid var(--formspec-default-focus);
-  outline-offset: 1px;
+  outline: 3px solid var(--formspec-default-focus);
+  outline-offset: 2px;
   box-shadow: none;
 }
 
@@ -1352,6 +1741,61 @@ h6.formspec-heading {
   cursor: pointer;
 }
 
+/* Dark mode: crisp SC 1.4.11 (>= 3:1) borders on unchecked checkboxes & radios. */
+.formspec-container.formspec-appearance-dark :is(
+  .formspec-field--inline > input[type="checkbox"]:not([role="switch"]),
+  .formspec-checkbox-group input[type="checkbox"],
+  .formspec-radio-group input[type="radio"]
+) {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  border: 1.5px solid var(--formspec-default-checkbox-border);
+  background: var(--formspec-default-checkbox-bg);
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-container.formspec-appearance-dark :is(
+  .formspec-field--inline > input[type="checkbox"]:not([role="switch"]),
+  .formspec-checkbox-group input[type="checkbox"]
+) {
+  border-radius: var(--formspec-default-radius-sm);
+}
+
+.formspec-container.formspec-appearance-dark .formspec-radio-group input[type="radio"] {
+  border-radius: 50%;
+}
+
+.formspec-container.formspec-appearance-dark :is(
+  .formspec-field--inline > input[type="checkbox"]:not([role="switch"]),
+  .formspec-checkbox-group input[type="checkbox"],
+  .formspec-radio-group input[type="radio"]
+):checked {
+  border-color: var(--formspec-default-primary-fill);
+  background: var(--formspec-default-primary-fill);
+}
+
+.formspec-container.formspec-appearance-dark :is(
+  .formspec-field--inline > input[type="checkbox"]:not([role="switch"]),
+  .formspec-checkbox-group input[type="checkbox"]
+):checked::before {
+  content: "";
+  width: 0.62rem;
+  height: 0.36rem;
+  border-left: 2px solid var(--formspec-default-text-inverse);
+  border-bottom: 2px solid var(--formspec-default-text-inverse);
+  transform: rotate(-45deg) translate(0.5px, -1px);
+}
+
+.formspec-container.formspec-appearance-dark .formspec-radio-group input[type="radio"]:checked::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--formspec-default-text-inverse);
+}
+
 /* Native select — bordered control + custom chevron (matches text inputs) */
 .formspec-select-wrapper {
   position: relative;
@@ -1371,47 +1815,69 @@ h6.formspec-heading {
   max-width: 100%;
 }
 
-/* Match standalone inputs: crisp outline + border tint; skip the extra focus glow (reads too soft on wrappers). */
+/* Match standalone inputs: crisp 3px outline + border tint; skip the extra focus glow (reads too soft on wrappers). */
 .formspec-select-wrapper:focus-within {
   border-color: var(--formspec-default-focus);
-  outline: 2px solid var(--formspec-default-focus);
-  outline-offset: 1px;
+  outline: 3px solid var(--formspec-default-focus);
+  outline-offset: 2px;
   box-shadow: none;
 }
 
 /* Wrapper supplies the focus ring; inner select has no radius — avoid a square outline on the control. */
+.formspec-select-wrapper select:focus,
 .formspec-select-wrapper select.formspec-input:focus,
 .formspec-select-wrapper select.formspec-select-native:focus {
   outline: none;
   box-shadow: none;
 }
 
+.formspec-select-wrapper select,
 .formspec-select-wrapper select.formspec-input,
 .formspec-select-wrapper select.formspec-select-native {
   flex: 1;
   min-width: 0;
+  width: 100%;
   margin: 0;
-  padding: 0.8rem 2.65rem 0.8rem 0.95rem;
+  padding: 0.72rem 2.5rem 0.72rem 0.9rem;
   border: none;
   border-radius: 0;
   background: transparent;
+  background-color: transparent;
+  background-image: none;
   font-size: calc(0.9375rem * var(--formspec-size-scale, 1));
   line-height: 1.4;
   color: var(--formspec-default-text);
   box-shadow: none;
   appearance: none;
   -webkit-appearance: none;
+  -moz-appearance: none;
   cursor: pointer;
+}
+
+.formspec-select-wrapper select::-ms-expand {
+  display: none;
+}
+
+.formspec-field--readonly .formspec-select-wrapper {
+  background: var(--formspec-default-readonly-input-bg);
+  border-color: var(--formspec-default-readonly-input-border);
+}
+
+.formspec-field--readonly .formspec-select-wrapper select,
+.formspec-field--readonly .formspec-select-wrapper select.formspec-select-native {
+  background: transparent;
+  background-image: none;
+  border: none;
 }
 
 .formspec-select-wrapper::after {
   content: '';
   position: absolute;
-  right: 0.65rem;
+  right: 0.85rem;
   top: 50%;
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-top: -0.35rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-top: -0.32rem;
   border-right: 2px solid var(--formspec-default-text-subtle);
   border-bottom: 2px solid var(--formspec-default-text-subtle);
   transform: rotate(45deg);
@@ -1516,8 +1982,8 @@ h6.formspec-heading {
 
 .formspec-combobox-row:focus-within {
   border-color: var(--formspec-default-focus);
-  outline: 2px solid var(--formspec-default-focus);
-  outline-offset: 1px;
+  outline: 3px solid var(--formspec-default-focus);
+  outline-offset: 2px;
   box-shadow: none;
 }
 
@@ -1648,6 +2114,11 @@ h6.formspec-heading {
   flex: 1;
   border: none;
   border-radius: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.formspec-money-amount {
+  font-variant-numeric: tabular-nums;
 }
 
 .formspec-stepper {
@@ -2034,10 +2505,56 @@ hr.formspec-divider {
 .formspec-group,
 .formspec-section {
   position: relative;
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
 }
 
 .formspec-group {
   padding: 0.45rem 0 1.1rem;
+}
+
+.formspec-group--invalid,
+.formspec-repeat--invalid,
+.formspec-repeat-instance--invalid {
+  border-inline-start: 3px solid var(--formspec-default-danger);
+  padding-inline-start: 0.875rem;
+}
+
+.formspec-repeat-instance--invalid {
+  border-color: color-mix(in srgb, var(--formspec-default-danger) 55%, var(--formspec-default-border));
+  border-inline-start: 3px solid var(--formspec-default-danger);
+}
+
+.formspec-group-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.55rem 0.75rem;
+  border-inline-start: 3px solid var(--formspec-default-danger);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-danger-surface);
+  color: var(--formspec-default-danger-text);
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
+  line-height: 1.45;
+}
+
+.formspec-group-errors p {
+  margin: 0;
+}
+
+.formspec-repeat,
+.formspec-repeat-instance {
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
+}
+
+.formspec-repeat-heading {
+  margin: 0 0 0.5rem;
+  max-width: 72ch;
+  color: var(--formspec-default-text-strong);
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
+  font-size: calc(1rem * var(--formspec-size-scale, 1));
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
 }
 
 .formspec-group + .formspec-group {
@@ -2076,11 +2593,12 @@ hr.formspec-divider {
 
 .formspec-repeat-instance-label {
   margin: 0;
+  min-width: 0;
   color: var(--formspec-default-text-strong);
-  font-size: calc(0.8125rem * var(--formspec-size-scale, 1));
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 650;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
+  line-height: 1.35;
+  letter-spacing: 0;
 }
 
 .formspec-panel {
@@ -2529,11 +3047,15 @@ hr.formspec-divider {
 .formspec-modal-trigger,
 .formspec-popover-trigger,
 .formspec-repeat-add,
-.formspec-repeat-remove,
 .formspec-screener-continue,
 .formspec-submit,
 .formspec-datatable-add {
   min-height: 2.75rem;
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-repeat-remove {
+  min-height: 2.25rem;
   transition: var(--formspec-default-transition-fast);
 }
 
@@ -2543,11 +3065,16 @@ hr.formspec-divider {
   margin-top: var(--formspec-spacing-sm, 0.5rem);
 }
 
+/* Secondary outline treatment so repeater Add never competes with primary Submit CTAs. */
 .formspec-repeat-add {
-  padding: 0.72rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 88%, var(--formspec-default-tint-base));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.62rem 1rem;
+  border: 1px solid var(--formspec-default-primary);
   border-radius: var(--formspec-default-radius-sm);
-  background: color-mix(in srgb, var(--formspec-default-surface) 84%, var(--formspec-default-tint-base));
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-primary);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
@@ -2557,11 +3084,12 @@ hr.formspec-divider {
   -webkit-appearance: none;
 }
 
-.formspec-repeat-add {
-  color: var(--formspec-default-primary);
+.formspec-repeat-add:hover:not(:disabled) {
+  color: var(--formspec-default-primary-strong);
+  background: var(--formspec-default-primary-soft);
+  border-color: var(--formspec-default-primary-strong);
 }
 
-.formspec-repeat-add,
 .formspec-submit,
 .formspec-screener-continue {
   color: var(--formspec-default-text-inverse);
@@ -2569,20 +3097,111 @@ hr.formspec-divider {
   border-color: var(--formspec-default-primary-fill);
 }
 
-.formspec-repeat-add:hover {
-  color: var(--formspec-default-text-inverse);
-  background: var(--formspec-default-primary-fill-strong);
-}
-
+/* Compact subtle/outline destructive Remove button — never a multi-line solid crimson block. */
 .formspec-repeat-remove {
-  padding: 0.72rem 1rem;
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--formspec-default-danger) 55%, var(--formspec-default-border));
+  border-radius: var(--formspec-default-radius-sm);
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: var(--formspec-default-danger-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
   letter-spacing: 0.01em;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--formspec-default-danger-fill) 16%, transparent);
+  box-shadow: none;
+  cursor: pointer;
 }
 
-.formspec-repeat-remove:hover {
-  box-shadow: 0 12px 22px color-mix(in srgb, var(--formspec-default-danger-fill) 22%, transparent);
+.formspec-repeat-remove:hover:not(:disabled) {
+  background: var(--formspec-default-danger-surface);
+  border-color: var(--formspec-default-danger);
+  color: var(--formspec-default-danger-text);
+  box-shadow: none;
+}
+
+.formspec-repeat-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.formspec-repeat-confirm-prompt {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--formspec-default-danger-text);
+}
+
+.formspec-repeat-confirm-yes {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--formspec-default-danger-fill);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-danger-fill);
+  color: var(--formspec-default-text-inverse);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.formspec-repeat-confirm-cancel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--formspec-default-border-input);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.formspec-repeat-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--formspec-default-border);
+  border-inline-start: 3px solid var(--formspec-default-primary);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface-subtle);
+  color: var(--formspec-default-text);
+  font-size: 0.84rem;
+}
+
+.formspec-repeat-undo-button {
+  min-height: 2rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--formspec-default-primary);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.formspec-repeat-undo-button:hover {
+  background: var(--formspec-default-primary-soft);
 }
 
 .formspec-submit {
@@ -2594,22 +3213,72 @@ hr.formspec-divider {
   min-width: 9.75rem;
   align-self: flex-start;
   margin-top: 1rem;
-  padding: 0.82rem 1.2rem;
-  border: none;
+  padding: 0.72rem 1.2rem;
+  border: 1px solid var(--formspec-default-primary-fill);
   border-radius: var(--formspec-default-radius-sm);
   appearance: none;
   -webkit-appearance: none;
   font-family: inherit;
   font-size: 0.92rem;
-  font-weight: 600;
-  letter-spacing: 0.012em;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--formspec-default-primary) 14%, transparent);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: none;
 }
 
 .formspec-submit:hover {
   color: var(--formspec-default-text-inverse);
   background: var(--formspec-default-primary-fill-strong);
-  box-shadow: 0 12px 22px color-mix(in srgb, var(--formspec-default-primary) 18%, transparent);
+  border-color: var(--formspec-default-primary-fill-strong);
+  box-shadow: none;
+}
+
+.formspec-submit:disabled,
+.formspec-submit[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Action hierarchy: non-submit actions (Save draft, Check every answer, Review) take crisp secondary outline treatment. */
+.formspec-action[data-action-intent]:not([data-action-intent="submit"]) {
+  color: var(--formspec-default-text);
+  background: color-mix(in srgb, var(--formspec-default-surface) 88%, var(--formspec-default-tint-base));
+  border: 1px solid var(--formspec-default-border-input);
+  box-shadow: none;
+}
+
+.formspec-action[data-action-intent]:not([data-action-intent="submit"]):hover:not(:disabled):not([aria-disabled="true"]) {
+  color: var(--formspec-default-text-strong);
+  background: var(--formspec-default-surface-soft);
+  border-color: var(--formspec-default-border-strong);
+  box-shadow: none;
+}
+
+.formspec-action-bar {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--formspec-default-border-subtle);
+  gap: 0.625rem;
+}
+
+.formspec-action-control {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.formspec-action-bar .formspec-submit {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.formspec-action-status:empty {
+  display: none;
+}
+
+.formspec-action-status {
+  font-size: 0.84rem;
+  color: var(--formspec-default-text-subtle);
 }
 
 .formspec-modal,
@@ -2767,7 +3436,7 @@ hr.formspec-divider {
   appearance: none;
   -webkit-appearance: none;
   background: none;
-  color: var(--formspec-default-text-subtle);
+  color: var(--formspec-default-text);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 500;
@@ -3129,6 +3798,559 @@ hr.formspec-divider {
   font-weight: 560;
 }
 
+/* ── Core workspace mode (sticky section rail, controls, bounded findings margin) ── */
+
+/* Suppress spurious programmatic/click focus rings on outer workspace wrapper. */
+.formspec-workspace:focus,
+.formspec-workspace-container:focus,
+.formspec-workspace__content:focus:not(:focus-visible),
+.formspec-container:focus:not(:focus-visible),
+.formspec-workspace__content > :is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.formspec-workspace__mobile-findings-bar {
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--formspec-default-border);
+  border-radius: var(--formspec-default-radius-md);
+  background: var(--formspec-default-surface-quiet);
+  font-size: 0.84rem;
+  color: var(--formspec-default-text);
+}
+
+.formspec-workspace__mobile-findings-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.formspec-workspace__mobile-findings-jump {
+  min-height: 2.15rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--formspec-default-border-input);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-primary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.formspec-workspace__navigation {
+  min-width: 0;
+  padding: 0.875rem;
+  border: 1px solid var(--formspec-default-border);
+  border-radius: var(--formspec-default-radius-md);
+  background: var(--formspec-default-surface-quiet);
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.formspec-workspace__nav-toggle {
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  margin-bottom: 0;
+  border: 1px solid var(--formspec-default-border);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text-strong);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.formspec-workspace__navigation[data-mobile-open="true"] .formspec-workspace__nav-toggle {
+  margin-bottom: 0.75rem;
+}
+
+.formspec-workspace__search {
+  margin-bottom: 0.875rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--formspec-default-border-subtle);
+}
+
+.formspec-workspace__inline-search {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--formspec-default-border-subtle);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface-quiet);
+}
+
+.formspec-workspace__navigation nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.formspec-workspace__section-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.625rem 0.5rem 0.65rem;
+  border: 1px solid transparent;
+  border-inline-start: 4px solid transparent;
+  border-radius: var(--formspec-default-radius-sm);
+  transition: var(--formspec-default-transition-fast);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .formspec-workspace__section-item:not([data-current="true"]):not(:has([aria-current])):hover {
+    background: var(--formspec-default-surface-soft);
+    border-color: var(--formspec-default-border-muted);
+    border-inline-start-color: var(--formspec-default-border-strong);
+  }
+}
+
+.formspec-workspace__section-item[data-current="true"],
+.formspec-workspace__section-item:has([aria-current]) {
+  background: var(--formspec-default-surface);
+  border-color: var(--formspec-default-border);
+  border-inline-start: 4px solid var(--formspec-default-primary);
+}
+
+.formspec-workspace__section-item > :is(a, button) {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: var(--formspec-default-text);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.formspec-workspace__section-item > :is(a, button)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.formspec-workspace__section-item > :is(a, button)[aria-current] {
+  color: var(--formspec-default-text-strong);
+  font-weight: 700;
+}
+
+.formspec-workspace__section-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.formspec-workspace__section-bar-track {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.formspec-workspace__section-bar {
+  display: flex;
+  block-size: 6px;
+  min-inline-size: 16%;
+  max-inline-size: 100%;
+  background: var(--formspec-default-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--formspec-default-border-strong);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.formspec-workspace__section-bar-fill {
+  display: block;
+  block-size: 100%;
+  background: var(--formspec-default-primary);
+  transition: inline-size 0.2s ease;
+}
+
+.formspec-workspace__section-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--formspec-default-text-subtle);
+}
+
+.formspec-workspace__section-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.28rem;
+  border-radius: 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.formspec-workspace__section-badge--fix {
+  color: var(--formspec-default-danger);
+  border: 1px solid var(--formspec-default-danger);
+  background: var(--formspec-default-danger-surface);
+}
+
+.formspec-workspace__section-badge--check {
+  color: var(--formspec-default-warning);
+  border: 1px dashed var(--formspec-default-warning);
+  background: var(--formspec-default-warning-surface);
+}
+
+.formspec-workspace__section-badge--required {
+  color: var(--formspec-default-text-strong);
+  border: 1px solid var(--formspec-default-border-strong);
+  background: var(--formspec-default-surface-muted);
+}
+
+.formspec-workspace__navigation label,
+.formspec-workspace__inline-search label {
+  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--formspec-default-text-subtle);
+}
+
+.formspec-workspace__navigation input[type="search"],
+.formspec-workspace__inline-search input[type="search"] {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--formspec-default-border-input);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.formspec-workspace__navigation p[role="status"],
+.formspec-workspace__inline-search p[role="status"] {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--formspec-default-text-subtle);
+}
+
+.formspec-workspace__search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-block-size: 15rem;
+  overflow-y: auto;
+}
+
+.formspec-workspace__search-results button {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--formspec-default-border-subtle);
+  border-radius: var(--formspec-default-radius-sm);
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  text-align: start;
+  cursor: pointer;
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-workspace__search-results button:hover {
+  border-color: var(--formspec-default-border-strong);
+  background: var(--formspec-default-surface-soft);
+}
+
+.formspec-workspace__search-results small {
+  display: block;
+  margin-top: 0.125rem;
+  color: var(--formspec-default-text-subtle);
+  font-size: 0.75rem;
+}
+
+.formspec-workspace__content {
+  min-width: 0;
+}
+
+.formspec-workspace__content > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
+}
+
+.formspec-workspace__previous-next {
+  justify-content: space-between;
+  margin-block: 1.5rem 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--formspec-default-border-subtle);
+}
+
+.formspec-workspace__previous-next button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.55rem 1.05rem;
+  border: 1px solid var(--formspec-default-border-input);
+  border-radius: var(--formspec-default-radius-sm);
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-workspace__previous-next button:hover:not(:disabled) {
+  border-color: var(--formspec-default-border-strong);
+  background: var(--formspec-default-surface-soft);
+}
+
+.formspec-workspace__previous-next button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.formspec-workspace__findings {
+  min-width: 0;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--formspec-default-border);
+  border-radius: var(--formspec-default-radius-md);
+  background: var(--formspec-default-surface-quiet);
+  overflow-x: hidden;
+  box-sizing: border-box;
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
+}
+
+.formspec-workspace__findings > :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.formspec-workspace__findings > p {
+  margin: 0 0 0.625rem;
+  font-size: 0.84rem;
+  color: var(--formspec-default-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.formspec-workspace__findings-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.625rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.formspec-workspace__findings ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.formspec-workspace__findings li {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--formspec-default-border-subtle);
+  border-inline-start: 3px solid var(--formspec-default-border-strong);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.formspec-workspace__findings li[data-severity="error"] {
+  border-inline-start-color: var(--formspec-default-danger);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+}
+
+.formspec-workspace__findings li[data-severity="warning"] {
+  border-inline-start-color: var(--formspec-default-warning);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+}
+
+.formspec-workspace__findings li[data-severity="info"] {
+  border-inline-start-color: var(--formspec-default-info);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+}
+
+.formspec-workspace__findings li[data-finding-scope="other"] {
+  background: var(--formspec-default-surface-subtle);
+}
+
+.formspec-workspace__findings li[data-explained="true"] {
+  border-inline-start-color: var(--formspec-default-success);
+  background: var(--formspec-default-surface-quiet);
+  color: var(--formspec-default-text-muted);
+}
+
+.formspec-workspace__finding-status {
+  display: inline-block;
+  margin-inline-start: 0.4rem;
+  padding: 0.05rem 0.38rem;
+  border: 1px solid color-mix(in srgb, var(--formspec-default-success) 45%, var(--formspec-default-border));
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-success-surface);
+  color: var(--formspec-default-success-text);
+  font-size: 0.72rem;
+  font-weight: 650;
+  vertical-align: baseline;
+}
+
+.formspec-workspace__findings li:not(:has(button)) {
+  padding: 0.5rem 0.65rem;
+}
+
+.formspec-workspace__findings li button {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  border: none;
+  border-radius: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  text-align: start;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  cursor: pointer;
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-workspace__findings li button:hover {
+  background: var(--formspec-default-surface-soft);
+}
+
+.formspec-workspace__required-disclosure {
+  margin-top: 0.625rem;
+  border: 1px solid var(--formspec-default-border);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  overflow: hidden;
+}
+
+.formspec-workspace__required-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  cursor: pointer;
+  list-style: none;
+  color: var(--formspec-default-text-strong);
+  background: var(--formspec-default-surface-subtle);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.formspec-workspace__required-summary::-webkit-details-marker {
+  display: none;
+}
+
+.formspec-workspace__required-summary::after {
+  content: '▾';
+  flex-shrink: 0;
+  color: var(--formspec-default-text-subtle);
+  font-size: 0.78rem;
+}
+
+.formspec-workspace__required-disclosure[open] > .formspec-workspace__required-summary {
+  border-bottom: 1px solid var(--formspec-default-border-subtle);
+}
+
+.formspec-workspace__required-disclosure[open] > .formspec-workspace__required-summary::after {
+  content: '▴';
+}
+
+.formspec-workspace__required-summary:hover {
+  background: var(--formspec-default-surface-soft);
+}
+
+.formspec-workspace__findings ul.formspec-workspace__required-list {
+  padding: 0.4rem;
+  gap: 0.3rem;
+}
+
+.formspec-workspace__findings ul.formspec-workspace__required-list li {
+  border-inline-start-color: var(--formspec-default-border-strong);
+  background: var(--formspec-default-surface-quiet);
+}
+
+.formspec-workspace__required-section {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.75rem;
+  color: var(--formspec-default-text-subtle);
+}
+
+@container formspec-workspace (width > 48rem) {
+  .formspec-workspace__findings {
+    position: sticky;
+    top: var(--formspec-sticky-offset, 6.5rem);
+    align-self: start;
+    max-block-size: calc(100dvh - var(--formspec-sticky-offset, 6.5rem) - 1rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+@container formspec-workspace (width > 62rem) {
+  .formspec-workspace__navigation {
+    position: sticky;
+    top: var(--formspec-sticky-offset, 6.5rem);
+    align-self: start;
+    max-block-size: calc(100dvh - var(--formspec-sticky-offset, 6.5rem) - 1rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
 /* @filedesc Data display and validation affordances for the default Formspec skin. */
 
 .formspec-data-table-wrapper {
@@ -3314,6 +4536,161 @@ hr.formspec-divider {
   color: inherit;
   text-align: left;
   text-decoration: underline;
+}
+
+/* Warning explanations and grouped blank-answer acknowledgements.
+ * Distinct header + body blocks ensure borders never slice through wrapped text. */
+.formspec-warning-explanation {
+  display: flex;
+  flex-direction: column;
+  margin: 0.5rem 0 0.25rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--formspec-default-warning) 35%, var(--formspec-default-border));
+  border-inline-start: 3px solid var(--formspec-default-warning);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-warning-surface-soft);
+  color: var(--formspec-default-text);
+  overflow: hidden;
+  scroll-margin-top: calc(var(--formspec-sticky-offset, 8.5rem) + 1.25rem);
+}
+
+.formspec-warning-explanation[data-state="saved"] {
+  border-color: color-mix(in srgb, var(--formspec-default-success) 32%, var(--formspec-default-border));
+  border-inline-start-color: var(--formspec-default-success);
+  background: var(--formspec-default-success-surface);
+}
+
+.formspec-warning-explanation-header {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-warning) 22%, var(--formspec-default-border-subtle));
+  background: var(--formspec-default-warning-surface);
+  color: var(--formspec-default-warning-text);
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
+
+.formspec-warning-explanation[data-state="saved"] .formspec-warning-explanation-header {
+  border-bottom-color: color-mix(in srgb, var(--formspec-default-success) 20%, var(--formspec-default-border-subtle));
+  background: color-mix(in srgb, var(--formspec-default-success) 10%, var(--formspec-default-surface));
+  color: var(--formspec-default-success-text);
+}
+
+/* Defensive reset if a downstream renderer wraps warning explanations in native <fieldset><legend>. */
+fieldset.formspec-warning-explanation {
+  min-width: 0;
+}
+
+fieldset.formspec-warning-explanation > legend {
+  float: left;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--formspec-default-warning) 22%, var(--formspec-default-border-subtle));
+  background: var(--formspec-default-warning-surface);
+  color: var(--formspec-default-warning-text);
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+fieldset.formspec-warning-explanation > legend + * {
+  clear: both;
+}
+
+.formspec-warning-explanation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem 0.85rem;
+}
+
+.formspec-warning-explanation-body label {
+  margin-bottom: 0;
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
+  font-weight: 560;
+  color: var(--formspec-default-text);
+}
+
+.formspec-warning-explanation-body textarea {
+  margin-top: 0.35rem;
+  min-height: 4.25rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text);
+}
+
+.formspec-warning-explanation-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.formspec-warning-explanation-action {
+  align-self: flex-start;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--formspec-default-border-input);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface);
+  color: var(--formspec-default-text-strong);
+  font: inherit;
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: var(--formspec-default-transition-fast);
+}
+
+.formspec-warning-explanation-action:hover:not(:disabled) {
+  border-color: var(--formspec-default-border-strong);
+  background: var(--formspec-default-surface-soft);
+}
+
+/* High-contrast disabled/saved state in both Light and Dark mode (no opacity wash-out). */
+.formspec-warning-explanation-action:disabled {
+  opacity: 1;
+  background: var(--formspec-default-surface-subtle);
+  border-color: var(--formspec-default-border);
+  color: var(--formspec-default-text-muted);
+  cursor: default;
+}
+
+.formspec-warning-explanation-action[data-state="saved"]:disabled {
+  background: var(--formspec-default-success-surface);
+  border-color: color-mix(in srgb, var(--formspec-default-success) 45%, var(--formspec-default-border));
+  color: var(--formspec-default-success-text);
+}
+
+.formspec-warning-acknowledgement-list {
+  margin: 0;
+  padding-inline-start: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
+}
+
+.formspec-warning-acknowledgement-list a {
+  color: var(--formspec-default-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.formspec-warning-acknowledgement-list a:hover {
+  color: var(--formspec-default-primary-strong);
+}
+
+.formspec-warning-acknowledgement-added,
+.formspec-warning-acknowledgement-removed {
+  margin: 0;
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
+  color: var(--formspec-default-text-subtle);
 }
 
 /* @filedesc Motion and responsive accessibility adjustments for the default Formspec skin. */

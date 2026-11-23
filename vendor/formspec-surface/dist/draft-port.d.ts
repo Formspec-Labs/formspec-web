@@ -1,6 +1,6 @@
 /** @filedesc Qualified draft storage and progress reads for Surface hosts. */
-import type { DecidedDisposition, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
-import type { ProgressCounts } from '@formspec-org/layout';
+import type { DraftExplanation } from '@formspec-org/engine';
+import type { DecidedDisposition, DraftProgressCounts, DraftProgressSummary, Explanation, FilingStatusSubjectPredicate, FormDefinition, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
 import type { DataSourceSubject } from './data-source-loader.js';
 export interface DraftKey {
     scope: string;
@@ -10,10 +10,19 @@ export interface DraftKey {
         id: string;
     }) | undefined;
 }
-export type FilingProgressCounts = Readonly<Pick<ProgressCounts, 'total' | 'filled' | 'toFix' | 'toCheck'>>;
+export type FilingProgressCounts = Readonly<DraftProgressCounts>;
 export interface DraftSectionPlacement {
     id?: string;
     fields: readonly string[];
+}
+export interface FilingSubjectPredicate {
+    key: string;
+    op: FilingStatusSubjectPredicate['op'];
+    value: string | number;
+}
+export interface FilingSubjectMatch {
+    type: string;
+    predicates: readonly FilingSubjectPredicate[];
 }
 export interface FilingDraftQuery {
     /** Correlates a result to this Definition, subject, and section plan within the batch. */
@@ -21,22 +30,28 @@ export interface FilingDraftQuery {
     definitionUrl: string;
     definitionVersion: string;
     subject?: DataSourceSubject;
+    /** Selects a single filing unit by subject-key predicates when the URL does not supply every key directly. */
+    subjectMatch?: FilingSubjectMatch;
     sections: readonly DraftSectionPlacement[];
 }
-export type CurrentDraftProgress = {
-    status: 'current';
-    form: FilingProgressCounts & {
-        ready: boolean | null;
-    };
-    sections: Readonly<Record<string, FilingProgressCounts>>;
+export type CurrentDraftProgress = DraftProgressSummary;
+/**
+ * Copy exactly the `schemas/draft-progress-summary.schema.json` fields of a progress value.
+ * Field paths, messages and any other caller-attached members are dropped; when `allowedSectionIds`
+ * is provided, only section keys declared in that plan are retained. A value that cannot be
+ * represented by the closed schema yields `undefined` so the caller stores no counts.
+ */
+export declare function canonicalDraftProgress(value: unknown, allowedSectionIds?: ReadonlySet<string> | readonly string[]): CurrentDraftProgress | undefined;
+export type MatchedFilingDraftObservation = CurrentDraftProgress | {
+    status: 'absent' | 'stale' | 'unavailable';
 };
-export type FilingDraftObservation = CurrentDraftProgress | {
-    status: 'absent' | 'denied' | 'stale' | 'unavailable';
+export type FilingDraftObservation = MatchedFilingDraftObservation | {
+    status: 'denied';
 };
-export type FilingObservation = {
+export type MatchedFilingObservation = {
     status: 'none';
 } | {
-    status: 'denied' | 'unavailable';
+    status: 'unavailable';
 } | {
     status: 'filed' | DecidedDisposition['review'];
     receiptRef: string;
@@ -44,11 +59,33 @@ export type FilingObservation = {
     review: 'available' | 'unavailable';
     comments: readonly string[];
     sample?: 'preview-submit' | 'fixture';
+    progress?: CurrentDraftProgress;
 };
-export interface FilingStatusObservation {
+export type FilingObservation = MatchedFilingObservation | {
+    status: 'denied';
+};
+export type FilingStatusObservation = {
     draft: FilingDraftObservation;
     filing: FilingObservation;
-}
+    subject?: undefined;
+    subjectMatch?: undefined;
+} | {
+    draft: MatchedFilingDraftObservation;
+    filing: MatchedFilingObservation;
+    /** Resolved filing unit when the query used `subjectMatch`. */
+    subject: DataSourceSubject;
+    subjectMatch: 'matched';
+} | {
+    draft: {
+        status: 'absent' | 'unavailable';
+    };
+    filing: {
+        status: 'none' | 'unavailable';
+    };
+    subject?: undefined;
+    subjectMatch: 'none' | 'ambiguous';
+};
+export declare function matchesFilingSubjectPredicates(definition: FormDefinition, subject: DataSourceSubject | undefined, match: FilingSubjectMatch): boolean;
 export type FilingStatusReader = (queries: readonly FilingDraftQuery[], input: {
     previewScope: string | undefined;
     signal: AbortSignal;
@@ -67,6 +104,10 @@ export interface DraftSaveInput extends Omit<DraftRecord, 'revision' | 'pins'> {
     definitionVersion: string;
     /** Null means the caller observed no draft. */
     expectedRevision: string | null;
+    /** Required on a creating save for at-open reads. The adapter compares these with its own selection. */
+    creationPins?: DraftRecord['pins'];
+    /** Pending and stamped warning explanations edited in the draft session. */
+    explanations?: readonly DraftExplanation[];
     /** Null invalidates counts for this revision. */
     summary: {
         sections: readonly DraftSectionPlacement[];
@@ -83,15 +124,32 @@ export type DraftLoadResult = {
     status: 'loaded';
     draft: DraftRecord;
 } | {
+    status: 'initialized';
+    revision: string;
+    pins: DraftRecord['pins'];
+} | {
     status: 'absent';
 } | {
     status: 'version-mismatch';
     storedVersion: string;
     revision: string;
 } | DraftRefusal;
+export type FilingLoadResult = {
+    status: 'loaded';
+    filing: {
+        responseJson: string;
+        definitionVersion: string;
+        observation: Extract<MatchedFilingObservation, {
+            receiptRef: string;
+        }>;
+    };
+} | {
+    status: 'absent';
+} | DraftRefusal;
 export type DraftSaveResult = {
     status: 'saved';
     revision: string;
+    explanations?: readonly Explanation[];
 } | {
     status: 'pin-unavailable';
     instance: string;
@@ -99,15 +157,37 @@ export type DraftSaveResult = {
 export type DraftRestartResult = {
     status: 'discarded';
 } | DraftWriteRefusal;
+/** Parent keys only. The same attempt must recover the same initialized unit. */
+export interface DraftStartInput {
+    scope: string;
+    definitionUrl: string;
+    definitionVersion: string;
+    subject: DataSourceSubject;
+    attemptId: string;
+}
+export type DraftStartResult = {
+    status: 'started';
+    subject: NonNullable<DraftKey['subject']>;
+} | {
+    status: 'invalid-subject' | 'conflict';
+} | {
+    status: 'pin-unavailable';
+    instance: string;
+} | DraftRefusal;
 export interface DraftPort {
+    /** A store offering explicit unit creation authorizes open before lookup or minting. */
+    start?(input: DraftStartInput): Promise<DraftStartResult>;
     /** Authorize before looking up a draft or disclosing its pin. */
     load(key: DraftKey, definitionVersion: string, signal?: AbortSignal): Promise<DraftLoadResult>;
+    /** Authorize and load the latest completed filing (response JSON + decision observation) for this filing unit. */
+    loadFiling?(key: DraftKey, definitionVersion: string, signal?: AbortSignal): Promise<FilingLoadResult>;
     /** Compare the revision and commit both draft pieces and progress atomically. */
     save(input: DraftSaveInput): Promise<DraftSaveResult>;
     readSummaries: FilingStatusReader;
 }
 /** Browser preview can discard an authorized mismatched revision on confirmation. */
 export interface BrowserDraftPort extends DraftPort {
+    start(input: DraftStartInput): Promise<DraftStartResult>;
     restart(key: DraftKey, expectedRevision: string): Promise<DraftRestartResult>;
     subscribe(listener: () => void): () => void;
 }

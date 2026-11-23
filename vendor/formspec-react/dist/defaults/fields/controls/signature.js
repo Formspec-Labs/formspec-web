@@ -3,9 +3,9 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useRef, useEffect } from 'react';
 import { useChromeText } from '../../../use-chrome-text';
-export function SignatureControl({ field, node, describedBy, }) {
+export function SignatureControl({ field, node, describedBy, isReadonly = false, }) {
     const chrome = useChromeText();
-    const showError = !!(field.error && field.touched);
+    const showError = !!(field.error && (field.touched || field.errors.some((e) => e.severity === 'error' && e.constraintKind === 'shape')));
     const canvasRef = useRef(null);
     const isDrawingRef = useRef(false);
     const height = node.props?.height || 200;
@@ -86,5 +86,5 @@ export function SignatureControl({ field, node, describedBy, }) {
                 // Item 1: WCAG 2.1.1 / 4.1.2 — canvas needs role, label, and keyboard focus. A canvas takes
                 // no <label for>, so it names itself from the field's label and the pad's own description —
                 // both already in the respondent's language, neither composed here.
-                role: "img", "aria-labelledby": `${field.id}-label ${field.id}-canvas-description`, "aria-invalid": showError, ...(describedBy ? { 'aria-describedby': describedBy } : {}), tabIndex: 0, className: "formspec-signature-canvas", style: { width: '100%', height, touchAction: 'none', cursor: 'crosshair', display: 'block' } }), _jsx("span", { id: `${field.id}-canvas-description`, className: "formspec-sr-only", children: chrome('signature.canvas') }), _jsx("button", { type: "button", className: "formspec-signature-clear", "aria-labelledby": `${field.id}-clear-text ${field.id}-label`, onClick: handleClear, children: _jsx("span", { id: `${field.id}-clear-text`, children: chrome('signature.clear') }) })] }));
+                role: "img", "aria-labelledby": `${field.id}-label ${field.id}-canvas-description`, "aria-invalid": showError, ...(describedBy ? { 'aria-describedby': describedBy } : {}), tabIndex: isReadonly ? -1 : 0, className: "formspec-signature-canvas", style: { width: '100%', height, touchAction: 'none', cursor: 'crosshair', display: 'block' } }), _jsx("span", { id: `${field.id}-canvas-description`, className: "formspec-sr-only", children: chrome('signature.canvas') }), _jsx("button", { type: "button", className: "formspec-signature-clear", "aria-labelledby": `${field.id}-clear-text ${field.id}-label`, onClick: handleClear, children: _jsx("span", { id: `${field.id}-clear-text`, children: chrome('signature.clear') }) })] }));
 }

@@ -41,8 +41,6 @@ export declare function setNestedPathValue(target: JsonRecord, path: string, val
 export declare function replaceBareCurrentFieldRefs(expression: string, currentFieldName: string): string;
 export declare function flattenObject(value: JsonValue, prefix?: string, output?: JsonRecord): JsonRecord;
 export declare function isEmptyValue(value: unknown): boolean;
-export declare function extractInlineBind(item: FormItem, path: string): EngineBindConfig | null;
-export declare function detectNamedCycle(graph: Map<string, Set<string>>, message: string): void;
 export declare function topoSortKeys<T extends {
     key: string;
 }>(nodes: T[], graph: Map<string, Set<string>>): T[];
@@ -67,4 +65,3 @@ export declare function resolveQualifiedGroupRefs(expression: string, currentIte
     index: number;
     count: number;
 }>): string;
-export declare function resolveRelativeDependency(dep: string, parentPath: string, selfPath: string): string | null;

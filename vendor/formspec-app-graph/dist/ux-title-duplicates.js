@@ -1,17 +1,10 @@
 /** @filedesc Scoped duplicate-title warnings for content that can render together. */
 import { diagnosticSourceForHandle } from './report.js';
 import { handlesByKind, ownProp, record, recordArray, registryWidgetEntries, resolvedWidgetContributionFromEntries, stringProp, surfaceWidgetSlots, widgetShape, } from './surface-widgets.js';
+import { normalizeUxTitle, validateSectionTitleDuplicates } from './section-title-duplicates.js';
 export const UX_TITLE_DUPLICATE_CODE = 'APP-GRAPH-UX-TITLE-DUPLICATE';
 const STRUCTURED_PANEL_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/StructuredPanel@0.1';
 const TITLED_COMPONENTS = new Set(['Section', 'Panel']);
-/**
- * Title comparison deliberately does not fold case. AppGraph does not resolve
- * the display locale for these authored strings, so a locale-independent case
- * guess would create false positives.
- */
-export function normalizeUxTitle(value) {
-    return value.normalize('NFC').trim().replace(/\s+/gu, ' ');
-}
 function titleCandidate(handle, pointer, title, kind) {
     if (title === undefined)
         return undefined;
@@ -20,7 +13,7 @@ function titleCandidate(handle, pointer, title, kind) {
         return undefined;
     return { handle, pointer, title, normalizedTitle, kind };
 }
-function duplicateTitleDiagnostics(candidates, scope) {
+function duplicateTitleDiagnostics(candidates, scope, compare) {
     const firstByTitle = new Map();
     const diagnostics = [];
     for (const candidate of candidates) {
@@ -29,6 +22,8 @@ function duplicateTitleDiagnostics(candidates, scope) {
             firstByTitle.set(candidate.normalizedTitle, candidate);
             continue;
         }
+        if (compare?.(first, candidate) === false)
+            continue;
         diagnostics.push({
             code: UX_TITLE_DUPLICATE_CODE,
             severity: 'warning',
@@ -123,9 +118,10 @@ function titledComponentCandidate(handle, node, pointer) {
     const component = stringProp(node, 'component');
     if (!component || !TITLED_COMPONENTS.has(component))
         return undefined;
-    return titleCandidate(handle, `${pointer}/title`, stringProp(node, 'title'), `component-${component.toLowerCase()}`);
+    const candidate = titleCandidate(handle, `${pointer}/title`, stringProp(node, 'title'), `component-${component.toLowerCase()}`);
+    return candidate && { ...candidate, componentId: stringProp(node, 'id') };
 }
-function componentTreeDiagnostics(handle, node, pointer) {
+function componentTreeDiagnostics(handle, node, pointer, plannedSections) {
     const diagnostics = [];
     const parent = titledComponentCandidate(handle, node, pointer);
     const children = recordArray(ownProp(node, 'children'));
@@ -136,7 +132,8 @@ function componentTreeDiagnostics(handle, node, pointer) {
     diagnostics.push(...duplicateTitleDiagnostics(titledChildren, {
         kind: 'component-siblings',
         label: `Component sibling scope '${pointer}'`,
-    }));
+    }, (first, second) => !(first.kind === 'component-section' && second.kind === 'component-section'
+        && plannedSections?.has(first.componentId) && plannedSections.has(second.componentId))));
     if (parent) {
         for (const child of titledChildren) {
             if (parent.normalizedTitle !== child.normalizedTitle)
@@ -152,9 +149,9 @@ function componentTreeDiagnostics(handle, node, pointer) {
     });
     return diagnostics;
 }
-function componentDiagnostics(component) {
+function componentDiagnostics(component, plannedSections) {
     const tree = record(ownProp(record(component.document), 'tree'));
-    return tree ? componentTreeDiagnostics(component, tree, '/tree') : [];
+    return tree ? componentTreeDiagnostics(component, tree, '/tree', plannedSections) : [];
 }
 const STRUCTURED_PANEL_DELIVERY_CONTRACT_IDS = new Set([
     STRUCTURED_PANEL_DELIVERY_CONTRACT_ID,
@@ -219,20 +216,11 @@ function structuredPanelDiagnostics(context) {
     }
     return diagnostics;
 }
-/**
- * Warn about duplicate visible titles only where the loaded graph proves a
- * shared display scope.
- *
- * This pass intentionally omits Theme pages and Definition-generated pages.
- * Determining whether those pages are active requires the layout planner's
- * Component > Theme > Definition selection, region resolution, and renderer
- * platform choice. AppGraph has no layout dependency, and comparing their raw
- * declarations would report inactive fallback titles. Top-level Component
- * Sections remain covered by the sibling rule because Component pages have
- * highest precedence and their authored headings share one tree.
- */
+/** Check titles within proven display scopes and resolved section plans. */
 export function validateUxTitleDuplicates(context) {
+    const { diagnostics, plannedComponents } = validateSectionTitleDuplicates(context);
     return [
+        ...diagnostics,
         ...handlesByKind(context.handles, 'surface').flatMap((surface) => [
             ...navigationDiagnostics(surface),
             ...routeSlotRepetitionDiagnostics(surface),
@@ -240,7 +228,7 @@ export function validateUxTitleDuplicates(context) {
         ...handlesByKind(context.handles, 'experience')
             .flatMap(experienceTaskDiagnostics),
         ...handlesByKind(context.handles, 'component')
-            .flatMap(componentDiagnostics),
+            .flatMap(component => componentDiagnostics(component, plannedComponents.get(component))),
         ...structuredPanelDiagnostics(context),
     ];
 }

@@ -1,4 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { NativeScreenerSlot } from './screener-completion.js';
 /**
  * @filedesc `SurfaceSlot` — one planned slot, rendered — and `SurfaceSlotFrame`,
@@ -24,16 +24,21 @@ import { NativeScreenerSlot } from './screener-completion.js';
  * embedded title sat at the same rank as its host while its content sat one
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
+import { currentEffectDataSourcePorts } from './data-source-effect.js';
 import { selectDataSourceRevisions } from './data-source-revision.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
-import { createFormEngine, createMappingEngine, initFormspecEngineTools, isFormspecEngineToolsInitialized, resolveResponseActionValidationTuple, responseSubjectId, } from '@formspec-org/engine';
+import { createFormEngine, createMappingEngine, initFormspecEngineTools, preactReactiveRuntime, resolveResponseActionValidationTuple, responseSubjectId, } from '@formspec-org/engine';
 import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
-import { canonicalFiniteJson, loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
+import { canonicalFiniteJson, loadWidgetDataInputs, loadDefinitionFormInitialData, plannedDefinitionFormActionRefs, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
+import { DraftStart } from './DraftStart.js';
 import { DraftDefinitionForm } from './DraftDefinitionForm.js';
+import { isPlainLinkClick, withSurfaceQuery } from './browser-location.js';
 import { loadDraftReviewInputs } from './draft-review.js';
+import { readSubmitEvaluation, summarizeDraftProgress } from './draft-progress.js';
 import { Heading, nextLevel } from './heading.js';
 import { FilingStatus } from './FilingStatus.js';
+import { FormattedReceiptRef, filingStatusLabel } from './receipt-ref.js';
 import { routeIdentity } from './widget-api.js';
 import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, normalizeWidgetActionResult, } from './widget-action-runtime.js';
 import { WidgetEmptyState } from './widgets/empty-state.js';
@@ -172,7 +177,7 @@ export function SurfaceSlotFrame(props) {
         (plan.slotType !== 'experience-unit' || showExperienceNeeds);
     return (_jsxs("section", { className: "fs-surface-slot", "data-slot": plan.slotId, "data-slot-type": plan.slotType, ...needTraceAttributes(plan.needAnchors), ...(showsAuthoredTitle ? { 'aria-label': plan.title } : {}), children: [showsAuthoredTitle && !rendersOwnHeading(plan) && (_jsx(Heading, { level: plan.headingBaseLevel, className: "fs-surface-slot__title", children: plan.title })), _jsx(SurfaceSlot, { ...props })] }));
 }
-export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, sectionNavigationActive, }) {
+export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, embedSlotPrefix, onSlotFormEngineChange, onSlotVisibilityChange, overviewDestination, reviewDestination, onSlotDraftAvailabilityChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, focusField, sectionNavigationActive, }) {
     const reportSectionTitle = formSession?.workspace?.reportSectionTitle;
     const onSectionTitleChange = useCallback((title) => {
         reportSectionTitle?.(plan.slotId, title);
@@ -182,6 +187,16 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
         ? { ...semanticOutputScope, subjectPrefix }
         : undefined;
     switch (plan.slotType) {
+        case 'draft-start': {
+            const start = plan.start;
+            const session = formSession?.drafts;
+            const navigate = filingStatus?.navigate;
+            if (!start || !session?.port.start || !navigate)
+                return _jsx(UnavailableSlot, { children: strings('draftUnavailable') });
+            const identity = JSON.stringify([runtimeGeneration, route.routeId, plan.slotId, start.destination.routeId,
+                start.slotId, start.definitionUrl, start.definitionVersion, start.params, start.subject, session.scope]);
+            return _jsx(DraftStart, { plan: start, session: session, navigate: navigate, strings: strings }, identity);
+        }
         case 'filing-status':
             return _jsx(FilingStatus, { plan: plan.tracker, context: filingStatus, level: plan.title === undefined ? plan.headingBaseLevel : nextLevel(plan.headingBaseLevel), text: strings });
         case 'screener': {
@@ -225,13 +240,27 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
                 localeDocuments,
                 activeLocale,
                 onSectionTitleChange,
-                ...(sectionNavigationActive && workspace && { activeSection }),
+                ...(sectionNavigationActive && workspace && {
+                    activeSection,
+                    ...(focusField !== undefined && { focusField }),
+                }),
                 ...(formSession && {
                     appearance: formSession.appearance,
                     previewScope: formSession.previewScope,
                     draftSession: formSession.drafts,
                     draftStrings: strings,
                     reportSave: formSession.reportSave,
+                    overviewDestination: overviewDestination ?? formSession.entryPath,
+                    navigate: formSession.navigate ?? filingStatus?.navigate,
+                }),
+                ...(!formSession && overviewDestination !== undefined && {
+                    overviewDestination,
+                }),
+                ...(filingStatus?.formatHref && { formatHref: filingStatus.formatHref }),
+                ...(reviewDestination && { reviewDestination }),
+                ...(plan.draftReviewHref !== undefined && { draftReviewDestination: plan.draftReviewHref }),
+                ...(onSlotDraftAvailabilityChange && {
+                    onDraftAvailabilityChange: (status) => onSlotDraftAvailabilityChange(plan.slotId, status),
                 }),
                 ...(workspace && {
                     sectionNavigationActive,
@@ -248,15 +277,17 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
             if (semanticControlScope) {
                 renderInput.semanticControlScope = semanticControlScope;
             }
+            const slotKey = embedSlotPrefix ? `${embedSlotPrefix}/${plan.slotId}` : plan.slotId;
+            const effectiveGeneration = runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`;
             if (plan.initialData && plan.initialData.status !== 'ready') {
                 if (!renderInput.draftSession)
                     return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
-                return _jsx(DefinitionFormSlot, { input: { ...renderInput, draftSeed: 'unavailable' }, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey);
+                return _jsx(DefinitionFormSlot, { input: { ...renderInput, draftSeed: 'unavailable' }, slotKey: slotKey, runtimeGeneration: effectiveGeneration, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey);
             }
             if (plan.initialData?.status === 'ready') {
-                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
+                return (_jsx(DefinitionFormDataSlot, { input: renderInput, slotKey: slotKey, initialDataPlan: plan.initialData, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: effectiveGeneration, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
             }
-            return (_jsx(DefinitionFormSlot, { input: renderInput, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
+            return (_jsx(DefinitionFormSlot, { input: renderInput, slotKey: slotKey, runtimeGeneration: effectiveGeneration, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
         }
         case 'experience-unit': {
             const { unit } = plan;
@@ -277,7 +308,7 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
             // A resolved-but-undeclared widget still renders — the host supplied a
             // component. `WIDGET-UNDECLARED` is already in the plan's diagnostics
             // (§3.3): a shell MAY render it, and MUST say it did.
-            return (_jsx(SurfaceWidgetSlot, { plan: plan, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, draftSession: plan.draftReview ? formSession?.drafts : undefined, localeDocuments: plan.draftReview ? localeDocuments : undefined, activeLocale: plan.draftReview ? activeLocale : undefined, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, responseActionsDocuments: responseActionsDocuments ?? [], transitions: transitions ?? [], widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onAdvance: onAdvance, semanticOutputScope: slotSemanticOutputScope }));
+            return (_jsx(SurfaceWidgetSlot, { plan: plan, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, draftSession: plan.draftReview ? formSession?.drafts : undefined, filingStatus: plan.draftReview ? filingStatus : undefined, reportSave: plan.draftReview ? formSession?.reportSave : undefined, localeDocuments: plan.draftReview ? localeDocuments : undefined, activeLocale: plan.draftReview ? activeLocale : undefined, focusAcknowledgement: plan.draftReview ? formSession?.workspace?.focusAcknowledgement : undefined, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, responseActionsDocuments: responseActionsDocuments ?? [], transitions: transitions ?? [], widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onAdvance: onAdvance, semanticOutputScope: slotSemanticOutputScope }));
         }
         case 'static-content': {
             const { content } = plan;
@@ -296,7 +327,7 @@ export function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSou
             // the host's grant — an embedded route cannot restore branding the host
             // refuses. Headings step down a level, which `planRoute` already decided;
             // this renders the level it was handed and re-derives nothing.
-            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, filingStatus: filingStatus, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, formSession: formSession && { ...formSession, workspace: undefined }, onAdvance: onAdvance }, child.slotId))) }));
+            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, filingStatus: filingStatus, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, embedSlotPrefix: embedSlotPrefix ? `${embedSlotPrefix}/${plan.slotId}` : plan.slotId, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, overviewDestination: overviewDestination, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, formSession: formSession && { ...formSession, workspace: undefined }, onAdvance: onAdvance }, child.slotId))) }));
         }
         case 'unknown':
             return _jsx(UnavailableSlot, { children: strings('slotUnavailableStaticContent') });
@@ -335,28 +366,13 @@ function SurfaceStaticContent({ content, needAnchors, routeId, slotId, semanticO
 export function renderDefaultDefinitionForm(input) {
     return _jsx(DefaultDefinitionFormSlot, { input: input });
 }
-/** Stop later owner phases when this effect retires; host authority stays in the ports. */
-function currentEffectDataSourcePorts(isCurrent, { loader, authorize, validatePayload }) {
-    const check = () => {
-        if (!isCurrent())
-            throw new Error('Surface data load effect retired');
-    };
-    const invoke = (dispatch) => {
-        check();
-        const result = dispatch();
-        const complete = (value) => { check(); return value; };
-        // Preserve synchronous ports; only asynchronous results need a continuation.
-        return typeof result?.then === 'function'
-            ? Promise.resolve(result).then(complete)
-            : complete(result);
-    };
-    return {
-        loader: loader ? request => invoke(() => loader(request)) : undefined,
-        authorize: authorize ? request => invoke(() => authorize(request)) : undefined,
-        validatePayload: validatePayload ? request => invoke(() => validatePayload(request)) : undefined,
-    };
-}
-function executeDefinitionFormMapping({ mapping, value, }) {
+/**
+ * Runs only for a binding that names a Mapping, so only a mapped prefill loads tools WASM
+ * (Mapping execution lives there until fs-tco0). A failed load rejects, and the loader reports
+ * the slot unavailable instead of dropping the prefill.
+ */
+async function executeDefinitionFormMapping({ mapping, value, }) {
+    await initFormspecEngineTools();
     const result = createMappingEngine(mapping).reverse(value);
     if (result.diagnostics.length > 0) {
         const codes = result.diagnostics.map((diagnostic) => diagnostic.errorCode);
@@ -371,7 +387,7 @@ function executeDefinitionFormMapping({ mapping, value, }) {
  * Load before first mount. A later generation may refresh a clean form, but a
  * bubbled form edit permanently protects the mounted engine from late data.
  */
-function DefinitionFormDataSlot({ input, initialDataPlan, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, runtimeGeneration, onRuntimeDiagnosticsChange, renderDefinitionForm, semanticOutputScope, }) {
+function DefinitionFormDataSlot({ input, slotKey, initialDataPlan, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, runtimeGeneration, onRuntimeDiagnosticsChange, onSlotFormEngineChange, onSlotVisibilityChange, renderDefinitionForm, semanticOutputScope, }) {
     const { strings } = input;
     const [delivery, setDelivery] = useState({
         status: 'loading',
@@ -485,26 +501,49 @@ function DefinitionFormDataSlot({ input, initialDataPlan, dataSourceLoader, data
             dirty.current = true;
         }, onChangeCapture: () => {
             dirty.current = true;
-        }, children: _jsx(DefinitionFormSlot, { input: hydratedInput, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: semanticOutputScope }) }));
+        }, children: _jsx(DefinitionFormSlot, { input: hydratedInput, slotKey: slotKey, runtimeGeneration: runtimeGeneration, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: semanticOutputScope }) }));
 }
 function DefinitionFormLoading({ children }) {
     return (_jsx("p", { className: "fs-surface-loading", role: "status", "aria-live": "polite", "aria-busy": "true", "data-probe": "definition-form-loading", children: children }));
 }
-function DefinitionFormSlot({ input, renderDefinitionForm, semanticOutputScope, }) {
+function DefinitionFormSlot({ input, slotKey, runtimeGeneration, onRuntimeDiagnosticsChange, onSlotFormEngineChange, onSlotVisibilityChange, renderDefinitionForm, semanticOutputScope, }) {
     const { plan: { subject }, strings } = input;
-    const needsSubject = subject !== undefined;
-    const [toolsStatus, setToolsStatus] = useState(() => isFormspecEngineToolsInitialized() ? 'ready' : 'loading');
+    const actionDiagnosticScope = `definition-form-actions:${input.route.surfaceId}/${input.route.routeId}/${slotKey}`;
+    const reportedFindings = useRef(new Map());
+    const previousScope = useRef(undefined);
+    const scopeToken = `${runtimeGeneration}:${actionDiagnosticScope}`;
+    if (previousScope.current?.token !== scopeToken
+        || previousScope.current?.actions !== input.responseActionsDocument) {
+        previousScope.current = { token: scopeToken, actions: input.responseActionsDocument };
+        reportedFindings.current.clear();
+    }
     useEffect(() => {
-        if (!needsSubject || toolsStatus !== 'loading')
+        const findings = reportedFindings.current;
+        return () => {
+            findings.clear();
+            onRuntimeDiagnosticsChange?.(actionDiagnosticScope, []);
+        };
+    }, [actionDiagnosticScope, onRuntimeDiagnosticsChange, runtimeGeneration, input.responseActionsDocument]);
+    const handleActionFinding = useCallback((finding) => {
+        const key = `${finding.code}:${finding.reason ?? ''}:${finding.target}:${finding.nodeId ?? ''}`;
+        if (reportedFindings.current.has(key))
             return;
-        let current = true;
-        void initFormspecEngineTools().then(() => { if (current)
-            setToolsStatus('ready'); }, () => { if (current)
-            setToolsStatus('unavailable'); });
-        return () => { current = false; };
-    }, [needsSubject, toolsStatus]);
+        reportedFindings.current.set(key, surfaceDiagnostic('BUNDLE-DOCUMENT-SHAPE', `Response Actions finding on slot "${input.plan.slotId}": ${finding.reason ?? finding.code} (${finding.target}).`, {
+            surfaceId: input.route.surfaceId,
+            routeId: input.route.routeId,
+            slotId: input.plan.slotId,
+        }, {
+            code: finding.code,
+            kind: finding.kind,
+            target: finding.target,
+            ...(finding.reason ? { reason: finding.reason } : {}),
+            ...(finding.nodeId ? { nodeId: finding.nodeId } : {}),
+        }));
+        onRuntimeDiagnosticsChange?.(actionDiagnosticScope, [...reportedFindings.current.values()]);
+    }, [actionDiagnosticScope, input.plan.slotId, input.route.routeId, input.route.surfaceId, onRuntimeDiagnosticsChange]);
+    // Runtime WASM hashes the keys for hosts that key drafts before an engine exists; the engine derives its own.
     const responseSubject = useMemo(() => {
-        if (!subject || toolsStatus !== 'ready')
+        if (!subject)
             return undefined;
         try {
             return { ...subject, id: responseSubjectId(subject.type, subject.keys) };
@@ -512,44 +551,214 @@ function DefinitionFormSlot({ input, renderDefinitionForm, semanticOutputScope, 
         catch {
             return undefined;
         }
-    }, [subject, toolsStatus]);
-    if (needsSubject && !responseSubject) {
-        return toolsStatus === 'loading'
-            ? _jsx(DefinitionFormLoading, { children: strings('transitionPending') })
-            : _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
+    }, [subject]);
+    if (subject && !responseSubject) {
+        return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
     }
-    const resolvedInput = { ...input, responseSubject };
+    const resolvedInput = {
+        ...input,
+        responseSubject,
+        onActionFinding: handleActionFinding,
+    };
     return renderDefinitionForm
         ? renderDefinitionForm(resolvedInput)
-        : _jsx(DefaultDefinitionFormSlot, { input: resolvedInput, semanticOutputScope: semanticOutputScope });
+        : (_jsx(DefaultDefinitionFormSlot, { input: resolvedInput, slotKey: slotKey, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, semanticOutputScope: semanticOutputScope }));
 }
-function DefaultDefinitionFormSlot({ input, semanticOutputScope, }) {
+function DefaultDefinitionFormSlot({ input, slotKey = input.plan.slotId, onSlotFormEngineChange, onSlotVisibilityChange, semanticOutputScope, }) {
     if (input.draftSession) {
         const key = JSON.stringify([input.plan.definition.url, input.plan.definition.version,
             input.plan.subject?.type, input.plan.subject?.keys]);
-        return _jsx(DraftDefinitionForm, { input: input, session: input.draftSession, children: (engine, writer) => _jsx(DefaultSurfaceDefinitionForm, { ...input, draftEngine: engine, draftWriter: writer, semanticOutputScope: semanticOutputScope }) }, key);
+        return _jsx(DraftDefinitionForm, { input: input, session: input.draftSession, children: (engine, writer) => _jsx(DefaultSurfaceDefinitionForm, { ...input, slotKey: slotKey, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, draftEngine: engine, draftWriter: writer, semanticOutputScope: semanticOutputScope }) }, key);
     }
-    return _jsx(DefaultSurfaceDefinitionForm, { ...input, semanticOutputScope: semanticOutputScope });
+    return (_jsx(DefaultSurfaceDefinitionForm, { ...input, slotKey: slotKey, onSlotFormEngineChange: onSlotFormEngineChange, onSlotVisibilityChange: onSlotVisibilityChange, semanticOutputScope: semanticOutputScope }));
+}
+function effectiveStyleValue(element, property, camelProp, computed) {
+    const computedValue = (computed?.getPropertyValue(property)
+        || computed?.[camelProp]
+        || '').trim().toLowerCase();
+    if (computedValue)
+        return computedValue;
+    return (element.style.getPropertyValue(property)
+        || element.style[camelProp]
+        || '').trim().toLowerCase();
+}
+function hasHiddenContentVisibility(element, computed) {
+    return effectiveStyleValue(element, 'content-visibility', 'contentVisibility', computed) === 'hidden';
+}
+function matchesModalDialog(element) {
+    if (element.tagName !== 'DIALOG' || !element.open)
+        return false;
+    if (typeof element.matches === 'function') {
+        try {
+            return element.matches(':modal');
+        }
+        catch {
+            return false;
+        }
+    }
+    return false;
+}
+function isEffectivelyDisabled(element) {
+    if (element.disabled)
+        return true;
+    if (element.getAttribute('aria-disabled') === 'true')
+        return true;
+    if (typeof element.matches === 'function') {
+        try {
+            if (element.matches(':disabled'))
+                return true;
+        }
+        catch {
+            // Ignore selector engines without :disabled support.
+        }
+    }
+    for (let current = element.parentElement; current; current = current.parentElement) {
+        if (current.tagName === 'FIELDSET' && current.disabled) {
+            const firstLegend = Array.from(current.children).find((child) => child.tagName === 'LEGEND');
+            if (!firstLegend || !firstLegend.contains(element))
+                return true;
+        }
+    }
+    return false;
+}
+function isElementReachable(element, root, visiting = new Set()) {
+    if (visiting.has(element))
+        return false;
+    visiting.add(element);
+    const view = element.ownerDocument.defaultView;
+    const elementComputed = view?.getComputedStyle(element);
+    const computedVisibility = effectiveStyleValue(element, 'visibility', 'visibility', elementComputed);
+    if (computedVisibility === 'hidden' || computedVisibility === 'collapse') {
+        return false;
+    }
+    const computedElementInteractivity = (elementComputed?.getPropertyValue('interactivity')
+        || elementComputed?.interactivity
+        || '').trim().toLowerCase();
+    if (computedElementInteractivity === 'inert') {
+        return false;
+    }
+    let current = element;
+    let insideForm = true;
+    let passedOpenModalDialog = false;
+    while (current) {
+        if (current === root) {
+            insideForm = false;
+        }
+        const computedStyle = view?.getComputedStyle(current);
+        if (!passedOpenModalDialog) {
+            if (current.inert || current.hasAttribute('inert')) {
+                return false;
+            }
+            if (effectiveStyleValue(current, 'interactivity', 'interactivity', computedStyle) === 'inert') {
+                return false;
+            }
+        }
+        if (insideForm && current !== element) {
+            if (current.tagName === 'DIALOG' && !current.open) {
+                if (current.hidden
+                    || current.style.display.trim().toLowerCase() === 'none'
+                    || hasHiddenContentVisibility(current, computedStyle)) {
+                    return false;
+                }
+                const trigger = current.previousElementSibling;
+                if (trigger instanceof HTMLElement
+                    && trigger.tagName === 'BUTTON'
+                    && trigger.classList.contains('formspec-modal-trigger')
+                    && !isEffectivelyDisabled(trigger)) {
+                    return isElementReachable(trigger, root, visiting);
+                }
+                return false;
+            }
+            if (current.classList.contains('formspec-popover-content') && current.hidden) {
+                if (current.style.display.trim().toLowerCase() === 'none'
+                    || hasHiddenContentVisibility(current, computedStyle)) {
+                    return false;
+                }
+                const trigger = current.previousElementSibling;
+                if (trigger instanceof HTMLElement
+                    && trigger.tagName === 'BUTTON'
+                    && trigger.classList.contains('formspec-popover-trigger')
+                    && !isEffectivelyDisabled(trigger)) {
+                    return isElementReachable(trigger, root, visiting);
+                }
+                return false;
+            }
+            if (current.getAttribute('role') === 'tabpanel' && current.hidden) {
+                if (current.style.display.trim().toLowerCase() === 'none'
+                    || hasHiddenContentVisibility(current, computedStyle)) {
+                    return false;
+                }
+                const tabId = current.getAttribute('aria-labelledby');
+                const tab = tabId
+                    ? [...root.querySelectorAll('[role="tab"]')].find((candidate) => candidate.id === tabId) ?? null
+                    : null;
+                if (tab instanceof HTMLElement
+                    && !isEffectivelyDisabled(tab)
+                    && isElementReachable(tab, root, visiting)) {
+                    current = current.parentElement;
+                    continue;
+                }
+                return false;
+            }
+            if (current.classList.contains('formspec-wizard-panel') && current.hidden) {
+                if (current.style.display.trim().toLowerCase() === 'none'
+                    || hasHiddenContentVisibility(current, computedStyle)) {
+                    return false;
+                }
+                current = current.parentElement;
+                continue;
+            }
+        }
+        if (current.hidden)
+            return false;
+        if (effectiveStyleValue(current, 'display', 'display', computedStyle) === 'none')
+            return false;
+        if (hasHiddenContentVisibility(current, computedStyle))
+            return false;
+        if (matchesModalDialog(current)) {
+            passedOpenModalDialog = true;
+        }
+        current = current.parentElement;
+    }
+    return true;
+}
+function collectMountedReachableActionRefs(root) {
+    const refs = new Set();
+    for (const button of root.querySelectorAll('button[data-action-ref]')) {
+        const actionRef = button.dataset.actionRef;
+        if (!actionRef || isEffectivelyDisabled(button))
+            continue;
+        if (isElementReachable(button, root)) {
+            refs.add(actionRef);
+        }
+    }
+    return refs;
 }
 function DefaultSurfaceDefinitionForm(input) {
-    const { plan, grant, strings, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, responseSubject, draftEngine, draftWriter, semanticOutputScope, activeSection, sectionNavigationActive, hrefForSection, onActiveSectionChange, onSectionTitleChange, } = input;
+    const { plan, grant, strings, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionFinding, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, responseSubject, slotKey, onSlotFormEngineChange, onSlotVisibilityChange, draftEngine, draftWriter, semanticOutputScope, activeSection, focusField, sectionNavigationActive, hrefForSection, onActiveSectionChange, onSectionTitleChange, } = input;
+    // The engine derives its id from type and keys, so those, not a renderer-supplied id, key it.
+    const subjectIdentity = JSON.stringify([responseSubject?.type, responseSubject?.keys]);
     const engine = useMemo(() => {
         if (draftEngine)
             return draftEngine;
         try {
-            return createFormEngine(plan.definition, {
+            const created = createFormEngine(plan.definition, {
                 ...(responseSubject && { responseSubject }),
                 ...(initialData?.data !== undefined && {
                     responseData: initialData.data,
                 }),
             });
+            if (created.hasSubjectRefusal()) {
+                created.dispose();
+                return undefined;
+            }
+            return created;
         }
         catch (error) {
             console.warn('Formspec Surface could not create the form engine.', error);
             return undefined;
         }
-        // Core's subject id covers both type and keys, even when a replan allocates a new object.
-    }, [draftEngine, initialData?.data, plan.definition, responseSubject?.id]);
+    }, [draftEngine, initialData?.data, plan.definition, subjectIdentity]);
     useEffect(() => () => { if (!draftEngine)
         engine?.dispose(); }, [draftEngine, engine]);
     const formVisit = useRef(undefined);
@@ -569,6 +778,141 @@ function DefaultSurfaceDefinitionForm(input) {
         if (activeLocale !== undefined)
             engine.setLocale(activeLocale);
     }, [engine, localeDocuments, activeLocale, plan.definition]);
+    useLayoutEffect(() => {
+        if (!engine || !onSlotFormEngineChange)
+            return;
+        onSlotFormEngineChange(slotKey, engine);
+        return () => {
+            onSlotFormEngineChange(slotKey, undefined);
+        };
+    }, [engine, onSlotFormEngineChange, slotKey]);
+    const formRootRef = useRef(null);
+    useLayoutEffect(() => {
+        if (!engine || !onSlotVisibilityChange)
+            return;
+        const root = formRootRef.current;
+        if (!root)
+            return;
+        const matchesMinWidth = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+            ? (minWidth) => window.matchMedia(`(min-width: ${minWidth}px)`).matches
+            : undefined;
+        const baselineKey = [...plannedDefinitionFormActionRefs(plan.definition, componentDocument, responseActionsDocument, {
+                themeDocument: grant.themeDocument,
+                ...(matchesMinWidth ? { matchesMinWidth } : {}),
+            })].sort().join('\0');
+        let disposed = false;
+        const measure = () => {
+            if (disposed || !formRootRef.current)
+                return;
+            onSlotVisibilityChange(slotKey, collectMountedReachableActionRefs(formRootRef.current), baselineKey);
+        };
+        measure();
+        const collectAncestors = (node) => {
+            const list = [];
+            for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement) {
+                list.push(ancestor);
+            }
+            return list;
+        };
+        const sameAncestors = (a, b) => a.length === b.length && a.every((el, idx) => el === b[idx]);
+        let rootObserver;
+        let ancestorObserver;
+        let reconnectObserver;
+        let observedAncestors = [];
+        const ancestorAttributeFilter = ['open', 'hidden', 'style', 'class', 'disabled', 'aria-disabled', 'inert'];
+        const stopReconnectObserver = () => {
+            reconnectObserver?.disconnect();
+            reconnectObserver = undefined;
+        };
+        const syncAncestorObserver = () => {
+            if (disposed || typeof MutationObserver !== 'function')
+                return;
+            if (!root.isConnected) {
+                ancestorObserver?.disconnect();
+                ancestorObserver = undefined;
+                observedAncestors = [];
+                if (!reconnectObserver) {
+                    const docRoot = root.ownerDocument.documentElement;
+                    if (docRoot) {
+                        const nextReconnect = new MutationObserver(() => {
+                            if (!disposed && root.isConnected) {
+                                stopReconnectObserver();
+                                syncAncestorObserver();
+                                measure();
+                            }
+                        });
+                        nextReconnect.observe(docRoot, { childList: true, subtree: true });
+                        reconnectObserver = nextReconnect;
+                    }
+                }
+                return;
+            }
+            stopReconnectObserver();
+            const nextAncestors = collectAncestors(root);
+            if (ancestorObserver && sameAncestors(observedAncestors, nextAncestors)) {
+                return;
+            }
+            ancestorObserver?.disconnect();
+            ancestorObserver = undefined;
+            observedAncestors = nextAncestors;
+            if (nextAncestors.length === 0)
+                return;
+            const nextObserver = new MutationObserver(() => {
+                syncAncestorObserver();
+                measure();
+            });
+            for (const ancestor of nextAncestors) {
+                nextObserver.observe(ancestor, {
+                    attributes: true,
+                    childList: true,
+                    attributeFilter: ancestorAttributeFilter,
+                });
+            }
+            ancestorObserver = nextObserver;
+        };
+        if (typeof MutationObserver === 'function') {
+            rootObserver = new MutationObserver(() => {
+                syncAncestorObserver();
+                measure();
+            });
+            rootObserver.observe(root, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                attributeFilter: ['open', 'hidden', 'style', 'class', 'disabled', 'aria-disabled', 'inert', 'data-action-ref'],
+            });
+            syncAncestorObserver();
+        }
+        const onDialogClose = () => measure();
+        root.addEventListener('close', onDialogClose, true);
+        const view = root.ownerDocument.defaultView;
+        const onViewportResize = () => measure();
+        view?.addEventListener('resize', onViewportResize);
+        const stopReactive = preactReactiveRuntime.effect(() => {
+            engine.getEvaluatedFormState({ profile: 'off' });
+            queueMicrotask(measure);
+        });
+        return () => {
+            disposed = true;
+            rootObserver?.disconnect();
+            ancestorObserver?.disconnect();
+            stopReconnectObserver();
+            root.removeEventListener('close', onDialogClose, true);
+            view?.removeEventListener('resize', onViewportResize);
+            stopReactive();
+        };
+    }, [
+        engine,
+        onSlotVisibilityChange,
+        slotKey,
+        plan.definition,
+        componentDocument,
+        responseActionsDocument,
+        grant.themeDocument,
+    ]);
+    useLayoutEffect(() => () => {
+        onSlotVisibilityChange?.(slotKey, undefined, '');
+    }, [onSlotVisibilityChange, slotKey]);
     const renderedScope = engine ? semanticOutputScope : undefined;
     useSurfaceSemanticOutputs(renderedScope, renderedScope ? [{ subjectRef: renderedScope.subjectPrefix }] : []);
     // Human help is References-spec resolution alone: this form never renders
@@ -597,24 +941,120 @@ function DefaultSurfaceDefinitionForm(input) {
             return [];
         }
     }, [references]);
+    const [actionBanner, setActionBanner] = useState(undefined);
+    const bannerRef = useRef(null);
+    useEffect(() => {
+        setActionBanner(undefined);
+    }, [engine]);
+    useEffect(() => {
+        if (!actionBanner || !bannerRef.current)
+            return;
+        bannerRef.current.focus({ preventScroll: false });
+        if (typeof bannerRef.current.scrollIntoView === 'function') {
+            bannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [actionBanner]);
+    // An owed group acknowledgement is accepted on the draft review route; the Findings margin links there.
+    const { draftReviewDestination, formatHref, navigate } = input;
+    const acknowledgementLink = useMemo(() => draftReviewDestination === undefined ? undefined : (code) => {
+        const destination = withSurfaceQuery(draftReviewDestination, 'acknowledge', code);
+        const href = formatHref ? formatHref(destination) : destination;
+        return href === undefined ? undefined : { href, ...(navigate && { navigate: () => { void navigate(destination); } }) };
+    }, [draftReviewDestination, formatHref, navigate]);
+    const lastHandledActionResultRef = useRef(undefined);
+    const handleActionOutcome = useCallback((result) => {
+        if (!engine || lastHandledActionResultRef.current === result)
+            return;
+        lastHandledActionResultRef.current = result;
+        if (result.resolution.action?.intent === 'autosave')
+            return;
+        if (result.status === 'blocked') {
+            const progress = summarizeDraftProgress([], readSubmitEvaluation(engine));
+            const errors = progress.form.toFix ?? 0;
+            const warnings = progress.form.toCheck ?? 0;
+            const missing = progress.form.missing;
+            const parts = [];
+            if (missing > 0)
+                parts.push(`${missing} required ${missing === 1 ? 'question' : 'questions'} unanswered`);
+            if (errors > 0)
+                parts.push(`${errors} ${errors === 1 ? 'error' : 'errors'} to fix`);
+            if (warnings > 0)
+                parts.push(`${warnings} ${warnings === 1 ? 'warning' : 'warnings'} to review`);
+            const detail = parts.length > 0
+                ? `Cannot submit yet: ${parts.join(', ')}. Use the Findings list to jump directly to each item.`
+                : 'Cannot submit yet: please review the highlighted items before submitting.';
+            setActionBanner({ kind: 'blocked', errors, warnings, missing, detail });
+            return;
+        }
+        if (result.status === 'failed') {
+            setActionBanner({
+                kind: 'failed',
+                detail: result.failureReason || 'This action could not be completed. Please try again.',
+            });
+            return;
+        }
+        if (result.status === 'completed') {
+            const isSubmitAction = result.validationTuple?.persistence === 'complete-response'
+                || result.resolution.action?.intent === 'submit'
+                || Boolean(result.detail?.previewFiling);
+            if (isSubmitAction) {
+                const previewFiling = result.detail?.previewFiling;
+                setActionBanner({
+                    kind: 'submitted',
+                    ...(previewFiling?.receiptRef ? { receiptRef: previewFiling.receiptRef } : {}),
+                    ...(previewFiling?.label ? { label: previewFiling.label } : {}),
+                });
+                input.reportSave?.('submitted');
+            }
+            else {
+                setActionBanner(undefined);
+            }
+        }
+    }, [engine, input.reportSave]);
     if (!engine) {
         return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
     }
-    return (_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, ...('activeSection' in input && { activeSection }), onActiveSectionChange: onActiveSectionChange, sectionNavigationActive: sectionNavigationActive, hrefForSection: hrefForSection, onSectionTitleChange: onSectionTitleChange, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: draftWriter
-            ? input => draftWriter.invoke(input, { invoker: responseActionInvoker, current: () => formVisit.current === visit })
-            : responseActionInvoker ?? null, draftSaveFeedback: draftWriter ? 'external' : undefined, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
-            ? {
-                // `onSubmit` requests the renderer's declared submit control. It is
-                // a no-op because durable effects have not reached a terminal yet.
-                onSubmit: () => { },
-                onActionResult: (result) => {
-                    onDefinitionActionResult?.(result);
-                    const action = completedFormAction(result);
-                    if (action)
-                        onActionCompleted?.(action, result);
-                },
-            }
-            : {}) }));
+    const reviewDest = input.reviewDestination;
+    const reviewHref = reviewDest !== undefined
+        ? (input.formatHref ? input.formatHref(reviewDest) : reviewDest)
+        : undefined;
+    const overviewDest = input.overviewDestination;
+    const overviewHref = overviewDest !== undefined
+        ? (input.formatHref ? input.formatHref(overviewDest) : overviewDest)
+        : undefined;
+    return (_jsxs("div", { ref: formRootRef, style: { display: 'contents' }, children: [_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, ...('activeSection' in input && { activeSection }), ...(focusField !== undefined && { focusField }), onActiveSectionChange: onActiveSectionChange, sectionNavigationActive: sectionNavigationActive, hrefForSection: hrefForSection, acknowledgementLink: acknowledgementLink, onSectionTitleChange: onSectionTitleChange, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, ...(onActionFinding ? { onActionFinding } : {}), responseActionInvoker: draftWriter
+                    ? input => draftWriter.invoke(input, { invoker: responseActionInvoker, current: () => formVisit.current === visit })
+                    : responseActionInvoker ?? null, draftSaveFeedback: draftWriter ? 'external' : undefined, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
+                    ? {
+                        // `onSubmit` requests the renderer's declared submit control. It is
+                        // a no-op because durable effects have not reached a terminal yet.
+                        onSubmit: () => { },
+                        onActionResult: (result) => {
+                            handleActionOutcome(result);
+                            onDefinitionActionResult?.(result);
+                        },
+                        ...(onActionCompleted
+                            ? {
+                                onControlActionResult: (result) => {
+                                    handleActionOutcome(result);
+                                    const action = completedFormAction(result);
+                                    if (action)
+                                        onActionCompleted(action, result);
+                                },
+                            }
+                            : {}),
+                    }
+                    : {}) }), actionBanner && (_jsx("div", { ref: bannerRef, tabIndex: -1, role: actionBanner.kind === 'submitted' ? 'status' : 'alert', className: `fs-surface-action-banner fs-surface-action-banner--${actionBanner.kind}`, "data-action-banner": actionBanner.kind, children: actionBanner.kind === 'submitted' ? (_jsxs(_Fragment, { children: [_jsx("p", { className: "fs-surface-action-banner__title", children: "Submitted" }), _jsxs("p", { className: "fs-surface-action-banner__detail", children: ["Your submission has been recorded.", actionBanner.label ? ` (${actionBanner.label})` : ''] }), actionBanner.receiptRef && (_jsxs("p", { className: "fs-surface-filing__meta", "data-receipt-ref": "", children: ["Receipt reference: ", _jsx(FormattedReceiptRef, { reference: actionBanner.receiptRef })] })), (reviewHref || overviewHref) && (_jsxs("div", { className: "fs-surface-action-banner__actions", children: [reviewDest && reviewHref && (_jsx("a", { className: "fs-surface-action-link fs-surface-action-link--primary", href: reviewHref, onClick: event => {
+                                        if (!input.navigate || !isPlainLinkClick(event))
+                                            return;
+                                        event.preventDefault();
+                                        void input.navigate(reviewDest);
+                                    }, children: "Review submitted answers" })), overviewDest && overviewHref && (_jsx("a", { className: "fs-surface-action-link fs-surface-action-link--secondary", href: overviewHref, onClick: event => {
+                                        if (!input.navigate || !isPlainLinkClick(event))
+                                            return;
+                                        event.preventDefault();
+                                        void input.navigate(overviewDest);
+                                    }, children: "Return to overview" }))] }))] })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "fs-surface-action-banner__title", children: actionBanner.kind === 'blocked' ? 'Submission blocked' : 'Action failed' }), _jsx("p", { className: "fs-surface-action-banner__detail", children: actionBanner.detail })] })) }))] }));
 }
 const EMPTY_WIDGET_DATA = Object.freeze({});
 const READY_WITH_NO_DATA = {
@@ -623,7 +1063,7 @@ const READY_WITH_NO_DATA = {
     degradedInputs: [],
     diagnostics: [],
 };
-function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, draftSession, localeDocuments, activeLocale, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
+function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, draftSession, filingStatus, reportSave, localeDocuments, activeLocale, focusAcknowledgement, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
     const draftVisit = useMemo(() => plan.draftReview ? {} : undefined, [plan.draftReview, draftSession, runtimeGeneration, localeDocuments, activeLocale]);
     const [settled, setSettled] = useState({
         draftVisit, delivery: plan.dataInputs.length === 0 && !plan.draftReview ? READY_WITH_NO_DATA : { status: 'loading' },
@@ -986,7 +1426,16 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, draf
         const technicalFailure = delivery.failures.some((failure) => failure.reason === 'load-failed' ||
             failure.reason === 'stale-disallowed' ||
             failure.reason === 'payload-invalid');
-        return stateView(technicalFailure ? 'error' : 'unavailable', (_jsx("div", { "data-widget-data": "unavailable", "data-draft-review-reason": 'draftReviewReason' in delivery ? delivery.draftReviewReason : undefined, "data-widget-failure-mode": modes.join(' '), children: _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }) })));
+        const reviewBackDest = plan.draftReview?.status === 'ready' ? plan.draftReview.formHref : undefined;
+        const reviewBackHref = reviewBackDest !== undefined
+            ? (filingStatus?.formatHref ? filingStatus.formatHref(reviewBackDest) : reviewBackDest)
+            : undefined;
+        return stateView(technicalFailure ? 'error' : 'unavailable', (_jsxs("div", { "data-widget-data": "unavailable", "data-draft-review-reason": 'draftReviewReason' in delivery ? delivery.draftReviewReason : undefined, "data-widget-failure-mode": modes.join(' '), children: [_jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }), reviewBackDest && reviewBackHref && 'draftReviewReason' in delivery && delivery.draftReviewReason === 'absent' && (_jsx("div", { className: "fs-surface-prerequisite-notice__actions", children: _jsx("a", { className: "fs-surface-action-link fs-surface-action-link--secondary", href: reviewBackHref, onClick: event => {
+                            if (!filingStatus?.navigate || !isPlainLinkClick(event))
+                                return;
+                            event.preventDefault();
+                            void filingStatus.navigate(reviewBackDest);
+                        }, children: "Back to form" }) }))] })));
     }
     if (widgetDataMatchesEmptyWhen(plan.config ?? {}, delivery.data)) {
         return stateView('empty', _jsx(WidgetEmptyState, { children: strings('widgetEmpty') }));
@@ -997,7 +1446,103 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, draf
     if (!Widget) {
         return _jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') });
     }
-    return (_jsx(Widget, { moduleId: plan.key.moduleId, widgetName: plan.key.widgetName, slot: { id: plan.slotId, title: plan.title }, route: route, headingLevel: plan.headingBaseLevel, config: plan.config ?? {}, data: delivery.data, actions: resolvedActions, emitAction: emitAction, admitsTenantTheme: grant.admitsTenantTheme, semanticOutputScope: semanticOutputScope }));
+    const draftReviewReady = plan.draftReview?.status === 'ready' && 'warningGroups' in delivery
+        ? { plan: plan.draftReview, delivery }
+        : undefined;
+    const reviewFiling = draftReviewReady?.delivery.filing;
+    const reviewValidation = draftReviewReady?.delivery.validationSummary;
+    const reviewFormDest = draftReviewReady?.plan.formHref;
+    const reviewFormHref = reviewFormDest !== undefined
+        ? (filingStatus?.formatHref ? filingStatus.formatHref(reviewFormDest) : reviewFormDest)
+        : undefined;
+    const validationParts = [];
+    if (reviewValidation) {
+        if (reviewValidation.missing > 0) {
+            validationParts.push(`${reviewValidation.missing} required ${reviewValidation.missing === 1 ? 'question' : 'questions'} unanswered`);
+        }
+        if (reviewValidation.toFix > 0) {
+            validationParts.push(`${reviewValidation.toFix} ${reviewValidation.toFix === 1 ? 'error' : 'errors'} to fix`);
+        }
+        if (reviewValidation.toCheck > 0) {
+            validationParts.push(`${reviewValidation.toCheck} ${reviewValidation.toCheck === 1 ? 'warning' : 'warnings'} to review`);
+        }
+    }
+    return (_jsxs(_Fragment, { children: [reviewFiling && (_jsxs("section", { className: "fs-surface-filing-banner", "data-filing-status": reviewFiling.status, role: "region", "aria-label": filingStatusLabel(reviewFiling.status, strings), children: [_jsxs("div", { className: "fs-surface-filing-banner__header", children: [_jsx("span", { className: "fs-surface-filing__badge", "data-filing-status": reviewFiling.status, children: filingStatusLabel(reviewFiling.status, strings) }), _jsx("p", { className: "fs-surface-filing-banner__lead", children: draftReviewReady?.delivery.isFiledRecord
+                                    ? 'Showing the submitted answers on file.'
+                                    : 'Showing your in-progress revision alongside the previous decision.' })] }), _jsxs("p", { className: "fs-surface-filing__meta", "data-receipt-ref": "", children: ["Receipt reference: ", _jsx(FormattedReceiptRef, { reference: reviewFiling.receiptRef })] }), reviewFiling.comments.map((comment, index) => (_jsx("p", { className: "fs-surface-filing__comment", children: comment }, index)))] })), validationParts.length > 0 && (_jsxs("section", { className: "fs-surface-review-validation", role: "region", "aria-label": "Items needing attention", children: [_jsxs("p", { className: "fs-surface-review-validation__summary", children: ["Before submitting: ", validationParts.join(', '), "."] }), reviewFormDest && reviewFormHref && (_jsx("a", { className: "fs-surface-action-link fs-surface-action-link--secondary", href: reviewFormHref, onClick: event => {
+                            if (!filingStatus?.navigate || !isPlainLinkClick(event))
+                                return;
+                            event.preventDefault();
+                            void filingStatus.navigate(reviewFormDest);
+                        }, children: "Back to form" }))] })), _jsx(Widget, { moduleId: plan.key.moduleId, widgetName: plan.key.widgetName, slot: { id: plan.slotId, title: plan.title }, route: route, headingLevel: plan.headingBaseLevel, config: plan.config ?? {}, data: delivery.data, actions: resolvedActions, emitAction: emitAction, admitsTenantTheme: grant.admitsTenantTheme, semanticOutputScope: semanticOutputScope }), draftReviewReady && draftReviewReady.delivery.warningGroups.length > 0 && draftSession && (_jsx(DraftReviewWarningAcknowledgements, { plan: draftReviewReady.plan, delivery: draftReviewReady.delivery, draftSession: draftSession, filingStatus: filingStatus, reportSave: reportSave, focusAcknowledgement: focusAcknowledgement, onSaved: retryDataLoad }))] }));
+}
+function DraftReviewWarningAcknowledgements({ plan, delivery, draftSession, filingStatus, reportSave, focusAcknowledgement, onSaved, }) {
+    const [savingCode, setSavingCode] = useState(null);
+    // Arriving by a Findings link, focus moves on from the route heading to the control that accepts the group,
+    // once. With nothing to accept yet it stays on the heading; it is never taken from a control chosen meanwhile.
+    const focused = useRef(undefined);
+    const accept = useRef(new Map());
+    useEffect(() => {
+        if (!focusAcknowledgement || focused.current === focusAcknowledgement)
+            return;
+        const button = accept.current.get(focusAcknowledgement);
+        if (!button || button.disabled)
+            return;
+        focused.current = focusAcknowledgement;
+        if (focusIsTheShells(button.ownerDocument))
+            button.focus();
+    }, [focusAcknowledgement, delivery]);
+    const sections = useMemo(() => (plan.sections ?? []).map(sec => ({
+        ...(sec.id === undefined ? {} : { id: sec.id }),
+        fields: [...sec.fields],
+        fieldTemplates: [...sec.fields],
+        nodes: [],
+        groups: [],
+    })), [plan.sections]);
+    const acknowledge = async (code, expectedBasis) => {
+        if (savingCode !== null)
+            return;
+        setSavingCode(code);
+        try {
+            const outcome = await draftSession.acknowledgeWarningGroup({
+                definition: plan.definition,
+                subject: plan.subject,
+                expectedRevision: delivery.revision,
+                expectedBasis,
+                code,
+                sections,
+                report: reportSave,
+            });
+            if (outcome === 'saved' || outcome === 'mismatch')
+                onSaved();
+        }
+        finally {
+            setSavingCode(null);
+        }
+    };
+    return (_jsx(_Fragment, { children: delivery.warningGroups.map(group => (_jsxs("fieldset", { className: "fs-surface-review-ack formspec-warning-explanation formspec-warning-acknowledgement", "data-explanation-code": group.code, children: [_jsx("legend", { className: "fs-surface-review-ack__legend", children: group.legend }), _jsxs("div", { className: "fs-surface-review-ack__body", children: [_jsx("ul", { children: group.items.map(item => {
+                                const destination = item.jumpHref ?? undefined;
+                                const href = destination !== undefined
+                                    ? (filingStatus?.formatHref ? filingStatus.formatHref(destination) : destination)
+                                    : undefined;
+                                return (_jsx("li", { children: destination && href ? (_jsx("a", { href: href, onClick: event => {
+                                            if (!filingStatus?.navigate || !isPlainLinkClick(event))
+                                                return;
+                                            event.preventDefault();
+                                            void filingStatus.navigate(destination);
+                                        }, children: item.label })) : (_jsx("span", { children: item.label })) }, item.path));
+                            }) }), group.addedText && _jsx("p", { className: "formspec-warning-acknowledgement-added", children: group.addedText }), group.removedText && _jsx("p", { className: "formspec-warning-acknowledgement-removed", children: group.removedText }), _jsx("button", { ref: button => {
+                                if (button)
+                                    accept.current.set(group.code, button);
+                                else
+                                    accept.current.delete(group.code);
+                            }, type: "button", className: "fs-surface-review-ack__button", disabled: group.current || savingCode !== null, onClick: () => void acknowledge(group.code, group.basis ?? ''), children: group.buttonLabel })] })] }, group.code))) }));
+}
+/** Focus the shell placed on arrival (the route heading or main landmark), or none: not the respondent's choice. */
+function focusIsTheShells(document) {
+    const active = document.activeElement;
+    return !active || active === document.body
+        || active.matches('main, .fs-surface-route__title, h1, [role="heading"][aria-level="1"]');
 }
 function UnavailableSlot({ children }) {
     return (_jsx("p", { className: "fs-surface-unavailable", role: "status", "data-probe": "slot-unavailable", children: children }));

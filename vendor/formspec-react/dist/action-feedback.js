@@ -17,7 +17,8 @@ export function actionResultMessage(chrome, feedback) {
         return '';
     if (feedback.phase === 'pending')
         return chrome('action.inProgress');
-    if (feedback.intent === 'save-draft' && (feedback.status === 'failed' || feedback.status === 'unresolved')) {
+    if ((feedback.intent === 'save-draft' || feedback.intent === 'autosave')
+        && (feedback.status === 'failed' || feedback.status === 'unresolved')) {
         return chrome('draft.saveUnconfirmed');
     }
     return chrome('action.status', { status: chrome(STATUS_KEYS[feedback.status]) });
@@ -127,6 +128,9 @@ export function createActionFeedbackStore(engine, draftSaveFeedback) {
                 }
             };
         },
+        primaryOutlet() {
+            return outlets.values().next().value;
+        },
         start(outlet, intent, candidates, source) {
             retireFocus();
             const next = ++token;
@@ -171,6 +175,16 @@ export function createActionFeedbackStore(engine, draftSaveFeedback) {
             state.value = { ...owned, feedback: { phase: 'settled', status,
                     intent: owned.feedback.phase === 'idle' ? undefined : owned.feedback.intent } };
         },
+        cancel(ticket) {
+            if (!ticket || !active)
+                return;
+            const owned = state.peek();
+            if (!owned || owned.ticket !== ticket)
+                return;
+            focusOrigin?.dispose();
+            focusOrigin = undefined;
+            state.value = undefined;
+        },
     };
 }
 const StoreContext = createContext(undefined);
@@ -181,6 +195,7 @@ export function ActionFeedbackProvider({ engine, responseId, renderInstanceId, d
     return _jsx(StoreContext.Provider, { value: store, children: children });
 }
 export function useActionFeedbackOutlet() { return useContext(OutletContext); }
+export function useActionFeedbackStore() { return useContext(StoreContext); }
 /** The outlet lives outside recursive When branches and announces only its origin. */
 export function ActionFeedbackContent({ children }) {
     const store = useContext(StoreContext);

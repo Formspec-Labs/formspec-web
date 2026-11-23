@@ -1,6 +1,5 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
-import { validationResultIdentity } from '@formspec-org/types';
 import { freezeSourceMetadata, readSourceResult, sourceErrorMessage } from './instance-source.js';
 import { diffEvalResults } from '../diff.js';
 import { FelExtensionFunctions } from '../extension-functions.js';
@@ -11,16 +10,18 @@ import { FetchIssuerFetcher } from '../issuer/IssuerFetcher.js';
 import { IssuerStore } from '../issuer/IssuerStore.js';
 import { createFieldViewModel, resolveItemHelpText, resolveItemLabel, } from '../field-view-model.js';
 import { createFormViewModel } from '../form-view-model.js';
-import { wasmCreateFelContext, wasmCreateRepeatRow, wasmCreateResponse, wasmEvaluateDefinition, } from '../wasm-bridge-runtime.js';
-import { resolveOptionSetsOnDefinition, validateCalculateBindCycles, validateVariableDefinitionCycles, } from './definition-setup.js';
+import { wasmAssembleCandidate, wasmCreateFelContext, wasmCreateRepeatRow, wasmCreateResponse, wasmEvaluateDefinition, wasmEvaluateFiled, wasmResponseSubjectId, } from '../wasm-bridge-runtime.js';
+import { resolveOptionSetsOnDefinition, } from './definition-setup.js';
+import { isStamped, matchesEntry, sameAnswer, stripExplanationStamp, warningReview, } from './warning-explanations.js';
 import { captureDraftData } from './draft-snapshot.js';
+import { registerDraftEditVersionSignal } from './draft-edit-signal.js';
 import { validateInstanceDataAgainstSchema } from './instance-schema.js';
 import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignalsFromWasm, } from './reactive-patches.js';
 import { clearRepeatIndexedSubtree, snapshotRepeatRow, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectRelevantValidationResults, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
 import { mergeWasmEvalWithExternalValidations, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
-import { appendPath, cloneValue, coerceFieldValue, deepEqual, extractInlineBind, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parentPathOf, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
+import { appendPath, cloneValue, coerceFieldValue, deepEqual, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parentPathOf, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
     constructor(definition, options = {}) {
@@ -39,6 +40,7 @@ export class FormEngine {
         this.variableSignals = {};
         /** Own-key JSON data map; valid source names never inherit Object prototype values. */
         this.instanceData = Object.create(null);
+        this._draftEditDirty = false;
         this._bindConfigs = {};
         this._fieldItems = new Map();
         /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
@@ -49,14 +51,19 @@ export class FormEngine {
         this._shapeTiming = new Map();
         this._displaySignalPaths = new Set();
         this._calculatedFields = new Set();
+        this._calculatedPaths = new Set();
+        this._indexedBinds = {};
         this._registryEntries = new Map();
         /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
         this._extensionFunctions = new FelExtensionFunctions();
+        this._pendingExplanationState = null;
         this._registryDocuments = [];
         this._remoteOptionsTasks = [];
         this._instanceSourceAbort = new AbortController();
         this._pendingInstanceSources = new Set();
         this._pendingCreationPaths = new Set();
+        this._creationDiagnostics = [];
+        this._failedSeedPaths = new Set();
         this._instanceSourceOutcomes = Object.create(null);
         this._disposed = false;
         this._instanceSourceTasks = [];
@@ -78,14 +85,45 @@ export class FormEngine {
         const { runtimeContext, registryEntries, reactiveRuntime = preactReactiveRuntime, issuerFetcher, issuerOverride, extensionFunctions, } = options;
         this._instanceSourceResolver = options.instanceSourceResolver;
         this._responseSubject = cloneValue(options.responseSubject ?? undefined);
+        // A declared filing unit's id is Core's hash of its keys, never the host's claim.
+        if (this._responseSubject && definition.subject)
+            delete this._responseSubject.id;
+        if (this._responseSubject && !definition.subject && this._responseSubject.id === undefined) {
+            throw new Error('A host entity subject needs responseSubject.id when the Definition declares no subject');
+        }
+        this._responseInstanceResolutions = Object.assign(Object.create(null), cloneValue(options.responseInstanceResolutions ?? {}));
         this._rx = reactiveRuntime;
+        const initialExplanations = options.draftSnapshot?.explanations
+            ? options.draftSnapshot.explanations.map(raw => {
+                const edit = stripExplanationStamp(raw);
+                return options.savedExplanations?.find(entry => isStamped(entry) && sameAnswer(edit, entry)) ?? edit;
+            })
+            : cloneValue(options.savedExplanations ?? []);
+        this._explanations = this._rx.signal(cloneValue(initialExplanations));
         this._issuerStore = new IssuerStore(issuerFetcher ?? new FetchIssuerFetcher());
         this._validationProfileResolver = new DefaultValidationProfileResolver();
         this._issuerOverride = issuerOverride;
         this.instanceVersion = this._rx.signal(0);
         this.structureVersion = this._rx.signal(0);
         this._evaluationVersion = this._rx.signal(0);
+        this._draftEditVersion = this._rx.signal(0);
+        registerDraftEditVersionSignal(this, this._draftEditVersion);
+        this._explanationRefreshVersion = this._rx.signal(0);
         this._labelContextSignal = this._rx.signal(null);
+        this._explanationState = this._rx.computed(() => {
+            const evaluationVersion = this._evaluationVersion.value;
+            const explanations = this._explanations.value;
+            const refreshVersion = this._explanationRefreshVersion.value;
+            const pending = this._pendingExplanationState;
+            this._pendingExplanationState = null;
+            const reused = pending
+                && pending.evaluationVersion === evaluationVersion
+                && pending.explanations === explanations
+                && pending.refreshVersion === refreshVersion
+                ? pending.state
+                : null;
+            return freezeSourceMetadata(reused ?? this.reviewWarnings());
+        });
         this.definition = cloneValue(definition);
         if ([options.responseData, options.savedResponseData, options.draftSnapshot].filter(value => value !== undefined).length > 1) {
             throw new Error('Supply one of responseData, savedResponseData, or draftSnapshot');
@@ -118,24 +156,26 @@ export class FormEngine {
         this.initializeInstances(options.loadExternalSources !== false);
         this.initializeBindConfigs(this.definition.items);
         this.rejectInstancePathBinds();
-        validateVariableDefinitionCycles(this._variableDefs, scope => this.variableScopePath(scope));
-        validateCalculateBindCycles(this._bindConfigs);
         this.registerItems(this.definition.items);
         try {
             const saved = options.draftSnapshot?.data ?? options.savedResponseData;
             if (saved !== undefined) {
                 this.loadItemsData(this.definition.items, saved, '');
             }
-            else {
-                this.createResponseData(options.responseData ?? {});
+            const input = saved ?? this.createResponseData(options.responseData ?? {});
+            this._evaluate(null, true, input);
+            // The first evaluation checked the subject before anything else; hash it once, only if it passed.
+            // Rust accepts a declared subject only with its type and keys.
+            const subject = this._responseSubject;
+            if (subject && this.definition.subject && !this.hasSubjectRefusal()) {
+                subject.id = wasmResponseSubjectId(subject.type, subject.keys);
             }
-            this._evaluate();
         }
         catch (error) {
             this.dispose();
             throw error;
         }
-        if (options.loadExternalSources !== false)
+        if (options.loadExternalSources !== false && !this.hasSubjectRefusal())
             this.initializeRemoteOptions();
         // Create form-level view model (after first evaluate so validation is available)
         this._formViewModel = createFormViewModel({
@@ -243,7 +283,7 @@ export class FormEngine {
         return isJsonRecord(data) ? getNestedValue(data, path) : undefined;
     }
     getDisabledDisplay(path) {
-        return this._bindConfigs[toBasePath(path)]?.disabledDisplay ?? 'hidden';
+        return this.bindAt(path)?.disabledDisplay ?? 'hidden';
     }
     getVariableValue(name, scopePath) {
         this._evaluationVersion.value;
@@ -266,17 +306,18 @@ export class FormEngine {
         if (item.maxRepeat !== undefined && index >= item.maxRepeat) {
             return undefined;
         }
-        const created = wasmCreateRepeatRow(this.definition, this.editingData(), path, this.creationContext(), this._extensionFunctions);
-        if (!created)
+        const created = wasmCreateRepeatRow(this.definition, this._refusedInput ?? this.editingData(), path, this.creationContext(), this._extensionFunctions);
+        if (!created || created.refused)
             return undefined;
         this._rx.batch(() => {
             this._pendingCreationPaths.delete(path);
+            this._failedSeedPaths.delete(path);
             for (const pending of created.pending)
                 this._pendingCreationPaths.add(pending);
             this.appendRepeatRow(path, item);
             this.loadItemsData(item.children ?? [], created.data, `${path}[${index}]`);
+            this._evaluate();
         });
-        this._evaluate();
         return index;
     }
     removeRepeatInstance(itemName, index) {
@@ -286,29 +327,45 @@ export class FormEngine {
         if (!item?.repeatable || index < 0 || index >= count) {
             return;
         }
-        this.rebuildRepeatRows(path, item, index);
-        const prefix = `${path}[`;
-        this._pendingCreationPaths = new Set([...this._pendingCreationPaths].flatMap(pending => {
-            if (!pending.startsWith(prefix))
-                return [pending];
-            const end = pending.indexOf(']', prefix.length);
-            const row = Number(pending.slice(prefix.length, end));
-            if (row === index)
-                return [];
-            return [row > index ? `${prefix}${row - 1}${pending.slice(end)}` : pending];
-        }));
-        this._evaluate();
+        this._rx.batch(() => {
+            this.rebuildRepeatRows(path, item, index);
+            const prefix = `${path}[`;
+            const shift = (fieldPath) => {
+                if (!fieldPath.startsWith(prefix))
+                    return [fieldPath];
+                const end = fieldPath.indexOf(']', prefix.length);
+                const row = Number(fieldPath.slice(prefix.length, end));
+                if (row === index)
+                    return [];
+                return [row > index ? `${prefix}${row - 1}${fieldPath.slice(end)}` : fieldPath];
+            };
+            this._pendingCreationPaths = new Set([...this._pendingCreationPaths].flatMap(shift));
+            const shiftFindings = (findings) => findings.flatMap(finding => shift(finding.path).map(path => path === finding.path ? finding : { ...finding, path }));
+            this._externalValidation.splice(0, this._externalValidation.length, ...shiftFindings(this._externalValidation));
+            const previous = this._fullResult;
+            this._evaluate(previous && {
+                nonRelevant: previous.nonRelevant.flatMap(shift),
+                validations: shiftFindings(previous.validations),
+            }, false, this.editingData());
+        });
     }
     /** Resume saved Response data with its exact row counts and answered fields. */
-    loadResponseData(data) {
+    loadResponseData(data, explanations = []) {
+        if (!isJsonRecord(data))
+            throw new TypeError('Response data must be a JSON object');
         this._rx.batch(() => {
+            this._refusedCreation = undefined;
+            this._explanations.value = cloneValue(explanations);
             this._pendingCreationPaths.clear();
+            this._creationDiagnostics.length = 0;
+            this._failedSeedPaths.clear();
             this.loadItemsData(this.definition.items, data, '', true);
-            this._evaluate(null);
+            this._evaluate(null, false, data);
         });
     }
     editingData() {
-        return captureDraftData(this.definition.items, path => this._data[path], path => this._pendingCreationPaths.has(path) ? undefined : this.repeats[path].value);
+        return captureDraftData(this.definition.items, path => this._data[path], path => this._pendingCreationPaths.has(path) || this._failedSeedPaths.has(path)
+            ? undefined : this.repeats[path].value);
     }
     getDraftSnapshot() {
         const data = this.editingData();
@@ -318,9 +375,131 @@ export class FormEngine {
             data,
         });
     }
-    loadDraftSnapshot(snapshot) {
+    loadDraftSnapshot(snapshot, explanations = []) {
         this.assertDraftSnapshot(snapshot);
-        this.loadResponseData(snapshot.data);
+        const merged = snapshot.explanations
+            ? snapshot.explanations.map(raw => {
+                const edit = stripExplanationStamp(raw);
+                return explanations.find(entry => isStamped(entry) && sameAnswer(edit, entry)) ?? edit;
+            })
+            : cloneValue(explanations);
+        this.loadResponseData(snapshot.data, merged);
+    }
+    getExplanationEntries() {
+        return cloneValue(this._explanations.value);
+    }
+    getExplanationState() {
+        return this._explanationState.value;
+    }
+    reviewWarnings() {
+        return warningReview(this.evaluateResultForTrigger('submit'), this._explanations.value);
+    }
+    refreshExplanationState(state) {
+        const refreshVersion = this._explanationRefreshVersion.value + 1;
+        this._pendingExplanationState = {
+            evaluationVersion: this._evaluationVersion.value,
+            explanations: this._explanations.value,
+            refreshVersion,
+            state,
+        };
+        this._explanationRefreshVersion.value = refreshVersion;
+    }
+    setExplanation(shapeId, path, answer) {
+        const finding = this.reviewWarnings().findings.find(f => f.shapeId === shapeId && f.path === path);
+        if (!finding || finding.mode === 'acknowledge') {
+            throw new Error('This warning has no current instance explanation');
+        }
+        if (finding.mode === 'explain' && !answer.text)
+            throw new Error('This warning requires explanation text');
+        this.writeExplanation({
+            shapeId, path, basis: finding.basis, ...(answer.text === undefined ? {} : { text: answer.text }),
+        });
+    }
+    acknowledge(code, options) {
+        if ('parties' in this.definition)
+            throw new Error('Group acknowledgement requires a bound party');
+        const state = this.reviewWarnings();
+        const finding = state.findings.find(f => f.code === code && f.mode === 'acknowledge');
+        const group = state.groups.find(g => g.code === code);
+        if (options?.expectedBasis !== undefined) {
+            if (!group || finding?.mode !== 'acknowledge' || finding.groupBasis !== options.expectedBasis) {
+                this.refreshExplanationState(state);
+                return false;
+            }
+        }
+        else if (!group || finding?.mode !== 'acknowledge') {
+            throw new Error('No current warnings to acknowledge');
+        }
+        const [first, ...rest] = group.paths;
+        this.writeExplanation({ group: true, code, paths: [first, ...rest], basis: finding.groupBasis });
+        return true;
+    }
+    writeExplanation(entry) {
+        const entries = this._explanations.value;
+        const index = entries.findIndex(current => matchesEntry(current, entry));
+        if (index < 0) {
+            this._rx.batch(() => {
+                this._explanations.value = [...entries, entry];
+                this._draftEditVersion.value += 1;
+            });
+        }
+        else if (!sameAnswer(entries[index], entry)) {
+            this._rx.batch(() => {
+                this._explanations.value = entries.map((current, i) => i === index ? entry : current);
+                this._draftEditVersion.value += 1;
+            });
+        }
+    }
+    removeExplanation(key) {
+        const next = this._explanations.value.filter(entry => !matchesEntry(entry, key));
+        const changed = next.length !== this._explanations.value.length;
+        this._rx.batch(() => {
+            this._explanations.value = next;
+            if (changed)
+                this._draftEditVersion.value += 1;
+        });
+    }
+    acceptSavedExplanations(entries, options) {
+        const current = this._explanations.value;
+        let saved;
+        if (options?.base !== undefined) {
+            const base = options.base;
+            saved = [];
+            for (const local of current) {
+                const committed = entries.find(entry => matchesEntry(local, entry));
+                const baseEntry = base.find(entry => matchesEntry(local, entry));
+                if (committed && sameAnswer(local, committed)) {
+                    saved.push(committed);
+                }
+                else if (baseEntry && sameAnswer(local, baseEntry)) {
+                    if (committed)
+                        saved.push(committed);
+                }
+                else {
+                    saved.push(local);
+                }
+            }
+            for (const committed of entries) {
+                if (saved.some(existing => matchesEntry(existing, committed)))
+                    continue;
+                const baseEntry = base.find(entry => matchesEntry(committed, entry));
+                if (!baseEntry || !sameAnswer(baseEntry, committed)) {
+                    saved.push(committed);
+                }
+            }
+        }
+        else {
+            saved = current.map(edit => entries.find(entry => sameAnswer(edit, entry)) ?? edit);
+            if (options?.mergeMissing) {
+                for (const entry of entries) {
+                    if (!saved.some(existing => matchesEntry(existing, entry))) {
+                        saved.push(entry);
+                    }
+                }
+            }
+        }
+        if (!deepEqual(saved, current))
+            this._explanations.value = cloneValue(saved);
     }
     assertDraftSnapshot(snapshot) {
         if (snapshot.definitionUrl !== this.definition.url || snapshot.definitionVersion !== this.definition.version) {
@@ -335,7 +514,7 @@ export class FormEngine {
             const path = prefix ? `${prefix}.${item.key}` : item.key;
             const value = present ? data[item.key] : undefined;
             if (item.type === 'field') {
-                if ((present || replace) && !this._calculatedFields.has(toBasePath(path))) {
+                if ((present || replace) && !this.isCalculated(path)) {
                     this.storeFieldValue(path, value);
                     if (replace)
                         this.writeSources[path].value = null;
@@ -348,6 +527,7 @@ export class FormEngine {
                     if (this.repeats[path].value > rows.length) {
                         this.clearRepeatSubtree(path, rows.length);
                         this.repeats[path].value = rows.length;
+                        this._draftEditDirty = true;
                         this.structureVersion.value += 1;
                     }
                     while (this.repeats[path].value < rows.length) {
@@ -375,13 +555,28 @@ export class FormEngine {
     }
     createResponseData(data, pendingPaths) {
         const created = wasmCreateResponse(this.definition, data, this.creationContext(pendingPaths), this._extensionFunctions);
+        const refusal = created.diagnostics.find(diagnostic => this.isCalculationRefusal(diagnostic.code));
+        if (refusal)
+            throw new Error(refusal.message);
+        this._refusedCreation = created.refused ? { pendingPaths } : undefined;
+        if (created.refused) {
+            // Evaluation reports the authored Definition finding.
+            this.loadItemsData(this.definition.items, created.data, '');
+            return created.data;
+        }
         this._pendingCreationPaths = new Set(created.pending);
-        for (const message of created.diagnostics)
-            console.warn(message);
+        for (const diagnostic of created.diagnostics) {
+            this._creationDiagnostics.push(diagnostic);
+            // Missing source arrays still use the authored repeat minimum.
+            if (diagnostic.code !== 'SEED_SOURCE_UNAVAILABLE')
+                this._failedSeedPaths.add(diagnostic.path);
+        }
         this.loadItemsData(this.definition.items, created.data, '');
+        return created.data;
     }
     appendRepeatRow(path, item) {
         const index = this.repeats[path].value;
+        this._draftEditDirty = true;
         this._rx.batch(() => {
             this.repeats[path].value = index + 1;
             this.registerItems(item.children ?? [], `${path}[${index}]`);
@@ -390,6 +585,7 @@ export class FormEngine {
     }
     /** Reindex the surviving rows with their nested shape, values and prefill protection. */
     rebuildRepeatRows(path, item, removedIndex) {
+        this._draftEditDirty = true;
         const children = item.children ?? [];
         const rows = [];
         for (let current = 0; current < this.repeats[path].value; current += 1) {
@@ -432,7 +628,7 @@ export class FormEngine {
                     nonRelevant: previous.nonRelevant.filter(keepPath),
                     required: keepFlags(previous.required),
                     readonly: keepFlags(previous.readonly),
-                    validations: previous.validations.filter(({ path: resultPath, shapeId }) => shapeId || keepPath(resultPath)),
+                    validations: previous.validations.filter(({ path: resultPath, shapeId }) => shapeId || !resultPath.startsWith(prefix)),
                 };
             }
             this.structureVersion.value += 1;
@@ -462,29 +658,53 @@ export class FormEngine {
         if (this.writeFieldData(name, value, basePath)) {
             this._pendingCreationPaths.delete(name);
             ((_a = this.writeSources)[name] ?? (_a[name] = this._rx.signal(null))).value = options.source ?? 'user';
-            this._evaluate();
+            this._evaluate(undefined, false, this.editingData());
         }
     }
     /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
     writeFieldData(name, value, basePath = toBasePath(name)) {
-        if (this._calculatedFields.has(basePath)) {
+        if (this.isCalculated(name, basePath)) {
             return false;
         }
         const item = this._fieldItems.get(basePath);
         if (!item) {
             return false;
         }
-        const bind = this._bindConfigs[basePath];
+        const bind = this.bindAt(name, basePath);
         this.storeFieldValue(name, coerceFieldValue(item, bind, this.definition, value));
         return true;
     }
+    isCalculated(path, basePath = toBasePath(path)) {
+        return this._calculatedFields.has(basePath) || this._calculatedPaths.has(path);
+    }
+    bindAt(path, basePath = toBasePath(path)) {
+        const indexed = this._indexedBinds[path];
+        return indexed ? { ...this._bindConfigs[basePath], ...indexed } : this._bindConfigs[basePath];
+    }
     storeFieldValue(path, value) {
+        const hadKey = Object.prototype.hasOwnProperty.call(this._data, path);
         if (value === undefined) {
-            delete this._data[path];
+            if (hadKey) {
+                delete this._data[path];
+                this._draftEditDirty = true;
+            }
         }
         else {
+            if (!hadKey || !deepEqual(this._data[path], value)) {
+                this._draftEditDirty = true;
+            }
             this._data[path] = cloneValue(value);
         }
+    }
+    /** Whether the evaluator refused the supplied Response subject. */
+    hasSubjectRefusal() {
+        return this.subjectRefusal() !== undefined;
+    }
+    /** The evaluator's typed finding for a refused Response subject. */
+    subjectRefusal() {
+        if (this._fullResult?.refused !== true)
+            return undefined;
+        return this._fullResult.validations.find(({ path }) => path === '#subjectType' || path === '#subjectKeys' || path.startsWith('#subjectKeys.'));
     }
     getValidationReport(options = { profile: 'live' }) {
         this.assertValidationReportOptions(options, 'getValidationReport');
@@ -497,15 +717,10 @@ export class FormEngine {
     }
     /** Report for `trigger` plus the expression diagnostics of the evaluation that produced it. */
     produceValidation(trigger) {
-        const results = [];
+        let results = [];
         let diagnostics = this._fullResult?.diagnostics ?? [];
         const timestamp = this.nowISO();
-        if (trigger === 'demand') {
-            const demandResult = this.evaluateResultForTrigger('demand', timestamp);
-            diagnostics = demandResult.diagnostics;
-            results.push(...collectTimedShapeValidationResults(demandResult, this._shapeTiming, 'demand'));
-        }
-        else {
+        if (trigger === 'continuous') {
             for (const [path, signalRef] of Object.entries(this.validationResults)) {
                 if (this.isPathRelevant(path)) {
                     results.push(...signalRef.value);
@@ -514,31 +729,28 @@ export class FormEngine {
             for (const signalRef of Object.values(this.shapeResults)) {
                 results.push(...signalRef.value);
             }
-            if (trigger === 'submit' && this.hasSubmitValidation()) {
-                const submitResult = this.evaluateResultForTrigger('submit', timestamp);
-                diagnostics = submitResult.diagnostics;
-                const seen = new Set(results.map(validationResultIdentity));
-                for (const result of collectRelevantValidationResults(submitResult)) {
-                    const identity = validationResultIdentity(result);
-                    if (seen.has(identity))
-                        continue;
-                    seen.add(identity);
-                    results.push(result);
-                }
-            }
+        }
+        else {
+            const result = this.evaluateResultForTrigger(trigger, timestamp);
+            diagnostics = result.diagnostics;
+            results = this.collectResponseValidationResults(result, trigger);
         }
         return {
             report: buildValidationReportEnvelope(results, timestamp, this.definition.url, this.definition.version),
             diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
         };
     }
-    hasSubmitValidation() {
-        const { warningExplanation, shapes } = this.definition;
-        if (warningExplanation && warningExplanation !== 'none') {
-            return true;
+    collectResponseValidationResults(result, trigger) {
+        if (trigger === 'demand') {
+            return collectTimedShapeValidationResults(result, this._shapeTiming, 'demand');
         }
-        return shapes?.some(({ timing, explanation }) => timing === 'submit'
-            || (explanation && explanation !== 'none')) ?? false;
+        if (trigger === 'submit') {
+            return [
+                ...result.validations.map(toValidationResult),
+                ...collectRelevantValidationResults(result, this._externalValidation),
+            ];
+        }
+        return collectRelevantValidationResults(result);
     }
     evaluateShape(shapeId) {
         const timing = this._shapeTiming.get(shapeId) ?? 'continuous';
@@ -652,31 +864,69 @@ export class FormEngine {
     getResponse(meta) {
         return this.getResponseSnapshot(meta).response;
     }
-    /** One evaluation and clock for response data and its requested validation report. */
+    /** Capture response data and its requested validation report with one clock. */
     getResponseSnapshot(meta, validationProfile) {
+        return this.captureSnapshotInternal(meta, validationProfile, false).snapshot;
+    }
+    /**
+     * Evaluate Submit once at the current clock and either emit the assembled candidate or return
+     * an in-progress snapshot with `pendingExplanationStamps: true` when selected explanations lack stamps.
+     */
+    captureSubmitSnapshot(meta) {
+        return this.captureSnapshotInternal({ ...meta, profile: 'on-submit' }, 'on-submit', true);
+    }
+    captureSnapshotInternal(meta, validationProfile, allowPendingExplanationStamps) {
         this.assertNoRemovedModeOption(meta, 'getResponse');
-        if (meta?.subject && (this._responseSubject || 'keys' in meta.subject)) {
+        if (meta?.subject && (this._responseSubject || this.definition.subject || 'keys' in meta.subject)) {
             throw new Error('Supply filing-unit identity through the responseSubject constructor option');
+        }
+        // A refused subject has no Core id; its Response would be schema-invalid, so none is emitted.
+        const subjectRefusal = this.subjectRefusal();
+        if (subjectRefusal) {
+            throw new Error(`Response subject refused: ${subjectRefusal.path}: ${subjectRefusal.message}`);
         }
         const profile = meta?.profile ?? 'live';
         const responseTrigger = this._validationProfileResolver.resolve(profile);
         const trigger = this._validationProfileResolver.resolve(validationProfile ?? profile);
         const timestamp = this.nowISO();
-        const result = this.evaluateResultForTrigger(trigger, timestamp);
-        const data = cloneValue(result.data);
-        for (const path of this._pendingCreationPaths) {
-            if (!this.repeats[path])
-                continue;
-            const parentPath = parentPathOf(path);
-            const parent = getNestedValue(data, parentPath);
-            if (isJsonRecord(parent)) {
-                delete parent[path.slice(parentPath ? parentPath.length + 1 : 0)];
+        let instances;
+        let changedInstance;
+        if (responseTrigger === 'submit' && trigger === 'submit') {
+            const hasResponseInstances = Object.values(this.definition.instances ?? {}).some(instance => Boolean(instance.response));
+            if ((hasResponseInstances || this._explanations.value.length > 0) && meta?.authoredSignatures?.length) {
+                throw new Error('Capture the unsigned Response candidate before attaching signatures');
+            }
+            for (const [name, instance] of Object.entries(this.definition.instances ?? {})) {
+                if (!instance.response)
+                    continue;
+                instances ?? (instances = { ...this.instanceData });
+                const delivery = this._responseInstanceResolutions[name];
+                if (!delivery)
+                    continue;
+                if (!deepEqual(delivery.value, instances[name])) {
+                    changedInstance ?? (changedInstance = name);
+                    continue;
+                }
+                // Use the delivered value when evaluating a potential signing candidate.
+                instances[name] = delivery.value;
             }
         }
-        const report = trigger === 'disabled' ? null : buildValidationReportEnvelope((trigger === 'demand'
-            ? collectTimedShapeValidationResults(result, this._shapeTiming, 'demand')
-            : collectRelevantValidationResults(result)), timestamp, this.definition.url, this.definition.version);
-        const response = buildFormspecResponseEnvelope({
+        const responseResult = this.evaluateResultForTrigger(responseTrigger, timestamp, { instances });
+        const data = responseTrigger === 'submit'
+            ? cloneValue(responseResult.data)
+            : this.draftResponseData(responseResult);
+        const validationResult = trigger === 'disabled'
+            ? null
+            : trigger === responseTrigger
+                ? responseResult
+                : this.evaluateResultForTrigger(trigger, timestamp);
+        const report = trigger === 'disabled' ? null : buildValidationReportEnvelope(this.collectResponseValidationResults(validationResult, trigger), timestamp, this.definition.url, this.definition.version);
+        const submitEvalResult = responseTrigger === 'submit'
+            ? responseResult
+            : trigger === 'submit'
+                ? validationResult
+                : null;
+        let response = buildFormspecResponseEnvelope({
             definition: this.definition,
             data,
             report: responseTrigger === 'disabled' ? null : report,
@@ -687,7 +937,74 @@ export class FormEngine {
             subject: cloneValue(this._responseSubject ?? meta?.subject),
             meta,
         });
-        return { response, validationReport: report };
+        const draftEntries = this._explanations.value;
+        let pendingExplanationStamps = false;
+        if (response.status === 'completed') {
+            let saved;
+            if (draftEntries.length) {
+                const entries = responseResult.candidateExplanations;
+                if (!entries)
+                    throw new Error('Submit evaluation did not assemble the warning explanations');
+                saved = entries.filter(isStamped);
+                if (saved.length !== entries.length) {
+                    if (!allowPendingExplanationStamps) {
+                        throw new Error('Save pending warning answers and load their server stamps before emitting this Response');
+                    }
+                    pendingExplanationStamps = true;
+                    this.refreshExplanationState(warningReview(responseResult, draftEntries));
+                    response = buildFormspecResponseEnvelope({
+                        definition: this.definition,
+                        data: this.draftResponseData(responseResult),
+                        report: null,
+                        completionEligible: false,
+                        timestamp,
+                        displayedIssuer: this.getDisplayedIssuerPin(),
+                        displayedLocale: this.getDisplayedLocalePin(),
+                        subject: cloneValue(this._responseSubject ?? meta?.subject),
+                        meta,
+                    });
+                    const stampedDraft = draftEntries.filter(isStamped);
+                    if (stampedDraft.length)
+                        response.explanations = cloneValue(stampedDraft);
+                }
+            }
+            if (!pendingExplanationStamps && (instances || draftEntries.length)) {
+                if (instances && changedInstance !== undefined) {
+                    throw new Error(`Response instance '${changedInstance}' changed after resolution`);
+                }
+                if (draftEntries.length) {
+                    response.explanations = cloneValue(draftEntries);
+                }
+                response = wasmAssembleCandidate(this.definition, response, this._responseInstanceResolutions, draftEntries.length ? { candidateExplanations: saved ?? [] } : null);
+            }
+        }
+        else {
+            if (draftEntries.length) {
+                const saved = draftEntries.filter(isStamped);
+                if (saved.length)
+                    response.explanations = cloneValue(saved);
+            }
+            if (submitEvalResult
+                && report?.results.some(r => r.code === 'EXPLANATION_STALE' || r.code === 'EXPLANATION_REQUIRED')) {
+                // Publish the fresh Submit evaluation to warning controls so clock-only expiry/expansion
+                // immediately reopens accepted groups without a second evaluation.
+                this.refreshExplanationState(warningReview(submitEvalResult, draftEntries));
+            }
+        }
+        return { snapshot: { response, validationReport: report }, pendingExplanationStamps };
+    }
+    draftResponseData(result) {
+        const data = cloneValue(result.data);
+        for (const path of [...this._pendingCreationPaths, ...this._failedSeedPaths]) {
+            if (!this.repeats[path])
+                continue;
+            const parentPath = parentPathOf(path);
+            const parent = getNestedValue(data, parentPath);
+            if (isJsonRecord(parent)) {
+                delete parent[path.slice(parentPath ? parentPath.length + 1 : 0)];
+            }
+        }
+        return data;
     }
     getDiagnosticsSnapshot(options = { profile: 'live' }) {
         this.assertValidationReportOptions(options, 'getDiagnosticsSnapshot');
@@ -723,7 +1040,7 @@ export class FormEngine {
             values,
             mips,
             validation: validation.report,
-            evaluationDiagnostics: validation.diagnostics,
+            evaluationDiagnostics: [...this._creationDiagnostics.map(diagnostic => ({ ...diagnostic })), ...validation.diagnostics],
             runtimeContext: {
                 now: timestamp,
                 locale: this._runtimeContext.locale,
@@ -1003,6 +1320,11 @@ export class FormEngine {
             return;
         }
         for (const [name, instance] of Object.entries(instances)) {
+            const delivery = instance.response && this._responseInstanceResolutions[name];
+            if (delivery) {
+                this.instanceData[name] = cloneValue(delivery.value);
+                continue;
+            }
             if (instance.data !== undefined) {
                 const seedData = cloneValue(instance.data);
                 this.validateInstanceSchema(name, seedData);
@@ -1072,7 +1394,7 @@ export class FormEngine {
             let previous;
             let hadPrevious = false;
             Promise.resolve().then(async () => {
-                if (signal.aborted)
+                if (signal.aborted || this.hasSubjectRefusal())
                     return;
                 let payload;
                 if (resolver) {
@@ -1118,10 +1440,10 @@ export class FormEngine {
                     if (this._disposed)
                         return;
                     this._pendingInstanceSources.delete(name);
-                    if (this._pendingCreationPaths.size > 0) {
-                        this.createResponseData(this.editingData(), [...this._pendingCreationPaths]);
-                    }
-                    this._evaluate();
+                    const data = this._pendingCreationPaths.size > 0
+                        ? this.createResponseData(this._refusedInput ?? this.editingData(), [...this._pendingCreationPaths])
+                        : undefined;
+                    this._evaluate(undefined, false, data);
                     if (installed) {
                         if (!resolver && instance.static)
                             FormEngine.instanceSourceCache.set(source, cloneValue(this.instanceData[name]));
@@ -1154,13 +1476,6 @@ export class FormEngine {
             this._groupItems.set(path, item);
             if (item.type === 'field') {
                 this._fieldDataTypes[path] = item.dataType;
-            }
-            const inlineBind = extractInlineBind(item, path);
-            if (inlineBind) {
-                this._bindConfigs[path] = { ...this._bindConfigs[path], ...inlineBind };
-                if (inlineBind.calculate) {
-                    this._calculatedFields.add(path);
-                }
             }
             if (item.children) {
                 this.initializeBindConfigs(item.children, path);
@@ -1500,8 +1815,16 @@ export class FormEngine {
             externalValidations: this._externalValidation,
         });
     }
-    _evaluate(previousResult = this._fullResult) {
-        const baseResult = wasmEvaluateDefinition(this.definition, this.editingData(), wasmEvaluateDefinitionPayload({
+    isCalculationRefusal(code) {
+        return code === 'CIRCULAR_DEPENDENCY' || code === 'CALCULATE_TARGET_CONFLICT';
+    }
+    _evaluate(previousResult = this._fullResult, constructing = false, input = this._refusedInput ?? this.editingData()) {
+        var _a;
+        // Retry new Response creation if the host has since supplied a valid input or extension.
+        const data = this._refusedCreation && !constructing
+            ? this.createResponseData(input, this._refusedCreation.pendingPaths)
+            : input;
+        const baseResult = wasmEvaluateDefinition(this.definition, data, wasmEvaluateDefinitionPayload({
             nowIso: this.nowISO(),
             previousResult,
             instances: this.instanceData,
@@ -1509,11 +1832,9 @@ export class FormEngine {
             subjectType: this._responseSubject && (this._responseSubject.type ?? null),
             subjectKeys: this._responseSubject?.keys,
         }), this._extensionFunctions);
-        if (this._responseSubject) {
-            const refusal = baseResult.validations.find(({ path }) => path === '#subjectType' || path === '#subjectKeys' || path.startsWith('#subjectKeys.'));
-            if (refusal) {
-                throw new Error(`${refusal.path}: ${refusal.message}`);
-            }
+        const refusal = baseResult.validations.find(result => this.isCalculationRefusal(result.code));
+        if (refusal && constructing) {
+            throw new Error(String(refusal.message));
         }
         const evalResult = this.shapedEvalResult(baseResult);
         // Shape timing is enforced in Rust `revalidate` for the default continuous WASM eval;
@@ -1522,14 +1843,32 @@ export class FormEngine {
         // Assign before patching: effects that run when the batch closes read `_fullResult` through FEL contexts.
         this._previousEvalResult = evalResult;
         this._fullResult = evalResult;
+        this._refusedInput = evalResult.refused ? cloneValue(data) : undefined;
+        if (!evalResult.refused) {
+            this._calculatedPaths = new Set(evalResult.calculatedPaths);
+            this._indexedBinds = evalResult.indexedBinds ?? {};
+            // A resumed Response may carry a result for a newly resolved indexed
+            // calculation. Discard that result from the editable draft.
+            for (const path of this._calculatedPaths) {
+                if (Object.prototype.hasOwnProperty.call(this._data, path)) {
+                    delete this._data[path];
+                    this._draftEditDirty = true;
+                }
+                if (this._displaySignalPaths.has(path))
+                    (_a = this.signals)[path] ?? (_a[path] = this._rx.signal(null));
+            }
+        }
         this._rx.batch(() => {
-            patchValueSignalsFromWasm({
+            if (patchValueSignalsFromWasm({
                 values: evalResult.values,
                 signals: this.signals,
                 data: this._data,
-                bindConfigs: this._bindConfigs,
-                calculatedFields: this._calculatedFields,
-            });
+                bindAt: (path, basePath) => this.bindAt(path, basePath),
+                isCalculated: (path, basePath) => this.isCalculated(path, basePath),
+                refused: evalResult.refused,
+            })) {
+                this._draftEditDirty = true;
+            }
             patchDeltaSignalsFromWasm(this._rx, delta, {
                 relevantSignals: this.relevantSignals,
                 requiredSignals: this.requiredSignals,
@@ -1543,19 +1882,31 @@ export class FormEngine {
                 validationResults: this.validationResults,
                 errorSignals: this.errorSignals,
             });
+            if (this._draftEditDirty) {
+                this._draftEditDirty = false;
+                this._draftEditVersion.value += 1;
+            }
             this._evaluationVersion.value += 1;
         });
     }
-    evaluateResultForTrigger(trigger, nowIso = this.nowISO()) {
-        return this.shapedEvalResult(wasmEvaluateDefinition(this.definition, this.editingData(), wasmEvaluateDefinitionPayload({
+    evaluateResultForTrigger(trigger, nowIso = this.nowISO(), options = {}) {
+        const data = options.data ?? this._refusedInput ?? this.editingData();
+        if (trigger === 'submit') {
+            // A reactive report depends on edits, even if every answer was pruned from its data.
+            this._evaluationVersion.value;
+        }
+        const evaluate = trigger === 'submit' ? wasmEvaluateFiled : wasmEvaluateDefinition;
+        const result = evaluate(this.definition, data, wasmEvaluateDefinitionPayload({
             nowIso,
             trigger,
-            previousResult: this._fullResult,
-            instances: this.instanceData,
+            previousResult: options.data === undefined ? this._fullResult : null,
+            explanations: this._explanations.value,
+            instances: options.instances ?? this.instanceData,
             registryDocuments: this._registryDocuments,
             subjectType: this._responseSubject && (this._responseSubject.type ?? null),
             subjectKeys: this._responseSubject?.keys,
-        }), this._extensionFunctions));
+        }), this._extensionFunctions);
+        return trigger === 'submit' || result.refused ? result : this.shapedEvalResult(result);
     }
     resolveRepeatPath(itemName) {
         return this.repeats[itemName] ? itemName : toBasePath(itemName);

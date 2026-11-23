@@ -1,4 +1,5 @@
 /** @filedesc Response Actions resolution helpers for renderers and hosts. */
+import type { IFormEngine } from './interfaces.js';
 import type { Action as ResponseAction, ActionInvocationStatus, EffectRequest, EffectOutcomeStatus, Precondition, ResponseActionsDocument, ValidationOverride, ValidationProfile } from '@formspec-org/types';
 export type { ResponseAction, ResponseActionsDocument, ValidationOverride as ResponseActionValidationTuple, };
 export type StandardResponseActionIntent = 'save-draft' | 'autosave' | 'review' | 'submit' | 'request-evidence';
@@ -25,7 +26,12 @@ export interface ActionRefFinding {
     kind: 'actionRef';
     nodeId?: string;
     target: string;
-    reason?: 'missing-actionRef' | 'no-response-actions-document' | 'missing-submit-action' | 'ambiguous-actionRef';
+    reason?: 'missing-actionRef' | 'no-response-actions-document' | 'missing-submit-action' | 'ambiguous-actionRef' | 'ambiguous-autosave-action';
+}
+export interface AutosaveActionResolution {
+    action: ResponseAction | null;
+    ambiguousActionIds?: readonly string[];
+    finding?: ActionRefFinding;
 }
 export interface ActionResolution {
     resolved: boolean;
@@ -235,6 +241,96 @@ export interface ResponseActionInvocationPlan {
  */
 export declare function planResponseActionInvocation(document: ResponseActionsDocumentInput | null | undefined, actionRef: string, nodeId?: string): ResponseActionInvocationPlan;
 export declare function findResponseActionByIntent(document: ResponseActionsDocumentInput | null | undefined, intent: string): ResponseAction | null;
+/**
+ * Whether `intent` conforms to `schemas/response-actions.schema.json` `#/$defs/ActionIntent`:
+ * either a closed standard Validation Mapping intent or an `x-` publisher extension that
+ * does not shadow a standard intent.
+ */
+export declare function isValidResponseActionIntent(intent: unknown): intent is ResponseAction['intent'];
+/**
+ * Fail-closed schema-faithful validator for a Definition-scoped Response Actions
+ * document (`schemas/response-actions.schema.json`). Shared by renderer
+ * auto-placement, Surface slot-supply planning, and automatic `autosave`
+ * selection so every consumer agrees on whether a document is valid.
+ */
+export declare function isValidDefinitionResponseActionsDocument(document: unknown, definition: {
+    url?: unknown;
+    version?: unknown;
+}): document is ResponseActionsDocument;
+/**
+ * Whether a Response Action represents background/system-initiated behavior
+ * (`intent === 'autosave'` per Validation Mapping §2) rather than a manual
+ * respondent control. Renderers MUST NOT synthesize interactive ActionButtons
+ * for background actions even when they carry a label.
+ */
+export declare function isBackgroundResponseAction(action: {
+    intent?: unknown;
+} | null | undefined): boolean;
+/**
+ * Select manual response-scoped Actions that a Definition auto-renderer can
+ * place without inventing a control label. The document itself must be a
+ * matching, response-scoped document with unique, structurally usable actions;
+ * one bad action closes the whole auto-placement seam. Background intents
+ * (`autosave`) are excluded from synthesized manual buttons.
+ */
+export declare function autoPlacedDefinitionActions(document: ResponseActionsDocumentInput | null | undefined, definition: {
+    url?: unknown;
+    version?: unknown;
+}): readonly ResponseAction[];
+/**
+ * Resolve the single unambiguous draft-checkpoint `autosave` Action for a
+ * Definition from a complete, schema-valid response-scoped Response Actions
+ * document. Because `actions[]` order is documentation-only, multiple eligible
+ * `autosave` Actions fail closed and return an `ambiguous-autosave-action`
+ * finding independent of array order.
+ */
+export declare function resolveAutosaveResponseAction(document: ResponseActionsDocumentInput | null | undefined, definition?: {
+    url?: unknown;
+    version?: unknown;
+} | null): AutosaveActionResolution;
+/**
+ * Resolve the valid draft-checkpoint `autosave` Action for a Definition, if
+ * exactly one is published unambiguously in a valid matching response-scoped document.
+ */
+export declare function findAutosaveResponseAction(document: ResponseActionsDocumentInput | null | undefined, definition?: {
+    url?: unknown;
+    version?: unknown;
+} | null): ResponseAction | null;
+export interface ResponseActionAutosaveInvokeContext {
+    document: ResponseActionsDocumentInput | null | undefined;
+    isCurrent: () => boolean;
+}
+export interface ResponseActionAutosaveDocumentChange {
+    previousAction: ResponseAction | null;
+    nextAction: ResponseAction | null;
+    equivalentAction: boolean;
+}
+export interface ResponseActionAutosaveOptions {
+    engine: Pick<IFormEngine, 'getDraftSnapshot' | 'getEvaluatedFormState'> & Partial<Pick<IFormEngine, 'getDefinition'>>;
+    document: ResponseActionsDocumentInput | null | undefined;
+    debounceMs?: number | undefined;
+    onFinding?: ((finding: ActionRefFinding) => void) | undefined;
+    onDocumentChange?: ((change: ResponseActionAutosaveDocumentChange) => void) | undefined;
+    onEdit?: (() => void) | undefined;
+    invoke: (action: ResponseAction, context: ResponseActionAutosaveInvokeContext) => unknown | Promise<unknown>;
+}
+export interface ResponseActionAutosaveController {
+    setDocument(document: ResponseActionsDocumentInput | null | undefined): void;
+    dispose(): void;
+}
+/**
+ * Create a per-engine `autosave` controller that preserves unsaved dirty edits
+ * across `responseActionsDocument` replacements (equivalent re-parsed objects,
+ * ambiguity corrections `2 -> 1`, and ambiguity cancellations `1 -> 2`).
+ */
+export declare function createResponseActionAutosaveController(options: ResponseActionAutosaveOptions): ResponseActionAutosaveController;
+/**
+ * Subscribe to `FormEngine` draft changes after mount and invoke the declared
+ * `autosave` Response Action with debounce (`400ms` default) and single-flight
+ * coalescing. Returns a cleanup function that cancels pending timers and
+ * detaches the reactive subscription.
+ */
+export declare function subscribeResponseActionAutosave(options: ResponseActionAutosaveOptions): () => void;
 /**
  * Structured error thrown when an explicit `action.validation` override
  * fails the VM §6.3 closed-tuple predicate. The `code` mirrors the Rust

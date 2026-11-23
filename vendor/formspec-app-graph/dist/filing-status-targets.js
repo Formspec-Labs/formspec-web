@@ -1,8 +1,53 @@
 import { parseRouteSubjectKey } from './surface-definition-slots.js';
+import { bindingFailure } from './data-sources.js';
 import { diagnosticSourceForHandle } from './report.js';
 function record(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
         ? value : undefined;
+}
+const SUBJECT_KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+const PREDICATE_ALLOWED_KEYS = new Set(['key', 'op', 'from', 'offset']);
+function resolveParamSource(raw, hasRepeat, sourceParams, currentParams) {
+    const parameter = record(raw);
+    if (!parameter || Object.keys(parameter).length !== 1)
+        return 'invalid-shape';
+    if (Object.prototype.hasOwnProperty.call(parameter, 'value')) {
+        return typeof parameter.value === 'string' && parameter.value !== ''
+            ? { normalized: { value: parameter.value }, value: parameter.value }
+            : 'invalid-shape';
+    }
+    if (Object.prototype.hasOwnProperty.call(parameter, 'rowField')) {
+        if (typeof parameter.rowField !== 'string' || parameter.rowField === '')
+            return 'invalid-shape';
+        return hasRepeat ? { normalized: { rowField: parameter.rowField } } : 'invalid-parameters';
+    }
+    if (Object.prototype.hasOwnProperty.call(parameter, 'routeParam')) {
+        if (typeof parameter.routeParam !== 'string' || parameter.routeParam === '')
+            return 'invalid-shape';
+        if (!sourceParams.has(parameter.routeParam))
+            return 'invalid-parameters';
+        if (currentParams === undefined)
+            return { normalized: { routeParam: parameter.routeParam } };
+        const resolved = Object.prototype.hasOwnProperty.call(currentParams, parameter.routeParam)
+            ? currentParams[parameter.routeParam]
+            : undefined;
+        return typeof resolved === 'string' && resolved !== ''
+            ? { normalized: { value: resolved }, value: resolved }
+            : 'invalid-parameters';
+    }
+    return 'invalid-shape';
+}
+/** Resolve a route and its Definition form within the owning Surface. */
+export function resolveLocalDefinitionForm(routes, routeRef, slotRef) {
+    const matches = routes.filter(route => route.id === routeRef);
+    const route = matches.length === 1 ? matches[0] : undefined;
+    if (!route)
+        return { reason: 'route-unresolved' };
+    const slots = route.slots.filter(slot => slot.id === slotRef);
+    const slot = slots.length === 1 ? slots[0] : undefined;
+    if (slot?.slotType !== 'definition-form')
+        return { reason: 'slot-unresolved' };
+    return { route, slot: slot };
 }
 /** Walk entries by their authored owner. Used for reverse references in editors. */
 export function filingStatusEntries(binding) {
@@ -41,6 +86,13 @@ export function resolveFilingStatusTargets(routes, source, binding, currentParam
             issues.push({ pointer: groupPointer, reason: 'invalid-binding' });
             return [];
         }
+        if (Object.prototype.hasOwnProperty.call(group, 'repeat')) {
+            const repeat = record(group.repeat);
+            if (!repeat || !['catalogRef', 'sourceRef', 'labelField', 'waitingLabel'].every(key => typeof repeat[key] === 'string' && repeat[key].length > 0)) {
+                issues.push({ pointer: groupPointer + '/repeat', reason: 'invalid-repeat-source' });
+                return [];
+            }
+        }
         if (groupIds.has(group.id))
             issues.push({ pointer: groupPointer, reason: 'duplicate-group' });
         groupIds.add(group.id);
@@ -52,47 +104,142 @@ export function resolveFilingStatusTargets(routes, source, binding, currentParam
                 refuse('invalid-binding');
                 return;
             }
-            const matches = routes.filter(route => route.id === entry.routeRef);
-            const route = matches.length === 1 ? matches[0] : undefined;
-            if (!route) {
-                refuse('route-unresolved');
+            const target = resolveLocalDefinitionForm(routes, entry.routeRef, entry.slotRef);
+            if ('reason' in target && target.reason) {
+                refuse(target.reason);
                 return;
             }
-            const slots = route.slots.filter(slot => slot.id === entry.slotRef);
-            const slot = slots.length === 1 ? slots[0] : undefined;
-            if (slot?.slotType !== 'definition-form') {
-                refuse('slot-unresolved');
-                return;
-            }
+            const { route, slot } = target;
             const names = (route.params ?? []).map(param => param.name).sort();
+            const targetParamSet = new Set(names);
+            const hasRepeat = Object.prototype.hasOwnProperty.call(group, 'repeat');
             const sources = entry.params === undefined ? {} : record(entry.params);
-            const parameters = names.map(name => {
-                const parameter = sources && Object.prototype.hasOwnProperty.call(sources, name) ? record(sources[name]) : undefined;
-                if (parameter && Object.keys(parameter).length === 1) {
-                    if (Object.prototype.hasOwnProperty.call(parameter, 'value') && typeof parameter.value === 'string' && parameter.value !== '') {
-                        return { value: parameter.value };
-                    }
-                    if (typeof parameter.routeParam === 'string' && sourceParams.has(parameter.routeParam)) {
-                        if (currentParams === undefined)
-                            return { routeParam: parameter.routeParam };
-                        const resolved = Object.prototype.hasOwnProperty.call(currentParams, parameter.routeParam) ? currentParams[parameter.routeParam] : undefined;
-                        if (typeof resolved === 'string' && resolved !== '')
-                            return { value: resolved };
-                    }
-                }
-                return undefined;
-            });
-            if (!sources || Object.keys(sources).length !== names.length || parameters.some(param => param === undefined)) {
+            if (!sources || Object.keys(sources).some(name => !targetParamSet.has(name))) {
                 refuse('invalid-parameters');
                 return;
             }
-            const key = JSON.stringify([route.id, slot.id, parameters]);
+            const hasSubject = Object.prototype.hasOwnProperty.call(entry, 'subject') && entry.subject !== undefined;
+            if (!hasSubject) {
+                const parameters = names.map(name => {
+                    if (!Object.prototype.hasOwnProperty.call(sources, name))
+                        return undefined;
+                    const resolved = resolveParamSource(sources[name], hasRepeat, sourceParams, currentParams);
+                    return typeof resolved === 'string' ? undefined : resolved;
+                });
+                if (Object.keys(sources).length !== names.length || parameters.some(param => param === undefined)) {
+                    refuse('invalid-parameters');
+                    return;
+                }
+                const key = JSON.stringify([group.repeat ? group.id : null, route.id, slot.id, parameters.map(param => param?.normalized), null]);
+                if (targetKeys.has(key)) {
+                    refuse('duplicate-target');
+                    return;
+                }
+                targetKeys.add(key);
+                targets.push({ entry, route, slot, pointer, params: Object.fromEntries(names.flatMap((name, i) => typeof parameters[i]?.value === 'string' ? [[name, parameters[i].value]] : [])) });
+                return;
+            }
+            if (!Array.isArray(entry.subject) || entry.subject.length === 0) {
+                refuse('invalid-subject-predicate');
+                return;
+            }
+            const mapping = record(record(slot.binding)?.subjectKeys);
+            if (!mapping || Object.keys(mapping).length === 0) {
+                refuse('invalid-subject-predicate');
+                return;
+            }
+            const directNames = Object.keys(sources).sort();
+            const directParameters = [];
+            for (const name of directNames) {
+                const resolved = resolveParamSource(sources[name], hasRepeat, sourceParams, currentParams);
+                if (typeof resolved === 'string') {
+                    refuse('invalid-parameters');
+                    return;
+                }
+                directParameters.push([name, resolved]);
+            }
+            const resolvedPredicates = [];
+            for (const [predicateIndex, rawPredicate] of entry.subject.entries()) {
+                const predicatePointer = `${pointer}/subject/${predicateIndex}`;
+                const predicate = record(rawPredicate);
+                const predicateKey = typeof predicate?.key === 'string' ? predicate.key : undefined;
+                if (!predicate || Object.keys(predicate).some(key => !PREDICATE_ALLOWED_KEYS.has(key))
+                    || typeof predicate.key !== 'string' || !SUBJECT_KEY_PATTERN.test(predicate.key)
+                    || !Object.prototype.hasOwnProperty.call(mapping, predicate.key)
+                    || (predicate.op !== 'eq' && predicate.op !== 'le' && predicate.op !== 'ge')
+                    || (Object.prototype.hasOwnProperty.call(predicate, 'offset')
+                        && predicate.offset !== undefined
+                        && !Number.isSafeInteger(predicate.offset))) {
+                    issues.push({
+                        pointer: predicatePointer,
+                        ...(predicateKey !== undefined ? { key: predicateKey } : {}),
+                        reason: 'invalid-subject-predicate',
+                    });
+                    return;
+                }
+                const mappedParam = mapping[predicate.key];
+                if (typeof mappedParam !== 'string' || Object.prototype.hasOwnProperty.call(sources, mappedParam)) {
+                    issues.push({ pointer: predicatePointer, key: predicate.key, reason: 'invalid-subject-predicate' });
+                    return;
+                }
+                const resolvedFrom = resolveParamSource(predicate.from, hasRepeat, sourceParams, currentParams);
+                if (resolvedFrom === 'invalid-shape') {
+                    issues.push({ pointer: `${predicatePointer}/from`, key: predicate.key, reason: 'invalid-subject-predicate' });
+                    return;
+                }
+                if (resolvedFrom === 'invalid-parameters') {
+                    issues.push({ pointer: `${predicatePointer}/from`, key: predicate.key, reason: 'invalid-parameters' });
+                    return;
+                }
+                resolvedPredicates.push({
+                    key: predicate.key,
+                    op: predicate.op,
+                    from: resolvedFrom.normalized,
+                    ...(resolvedFrom.value !== undefined ? { value: resolvedFrom.value } : {}),
+                    ...(typeof predicate.offset === 'number' ? { offset: predicate.offset } : {}),
+                });
+            }
+            const derivedParams = new Set();
+            for (const paramValue of Object.values(mapping)) {
+                if (typeof paramValue !== 'string') {
+                    refuse('invalid-subject-predicate');
+                    return;
+                }
+                if (Object.prototype.hasOwnProperty.call(sources, paramValue))
+                    continue;
+                if (!targetParamSet.has(paramValue) || derivedParams.has(paramValue)) {
+                    refuse('invalid-subject-predicate');
+                    return;
+                }
+                derivedParams.add(paramValue);
+            }
+            if (names.some(name => !derivedParams.has(name) && !Object.prototype.hasOwnProperty.call(sources, name))) {
+                refuse('invalid-parameters');
+                return;
+            }
+            const canonicalPredicates = resolvedPredicates
+                .map(predicate => [predicate.key, predicate.op, predicate.offset ?? 0, predicate.from])
+                .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+            const key = JSON.stringify([
+                group.repeat ? group.id : null,
+                route.id,
+                slot.id,
+                directParameters.map(([name, param]) => [name, param.normalized]),
+                canonicalPredicates,
+            ]);
             if (targetKeys.has(key)) {
                 refuse('duplicate-target');
                 return;
             }
             targetKeys.add(key);
-            targets.push({ entry, route, slot, pointer, params: Object.fromEntries(names.flatMap((name, i) => typeof parameters[i]?.value === 'string' ? [[name, parameters[i].value]] : [])) });
+            targets.push({
+                entry,
+                route,
+                slot,
+                pointer,
+                params: Object.fromEntries(directParameters.flatMap(([name, param]) => typeof param.value === 'string' ? [[name, param.value]] : [])),
+                subject: resolvedPredicates,
+            });
         });
         return [{ group, pointer: groupPointer, targets }];
     });
@@ -103,12 +250,18 @@ function subjectSourceIdentity(target, definition) {
     if (!document)
         return undefined;
     const subject = record(document.subject);
-    if (!subject)
-        return 'implicit-respondent';
+    if (!subject) {
+        return target.subject
+            ? { ok: false, reason: 'invalid-subject-predicate', pointerSuffix: '/subject' }
+            : { ok: true, identity: 'implicit-respondent' };
+    }
     const keys = record(subject.keys);
     const mapping = record(record(target.slot.binding)?.subjectKeys);
-    if (!keys || (!mapping && Object.keys(keys).length))
-        return undefined; // Definition-form validation owns incomplete subjectKeys.
+    if (!keys || (!mapping && Object.keys(keys).length)) {
+        return target.subject
+            ? { ok: false, reason: 'invalid-subject-predicate', pointerSuffix: '/subject' }
+            : undefined; // Definition-form validation owns incomplete subjectKeys.
+    }
     const sources = [];
     for (const key of Object.keys(keys).sort()) {
         const param = mapping?.[key];
@@ -116,17 +269,129 @@ function subjectSourceIdentity(target, definition) {
             ? target.entry.params?.[param] : undefined;
         const dataType = record(keys[key])?.dataType;
         const value = source && 'value' in source ? source.value : undefined;
-        if (value !== undefined && parseRouteSubjectKey(dataType, value) === undefined)
-            return false;
+        if (value !== undefined && parseRouteSubjectKey(dataType, value) === undefined) {
+            return { ok: false, reason: 'invalid-subject-value', ...(typeof param === 'string' ? { pointerSuffix: `/params/${param}`, key } : { key }) };
+        }
         sources.push([key, dataType, value === undefined ? source : ['value', value]]);
     }
-    return JSON.stringify([subject.type, sources]);
+    const predicates = [];
+    for (const [predicateIndex, predicate] of (target.subject ?? []).entries()) {
+        const pointerSuffix = `/subject/${predicateIndex}`;
+        const declared = record(keys[predicate.key]);
+        if (!declared)
+            return { ok: false, reason: 'invalid-subject-predicate', pointerSuffix, key: predicate.key };
+        const dataType = declared.dataType;
+        if ((predicate.op === 'le' || predicate.op === 'ge' || predicate.offset !== undefined) && dataType !== 'integer') {
+            return { ok: false, reason: 'invalid-subject-predicate', pointerSuffix, key: predicate.key };
+        }
+        const literal = 'value' in predicate.from ? predicate.from.value : undefined;
+        if (literal !== undefined) {
+            const parsed = parseRouteSubjectKey(dataType, literal);
+            if (parsed === undefined || (typeof parsed === 'number' && predicate.offset !== undefined && !Number.isSafeInteger(parsed + predicate.offset))) {
+                return { ok: false, reason: 'invalid-subject-value', pointerSuffix, key: predicate.key };
+            }
+            predicates.push([predicate.key, dataType, predicate.op, predicate.offset ?? 0, ['value', parsed]]);
+        }
+        else {
+            predicates.push([predicate.key, dataType, predicate.op, predicate.offset ?? 0, predicate.from]);
+        }
+    }
+    predicates.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    return { ok: true, identity: JSON.stringify([subject.type, sources, predicates]) };
+}
+/** Every member must address a distinct authored subject through an entry parameter or predicate. */
+export function filingRepeatSubjectBound(entry, binding, definition) {
+    const keys = record(record(record(definition)?.subject)?.keys);
+    const mapping = record(record(binding)?.subjectKeys);
+    const boundByParam = Object.keys(keys ?? {}).some(key => {
+        const param = mapping?.[key];
+        return typeof param === 'string' && typeof record(entry.params?.[param])?.rowField === 'string';
+    });
+    if (boundByParam)
+        return true;
+    return (entry.subject ?? []).some(predicate => Boolean(keys && Object.prototype.hasOwnProperty.call(keys, predicate.key))
+        && typeof record(predicate.from)?.rowField === 'string');
+}
+function filingRepeatFieldIssues(group, groupPointer, schema, targets) {
+    const repeat = group.repeat;
+    if (!repeat)
+        return [{ pointer: `${groupPointer}/repeat`, reason: 'invalid-repeat-source' }];
+    const payload = record(schema);
+    const array = repeat.rowsField === undefined ? payload
+        : payload?.type === 'object' && record(record(payload.properties)?.[repeat.rowsField]);
+    if (!array || array.type !== 'array')
+        return [{ pointer: `${groupPointer}/repeat`, reason: 'invalid-repeat-source' }];
+    const item = record(array.items);
+    const fields = record(item?.properties);
+    if (item?.type !== 'object' || !fields || record(fields[repeat.labelField])?.type !== 'string') {
+        return [{ pointer: `${groupPointer}/repeat`, reason: 'invalid-repeat-source' }];
+    }
+    const issues = [];
+    for (const { entry, binding, definition, pointer } of targets) {
+        const formPointer = pointer ?? `${groupPointer}/repeat`;
+        const keys = record(record(record(definition)?.subject)?.keys);
+        const mapping = record(record(binding)?.subjectKeys);
+        for (const [key, declared] of Object.entries(keys ?? {})) {
+            const param = mapping?.[key];
+            const source = typeof param === 'string' && entry.params?.[param];
+            if (source && 'rowField' in source && record(fields[source.rowField])?.type !== record(declared)?.dataType) {
+                issues.push({
+                    pointer: pointer ? `${formPointer}/params/${param}` : `${groupPointer}/repeat`,
+                    reason: 'invalid-repeat-source',
+                    key,
+                });
+            }
+        }
+        for (const [predicateIndex, predicate] of (entry.subject ?? []).entries()) {
+            if ('rowField' in predicate.from && keys) {
+                const declaredType = record(keys[predicate.key])?.dataType;
+                if (record(fields[predicate.from.rowField])?.type !== declaredType) {
+                    issues.push({
+                        pointer: pointer ? `${formPointer}/subject/${predicateIndex}` : `${groupPointer}/repeat`,
+                        reason: 'invalid-repeat-source',
+                        key: predicate.key,
+                    });
+                }
+            }
+        }
+    }
+    group.forms.forEach((entry, formIndex) => {
+        const formPointer = `${groupPointer}/forms/${formIndex}`;
+        for (const [param, source] of Object.entries(entry.params ?? {})) {
+            if (!('rowField' in source))
+                continue;
+            const type = record(fields[source.rowField])?.type;
+            if (type !== 'string' && type !== 'integer') {
+                issues.push({ pointer: `${formPointer}/params/${param}`, reason: 'invalid-repeat-source' });
+            }
+        }
+        for (const [predicateIndex, predicate] of (entry.subject ?? []).entries()) {
+            if (!('rowField' in predicate.from))
+                continue;
+            const type = record(fields[predicate.from.rowField])?.type;
+            if (type !== 'string' && type !== 'integer') {
+                issues.push({ pointer: `${formPointer}/subject/${predicateIndex}`, reason: 'invalid-repeat-source', key: predicate.key });
+            }
+        }
+    });
+    return issues;
+}
+/** Admit only an explicit array of records with the scalar fields the group consumes. */
+export function filingRepeatFieldsValid(group, schema, targets) {
+    return filingRepeatFieldIssues(group, '', schema, targets).length === 0;
 }
 export function validateFilingStatusTargets(context) {
     const diagnostics = [];
-    const definitions = new Map(context.handles
-        .filter(handle => handle.artifactKind === 'definition' && handle.status === 'loaded')
-        .map(handle => [handle.ref?.url, handle.document]));
+    const definitionsByUrl = new Map();
+    for (const handle of context.handles) {
+        if (handle.artifactKind !== 'definition' || handle.status !== 'loaded')
+            continue;
+        const existing = definitionsByUrl.get(handle.ref?.url);
+        if (existing)
+            existing.push(handle.document);
+        else
+            definitionsByUrl.set(handle.ref?.url, [handle.document]);
+    }
     for (const handle of context.handles) {
         const surface = record(handle.document);
         if (handle.artifactKind !== 'surface' || handle.status !== 'loaded'
@@ -137,29 +402,88 @@ export function validateFilingStatusTargets(context) {
             if (slot.slotType !== 'filing-status')
                 return;
             const resolved = resolveFilingStatusTargets(routes, route, slot.binding);
-            const report = ({ pointer, reason }) => diagnostics.push({
-                code: 'APP-GRAPH-FILING-STATUS-TARGET', severity: 'error', origin: 'app-graph-validator',
-                phase: 'cross-artifact',
-                message: `Filing-status slot '${slot.id}' cannot resolve its forms (${reason}).`,
-                primarySource: diagnosticSourceForHandle(handle, `/routes/${routeIndex}/slots/${slotIndex}/binding${pointer}`),
-                details: { reason },
-            });
+            const emitted = new Set();
+            const report = ({ pointer, reason, key }) => {
+                const dedupeKey = JSON.stringify([pointer, reason, key ?? null]);
+                if (emitted.has(dedupeKey))
+                    return;
+                emitted.add(dedupeKey);
+                diagnostics.push({
+                    code: 'APP-GRAPH-FILING-STATUS-TARGET', severity: 'error', origin: 'app-graph-validator',
+                    phase: 'cross-artifact',
+                    message: key
+                        ? `Filing-status slot '${slot.id}' cannot resolve subject key '${key}' (${reason}).`
+                        : `Filing-status slot '${slot.id}' cannot resolve its forms (${reason}).`,
+                    primarySource: diagnosticSourceForHandle(handle, `/routes/${routeIndex}/slots/${slotIndex}/binding${pointer}`),
+                    details: { reason },
+                });
+            };
             resolved.issues.forEach(report);
-            for (const { targets } of resolved.groups) {
+            for (const { group, pointer, targets } of resolved.groups) {
+                if (group.repeat) {
+                    const repeat = group.repeat;
+                    const failure = bindingFailure(context, {
+                        surfaceRef: handle.ref?.url, routeId: route.id, slotId: slot.id,
+                    }, { ...repeat });
+                    const catalog = context.handles.find(h => h.artifactKind === 'dataSources' && h.ref?.url === repeat.catalogRef);
+                    const sources = record(catalog?.document)?.sources;
+                    const source = Array.isArray(sources) && sources.find(value => record(value)?.id === repeat.sourceRef);
+                    const descriptor = record(source);
+                    if (record(descriptor?.runtime)?.delivery === 'draft') {
+                        for (const producerDoc of definitionsByUrl.get(descriptor?.definitionRef) ?? []) {
+                            const producer = record(producerDoc);
+                            const keys = record(record(producer?.subject)?.keys);
+                            if (keys && Object.keys(keys).length) {
+                                const forms = route.slots.filter(candidate => candidate.slotType === 'definition-form'
+                                    && record(candidate.binding)?.definitionRef === descriptor?.definitionRef);
+                                if (forms.length !== 1)
+                                    report({ pointer: pointer + '/repeat', reason: 'ambiguous-repeat' });
+                            }
+                        }
+                    }
+                    const forms = targets.flatMap(({ entry, slot, pointer: targetPointer }) => {
+                        const loaded = definitionsByUrl.get(record(slot.binding)?.definitionRef);
+                        return (loaded?.length ? loaded : [undefined]).map(definition => ({
+                            entry, binding: slot.binding, definition, pointer: targetPointer,
+                        }));
+                    });
+                    if (failure) {
+                        report({ pointer: pointer + '/repeat', reason: 'invalid-repeat-source' });
+                    }
+                    else {
+                        for (const issue of filingRepeatFieldIssues(group, pointer, descriptor?.schema, forms)) {
+                            report(issue);
+                        }
+                    }
+                }
                 let subjectMapping;
                 for (const target of targets) {
                     const definitionRef = record(target.slot.binding)?.definitionRef;
-                    const mapping = typeof definitionRef === 'string'
-                        ? subjectSourceIdentity(target, definitions.get(definitionRef)) : undefined;
-                    if (mapping === false) {
-                        report({ pointer: target.pointer, reason: 'invalid-subject-value' });
-                        continue;
+                    const loadedDefinitions = typeof definitionRef === 'string'
+                        ? (definitionsByUrl.get(definitionRef) ?? [])
+                        : [];
+                    if (group.repeat) {
+                        const candidates = loadedDefinitions.length ? loadedDefinitions : [undefined];
+                        if (candidates.some(definition => !filingRepeatSubjectBound(target.entry, target.slot.binding, definition))) {
+                            report({ pointer: target.pointer, reason: 'ambiguous-repeat' });
+                        }
                     }
-                    if (mapping === undefined)
-                        continue;
-                    subjectMapping ?? (subjectMapping = mapping);
-                    if (subjectMapping !== mapping)
-                        report({ pointer: target.pointer, reason: 'mixed-subject-mappings' });
+                    for (const definition of loadedDefinitions) {
+                        const mapping = subjectSourceIdentity(target, definition);
+                        if (!mapping)
+                            continue;
+                        if (!mapping.ok) {
+                            report({
+                                pointer: `${target.pointer}${mapping.pointerSuffix ?? ''}`,
+                                reason: mapping.reason,
+                                ...(mapping.key !== undefined ? { key: mapping.key } : {}),
+                            });
+                            continue;
+                        }
+                        subjectMapping ?? (subjectMapping = mapping.identity);
+                        if (subjectMapping !== mapping.identity)
+                            report({ pointer: target.pointer, reason: 'mixed-subject-mappings' });
+                    }
                 }
             }
         }));

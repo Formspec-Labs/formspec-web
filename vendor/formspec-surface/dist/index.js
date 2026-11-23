@@ -12,8 +12,8 @@
 export { generationNeedAnchors, isCanonicalNeedAnchor, mergeNeedAnchors, } from './need-trace.js';
 export { SURFACE_DIAGNOSTIC_CODES, SURFACE_DIAGNOSTIC_SEVERITY, documentRootContaminationDiagnostic, surfaceDiagnostic, } from './diagnostics.js';
 export { DEFAULT_SURFACE_STRINGS, SURFACE_LOCALE_KEY_PREFIX, SURFACE_STRING_KEYS, resolveSurfaceLocaleStrings, resolveSurfaceStrings, } from './strings.js';
-export { compareRouteSpecificity, fillRoutePath, inspectRouteParams, matchRoutePath, matchRouteSegments, parseRoutePath, routeParamMarkers, routePathPatternKey, routePathSegments, } from './route-path.js';
-export { composeSurfaceApp, matchRoute, routeHref, routeInSurface, } from './composition.js';
+export { compareRouteSpecificity, fillRoutePath, inspectRouteParams, matchRoutePath, matchRouteSegments, parseRoutePath, routeParamMarkers, routePathPatternKey, routePathSegments, serializeRoutePath, } from './route-path.js';
+export { composeSurfaceApp, formHref, matchRoute, routeHref, routeInSurface, } from './composition.js';
 export { ROUTE_CLASS_THEME_REASON, UNCLASSIFIED_THEME_REASON, createThemeAuthority, } from './theme-authority.js';
 export { createWidgetRegistry, flattenRegistryEntries, widgetContributionFor, } from './registry.js';
 export { STATIC_CONTENT_KINDS, planStaticContent, resolveHeadingLevel, resolveRouteTitleLevel, } from './static-content.js';
@@ -24,11 +24,14 @@ export { responseSourceLoader, catalogResponseDigest, catalogResponseProjection 
 export { filingAction } from './filing-action.js';
 export { dataSourceAvailableToDefinitionForm, loadDefinitionFormInitialData, planDefinitionFormInitialData, } from './definition-form-initial-data.js';
 export { createSurfaceSemanticOutputRegistry, } from './semantic-output.js';
-export { planTransitions, responseActionsDocumentForDefinition, slotSuppliedTriggers, } from './transitions.js';
+export { collectSlotBreakpointThresholds, planTransitions, plannedDefinitionFormActionRefs, responseActionsDocumentForDefinition, findUniquePlainAction, slotSuppliedTriggers, } from './transitions.js';
 export { planMatchedRoute, } from './route-plan.js';
 export { bundleIsRenderable, dereferenceBundleExport, } from './bundle.js';
-export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, validateSurfacePreviewScenario, } from './preview-scenario.js';
+export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, deriveSurfacePreviewScenario, validateSurfacePreviewScenario, } from './preview-scenario.js';
 export { snapshotFiniteJson, canonicalFiniteJson } from "./finite-json.js";
 export { captureResponseFieldMetadata, } from './response-field-metadata.js';
 export * from "./screener-slot.js";
-export { prepareResponseFiling, prepareResponseFixtures, responseDraftKey, responsePairKey, responseSelectionRecord, selectFilingStatus, } from './response-records.js';
+export { matchesFilingSubjectPredicates, } from './draft-port.js';
+export { canonicalDraftProgress } from './draft-port.js';
+export { defaultDraftResponseId, prepareDraftFixtures, prepareResponseFiling, prepareResponseFixtures, responseDraftKey, responsePairKey, responseSelectionRecord, selectFilingStatus, selectFilingSummaryStatus, toResponseFilingSummary, validateDraftFixtures, validResponseAuthored, } from './response-records.js';
+export { draftStartHref } from './draft-start.js';

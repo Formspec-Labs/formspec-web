@@ -4,6 +4,7 @@ import type { ArtifactResolutionReport, ModuleResolutionReport } from '@formspec
 import { type ArtifactResolverRequest } from './artifact-resolver.js';
 import { type ModuleResolverAdmissionInput, type ModuleResolverSupportInput } from './module-resolver.js';
 import type { AppGraphCrossArtifactValidator, AppGraphDiagnosticReport, AppGraphEvidenceSchemaValidators, AppGraphHostEvidence, AppGraphRenderedNeedTraceRequest, AppGraphSchemaValidators, AppGraphValidationOptions, AppGraphValidationReport } from './types.js';
+import { type AppGraphDocumentLinter } from './document-lint.js';
 import { type ComponentRouteResolver } from './component-route-resolution.js';
 export interface AppGraphReportProducerRequest extends ArtifactResolverRequest {
     hostEvidence?: AppGraphHostEvidence;
@@ -16,6 +17,8 @@ export interface AppGraphReportProducerRequest extends ArtifactResolverRequest {
     schemaValidators: AppGraphSchemaValidators;
     evidenceSchemaValidators?: AppGraphEvidenceSchemaValidators;
     crossArtifactValidators?: AppGraphCrossArtifactValidator[];
+    /** Load tools only when the resolved graph has a filed read and no supplied checker. */
+    loadProjectionLinter?: () => Promise<AppGraphDocumentLinter>;
     /** See `AppGraphValidationRequest.hostWidgetContracts`. */
     hostWidgetContracts?: HostWidgetContracts;
     /** See `AppGraphValidationRequest.renderedNeedTrace`. */

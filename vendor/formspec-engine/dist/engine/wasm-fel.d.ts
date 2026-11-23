@@ -1,5 +1,6 @@
 /** @filedesc WASM definition-eval payload, EvalResult merge, and validation merge. */
 import type { EvalResult, EvalValidation } from '../diff.js';
+import type { DraftExplanation } from './warning-explanations.js';
 import type { ResponseSubjectKeys } from '../interfaces.js';
 /** Subset of validation objects passed back into WASM as previous state. */
 export type WasmPreviousValidation = Array<{
@@ -16,11 +17,12 @@ export type WasmPreviousValidation = Array<{
 export declare function wasmEvaluateDefinitionPayload(options: {
     nowIso: string;
     trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
-    previousResult: EvalResult | null;
+    previousResult: Pick<EvalResult, 'nonRelevant' | 'validations'> | null;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];
     subjectType?: string | null;
     subjectKeys?: ResponseSubjectKeys;
+    explanations?: DraftExplanation[];
 }): {
     nowIso: string;
     trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
@@ -30,6 +32,7 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     registryDocuments: unknown[];
     subjectType?: string | null;
     subjectKeys?: ResponseSubjectKeys;
+    explanations?: DraftExplanation[];
 };
 export type EvalShapeTiming = 'continuous' | 'submit' | 'demand';
 /** Append engine-owned validations (e.g. extension hooks) after WASM batch evaluation. */

@@ -5,6 +5,10 @@ export interface SurfaceTransitionsProps {
     transitions: readonly PlannedTransition[];
     /** The shell's own person-facing strings. Defaults to the shipped English. */
     strings?: SurfaceStrings | undefined;
+    /** True when the route renders a definition-form that already owns the primary CTA. */
+    hasDefinitionForm?: boolean | undefined;
+    /** Target form route refs owned by draft-review slots on this route, for concise Back-to-form labels. */
+    draftReviewTargetRouteRefs?: ReadonlySet<string> | undefined;
     /**
      * Runs the transition's action under Response Actions authority and reports
      * whether it succeeded. Absent ⇒ a resolved transition is `unfireable` with
@@ -14,4 +18,4 @@ export interface SurfaceTransitionsProps {
     /** Navigate. Called only after `onFire` reports the action actually succeeded. */
     onAdvance?: AdvanceTransition | undefined;
 }
-export declare function SurfaceTransitions({ from, transitions, strings, onFire, onAdvance, }: SurfaceTransitionsProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function SurfaceTransitions({ from, transitions, strings, hasDefinitionForm, draftReviewTargetRouteRefs, onFire, onAdvance, }: SurfaceTransitionsProps): import("react/jsx-runtime").JSX.Element | null;

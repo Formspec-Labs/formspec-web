@@ -59,6 +59,14 @@ export function analyzeFelWithFieldTypes(expression: string, field_types_json: s
  */
 export function applyMigrationsToResponseData(definition_json: string, response_data_json: string, from_version: string, now_iso: string): string;
 
+/**
+ * Attach the evidence from available Response instance resolutions.
+ *
+ * # Errors
+ * Returns a JavaScript error if input cannot be decoded or delivery validation fails.
+ */
+export function assembleCandidate(definition_json: string, response_json: string, evaluation_json: string, resolution_json: string): string;
+
 export function assembleDefinition(definition_json: string, fragments_json: string): string;
 
 /**
@@ -69,14 +77,14 @@ export function checkFelExtensionName(name: string): void;
 /**
  * Return projection diagnostics for every eligible published upstream Definition version.
  *
- * Pass the consuming Definition's subject as JSON, or `null` for catalog route
+ * Pass the instance or prefill consumer as JSON, or `null` for widget route
  * parameters. Pass all published Definitions for the upstream URL as a JSON array.
  *
  * # Errors
  *
  * Returns a JavaScript error on invalid input JSON.
  */
-export function checkInstanceProjection(instance_json: string, consumer_subject_json: string, upstream_definitions_json: string): string;
+export function checkResponseProjection(instance_json: string, consumer_json: string, upstream_definitions_json: string): string;
 
 /**
  * Coerce a field value using item + bind + definition metadata (JSON in/out).
@@ -157,6 +165,15 @@ export function evalFelWithTrace(expression: string, fields_json: string): strin
  * `extensions` resolves Definition calls to host extension functions (Core §3.12).
  */
 export function evaluateDefinition(definition_json: string, data_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
+
+/**
+ * Prepare stable Response data and its submit verdict with the supplied clock.
+ *
+ * # Errors
+ *
+ * Returns an error for invalid JSON, invalid context, or data that do not settle.
+ */
+export function evaluateFiled(definition_json: string, data_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
 
 /**
  * Evaluate a standalone Screener Document against respondent inputs.
@@ -291,6 +308,7 @@ export function sanitizeFelIdentifier(s: string): string;
  *
  * # Errors
  *
+ * Records require a store-owned `kind` of `open-draft` or `filing`.
  * Returns an error for invalid input JSON, including an omitted `upstreamSubject`.
  * Supply JSON null when the upstream Definition declares no subject.
  */
@@ -298,6 +316,13 @@ export function selectResponsesJson(records_json: string, selection_json: string
 
 /**
  * Derive the canonical id of a typed Response subject.
+ *
+ * Respondent hosts key drafts by this id before an engine exists; the engine derives
+ * `Response.subject.id` through the same function.
+ *
+ * # Errors
+ *
+ * Returns an error for malformed or untyped keys JSON or an out-of-range integer key.
  */
 export function subjectIdJson(subject_type: string, keys_json: string): string;
 
@@ -322,9 +347,10 @@ export interface InitOutput {
     readonly analyzeFel: (a: number, b: number, c: number) => void;
     readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+    readonly assembleCandidate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly assembleDefinition: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
-    readonly checkInstanceProjection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly checkResponseProjection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly collectFelRewriteTargets: (a: number, b: number, c: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
@@ -337,6 +363,7 @@ export interface InitOutput {
     readonly evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly evaluateFiled: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly executeMappingRules: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;

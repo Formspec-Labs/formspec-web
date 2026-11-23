@@ -2,7 +2,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Recursive LayoutNode renderer — dispatches to field or layout components. */
 import { Workspace } from './workspace';
-import { useMemo, useCallback, useEffect, useId, useRef, useState, } from 'react';
+import React, { useMemo, useCallback, useEffect, useId, useRef, useState, } from 'react';
 import { signal as createSignal } from '@preact/signals-core';
 import { invokeResponseAction, } from '@formspec-org/engine';
 import { useFormspecContext } from './context';
@@ -13,6 +13,7 @@ import { useField } from './use-field';
 import { useForm } from './use-form';
 import { useWhen } from './use-when';
 import { focusFirstInvalidField } from './use-focus-field';
+import { WarningExplanations } from './warning-explanations';
 import { DefaultField } from './defaults/fields/default-field';
 import { DefaultLayout } from './defaults/layout/default-layout';
 import { Wizard } from './defaults/layout/wizard';
@@ -97,7 +98,7 @@ function errorMessage(error) {
 }
 function ActionButtonNode({ node }) {
     const chrome = useChromeText();
-    const { engine, onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
+    const { engine, onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, onControlActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
     const form = useForm();
     const actionRef = actionRefFor(node);
     const resolution = resolveActionRef(actionRef, node.id);
@@ -167,12 +168,13 @@ function ActionButtonNode({ node }) {
         };
         const finish = (result) => {
             onActionResult?.(result);
+            onControlActionResult?.(result, { nodeId: node.id });
             if (result.finding) {
                 onActionFinding?.(result.finding);
             }
             return result;
         };
-        if (responseActionInvoker) {
+        if (responseActionInvoker && responseActionsDocument) {
             const result = responseActionInvoker({
                 document: responseActionsDocument,
                 actionRef,
@@ -300,15 +302,9 @@ function ActionButtonNode({ node }) {
     }, [activate]);
     // The in-flight guard keeps pending activation inert without losing keyboard focus.
     const pending = feedback.phase === 'pending';
-    return (_jsxs("div", { ref: controlRef, className: "formspec-action-control", ...needAttrs, children: [_jsx("button", { ref: setButtonRef, 
-                // type="button" mirrors the webcomponent's ActionButton renderer
-                // (packages/formspec-webcomponent/src/components/interactive.ts):
-                // §10 is silent on the HTML type, but if an ActionButton lives
-                // inside a parent <form> and the click handler throws,
-                // type="submit" cascades to native form submission and bypasses
-                // Response Actions entirely. type="button" eliminates the
-                // foot-gun and keeps cross-renderer parity.
-                type: "button", "data-action-ref": actionRef, className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, "aria-disabled": !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), !outlet && _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
+    const actionIntent = resolution.action?.intent;
+    // Actions inside a form must never trigger a second, native submission.
+    return (_jsxs("div", { ref: controlRef, className: "formspec-action-control", "data-action-intent": actionIntent, style: node.style, hidden: node.props?.hidden === true, ...needAttrs, children: [_jsx("button", { ref: setButtonRef, type: "button", "data-action-ref": actionRef, "data-action-intent": actionIntent, className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, "aria-disabled": !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), !outlet && _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
 }
 function WhenGuard({ node }) {
     const visible = useWhen(node.when, node.whenPrefix);
@@ -328,7 +324,7 @@ function FieldNode({ node }) {
     const Component = exact ??
         (fallbackName ? components.fields?.[fallbackName] : undefined) ??
         DefaultField;
-    return _jsx(Component, { field: field, node: node });
+    return _jsxs(_Fragment, { children: [_jsx(Component, { field: field, node: node }), field.visible && _jsx(WarningExplanations, { path: field.path })] });
 }
 function LayoutNodeRenderer({ node }) {
     if (node.bindPath) {
@@ -345,8 +341,62 @@ function RelevanceGatedLayout({ node }) {
         return null;
     return _jsx(LayoutNodeInner, { node: node });
 }
+/** Group runs of 2+ adjacent ActionButton siblings into a horizontal action bar while leaving single actions untouched. */
+export function renderActionGroupedChildren(children, options) {
+    const out = [];
+    let trailingStart = children.length;
+    if (options?.beforeTrailingActions) {
+        while (trailingStart > 0 && children[trailingStart - 1].component === 'ActionButton') {
+            trailingStart -= 1;
+        }
+    }
+    let insertedBeforeActions = false;
+    for (let i = 0; i < children.length;) {
+        if (options?.beforeTrailingActions && !insertedBeforeActions && i === trailingStart && trailingStart < children.length) {
+            out.push(_jsx(React.Fragment, { children: options.beforeTrailingActions }, "root-warning-explanations"));
+            insertedBeforeActions = true;
+        }
+        if (children[i].component !== 'ActionButton') {
+            const child = children[i];
+            out.push(_jsx(FormspecNode, { node: child }, child.id));
+            i += 1;
+            continue;
+        }
+        let end = i + 1;
+        while (end < children.length && children[end].component === 'ActionButton') {
+            end += 1;
+        }
+        const run = children.slice(i, end);
+        if (run.length >= 2) {
+            out.push(_jsx("div", { className: "formspec-action-bar", children: run.map((child) => (_jsx(FormspecNode, { node: child }, child.id))) }, `action-bar:${run.map((child) => child.id).join(',')}`));
+        }
+        else {
+            out.push(_jsx(FormspecNode, { node: run[0] }, run[0].id));
+        }
+        i = end;
+    }
+    return out;
+}
+/** True when a root layout tree renders root WarningExplanations above its own Submit controls. */
+export function layoutOwnsRootWarningExplanations(layoutPlan, workspacePages) {
+    if (!layoutPlan)
+        return false;
+    if (workspacePages)
+        return true;
+    if (layoutPlan.component === 'Wizard')
+        return true;
+    if (layoutPlan.component === 'Stack') {
+        if (layoutPlan.pageMode === 'wizard' && layoutPlan.children.some((c) => c.component === 'Section')) {
+            return true;
+        }
+        if (layoutPlan.children.length > 0 && layoutPlan.children[layoutPlan.children.length - 1].component === 'ActionButton') {
+            return true;
+        }
+    }
+    return false;
+}
 function LayoutNodeInner({ node }) {
-    const { components, formPresentation } = useFormspecContext();
+    const { components, formPresentation, layoutPlan, workspacePages } = useFormspecContext();
     if (node.component === 'Stack' && node.children.length > 0) {
         const pageMode = node.pageMode;
         const hasPages = node.children.some((c) => c.component === 'Section');
@@ -360,6 +410,7 @@ function LayoutNodeInner({ node }) {
                     component: 'Wizard',
                     category: 'layout',
                     props: {
+                        id: node.props.id,
                         showProgress: fp.showProgress !== false,
                         allowSkip: !!fp.allowSkip,
                         sidenav: fp.sidenav,
@@ -371,7 +422,7 @@ function LayoutNodeInner({ node }) {
                     uiGraphRoutePolicy: node.uiGraphRoutePolicy,
                     children: pages,
                 };
-                return (_jsxs(_Fragment, { children: [orphans.map((child) => (_jsx(FormspecNode, { node: child }, child.id))), _jsx(LayoutNodeInner, { node: wizardNode })] }));
+                return (_jsxs(_Fragment, { children: [renderActionGroupedChildren(orphans), _jsx(LayoutNodeInner, { node: wizardNode })] }));
             }
             if (pageMode === 'tabs' && pages.length > 0) {
                 const tabsNode = {
@@ -379,6 +430,7 @@ function LayoutNodeInner({ node }) {
                     component: 'Tabs',
                     category: 'layout',
                     props: {
+                        id: node.props.id,
                         placement: fp.tabPosition || 'top',
                         defaultTab: fp.defaultTab ?? 0,
                     },
@@ -389,7 +441,7 @@ function LayoutNodeInner({ node }) {
                     uiGraphRoutePolicy: node.uiGraphRoutePolicy,
                     children: pages,
                 };
-                return (_jsxs(_Fragment, { children: [_jsx(LayoutNodeInner, { node: tabsNode }), orphans.map((child) => (_jsx(FormspecNode, { node: child }, child.id)))] }));
+                return (_jsxs(_Fragment, { children: [_jsx(LayoutNodeInner, { node: tabsNode }), renderActionGroupedChildren(orphans)] }));
             }
         }
     }
@@ -401,7 +453,16 @@ function LayoutNodeInner({ node }) {
         builtin ??
         (fallbackName ? (components.layout?.[fallbackName] ?? BUILTIN_LAYOUT[fallbackName]) : undefined) ??
         DefaultLayout;
-    return (_jsx(Component, { node: node, children: node.children.map((child) => (_jsx(FormspecNode, { node: child }, child.id))) }));
+    const groupActions = componentName === 'Stack' || componentName === 'Section' || componentName === 'Card' || componentName === 'Panel';
+    const placeRootWarningsAboveActions = !workspacePages
+        && layoutPlan !== null
+        && node.id === layoutPlan.id
+        && componentName === 'Stack'
+        && node.children.length > 0
+        && node.children[node.children.length - 1].component === 'ActionButton';
+    return (_jsx(Component, { node: node, children: groupActions
+            ? renderActionGroupedChildren(node.children, placeRootWarningsAboveActions ? { beforeTrailingActions: _jsx(WarningExplanations, {}) } : undefined)
+            : node.children.map((child) => (_jsx(FormspecNode, { node: child }, child.id))) }));
 }
 export { DisplayNode } from './node-renderer-display.js';
 export { RepeatGroup, RepeatAccordion, rewriteBindPaths } from './node-renderer-repeat.js';

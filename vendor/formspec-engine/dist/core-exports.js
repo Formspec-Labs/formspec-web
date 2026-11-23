@@ -1,7 +1,8 @@
 /** @filedesc Render-safe public surface shared by `index.ts` and `engine-render-entry.ts` — no FEL tooling facade or tools bridge (ADR 0050 §8). */
+export { isStamped, matchesEntry, sameAnswer, } from './engine/warning-explanations.js';
 export { DefaultValidationProfileResolver, } from './validation/index.js';
-export { APP_ACTION_VALIDATION_TUPLE, classifyResponseActionEffect, declaresHostEvent, findResponseActionByIntent, invokeResponseAction, invokeResponseActionAsync, isAppActionValidationTuple, isDurableResponseActionEffect, InvalidValidationTupleError, missingSubmitActionFinding, planResponseActionEffects, planResponseActionInvocation, resolveResponseAction, resolveResponseActionValidationTuple, validationProfileForAction, } from './response-actions.js';
-export { extractServiceRequestOutputs, planServiceRequest, resolveRuntimeValueSelector, resolveServiceRequest, ServiceRequestRuntimeError, } from './service-request-runtime.js';
+export { APP_ACTION_VALIDATION_TUPLE, autoPlacedDefinitionActions, classifyResponseActionEffect, createResponseActionAutosaveController, declaresHostEvent, findAutosaveResponseAction, findResponseActionByIntent, invokeResponseAction, invokeResponseActionAsync, isAppActionValidationTuple, isBackgroundResponseAction, isDurableResponseActionEffect, isValidDefinitionResponseActionsDocument, isValidResponseActionIntent, InvalidValidationTupleError, missingSubmitActionFinding, planResponseActionEffects, planResponseActionInvocation, resolveAutosaveResponseAction, resolveResponseAction, resolveResponseActionValidationTuple, subscribeResponseActionAutosave, validationProfileForAction, } from './response-actions.js';
+export { extractServiceRequestOutputs, isPlainJsonArray, isPlainJsonObject, planServiceRequest, resolveRuntimeValueSelector, resolveServiceRequest, ServiceRequestRuntimeError, } from './service-request-runtime.js';
 export { createDemoSubmitResponseActions, } from './demo-submit-response-actions.js';
 // §10 prohibits implicit-default Actions and free-string fallbacks. Renderers
 // that need a submit-intent actionRef MUST call `findResponseActionByIntent`
@@ -22,3 +23,8 @@ export { jsonNumberText, parseJsonNumber, jsonValueText } from './json-values.js
 export { clampJsonNumber, stepJsonNumber } from './numeric-input.js';
 export { cloneValue as cloneJsonValue } from './json-values.js';
 export { wasmCreateResponse as createResponse, wasmCreateRepeatRow as createRepeatRow } from './wasm-bridge-runtime.js';
+/**
+ * Core's filing-unit id from a subject type and typed keys, using runtime WASM only. For hosts that
+ * key storage by subject before an engine exists; `FormEngine` derives `Response.subject.id` itself.
+ */
+export { wasmResponseSubjectId as responseSubjectId } from './wasm-bridge-runtime.js';

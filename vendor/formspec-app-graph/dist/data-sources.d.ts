@@ -1,6 +1,6 @@
 /** @filedesc Data Sources catalog, availability, and Surface widget binding checks. */
 import type { AppGraphContext, AppGraphDiagnostic, ResolvedArtifactHandle } from './types.js';
-import { type JsonRecord, type SurfaceWidgetSlot } from './surface-widgets.js';
+import { type JsonRecord } from './surface-widgets.js';
 interface BindingFailure {
     reason: string;
     details?: Record<string, unknown>;
@@ -13,7 +13,13 @@ interface DefinitionResolution {
     candidates: ResolvedArtifactHandle[];
 }
 export declare function exactDefinitionResolution(context: AppGraphContext, definitionRef: string): DefinitionResolution;
-export declare function bindingFailure(context: AppGraphContext, widget: SurfaceWidgetSlot, binding: JsonRecord): BindingFailure | undefined;
+type SourceUseSite = {
+    surfaceRef?: string | undefined;
+    routeId?: string;
+    slotId?: string;
+    moduleId?: string;
+};
+export declare function bindingFailure(context: AppGraphContext, widget: SourceUseSite, binding: JsonRecord): BindingFailure | undefined;
 /**
  * Validate Data Sources graph membership and Surface widget data references.
  *

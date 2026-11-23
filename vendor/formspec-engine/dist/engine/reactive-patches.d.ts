@@ -7,9 +7,10 @@ export declare function patchValueSignalsFromWasm(options: {
     values: Record<string, unknown>;
     signals: Record<string, EngineSignal<any>>;
     data: Record<string, any>;
-    bindConfigs: Record<string, EngineBindConfig>;
-    calculatedFields: Set<string>;
-}): void;
+    bindAt: (path: string, basePath: string) => EngineBindConfig | undefined;
+    isCalculated: (path: string, basePath: string) => boolean;
+    refused: boolean;
+}): boolean;
 export declare function patchDeltaSignalsFromWasm(rx: EngineReactiveRuntime, delta: EvalDelta, options: {
     relevantSignals: Record<string, EngineSignal<boolean>>;
     requiredSignals: Record<string, EngineSignal<boolean>>;

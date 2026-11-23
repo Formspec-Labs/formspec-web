@@ -18,3 +18,16 @@
  * @returns A (possibly new) component descriptor with breakpoint overrides applied.
  */
 export declare function resolveResponsiveProps(comp: any, activeBreakpoint: string | null, breakpoints?: Record<string, number | string> | null): any;
+export type BreakpointSpec = number | string | {
+    minWidth?: number;
+};
+/**
+ * Merge Theme and Component breakpoint maps (Component wins on colliding names)
+ * and return numeric `[name, minWidthPx]` pairs sorted ascending by `minWidth`.
+ */
+export declare function extractBreakpointEntries(themeBreakpoints?: Record<string, BreakpointSpec> | null, componentBreakpoints?: Record<string, BreakpointSpec> | null): Array<[string, number]>;
+/**
+ * Evaluate the largest matching mobile-first breakpoint across merged Theme +
+ * Component breakpoints using a pure `matchesMinWidth` predicate.
+ */
+export declare function matchBreakpoint(themeBreakpoints: Record<string, BreakpointSpec> | null | undefined, componentBreakpoints: Record<string, BreakpointSpec> | null | undefined, matchesMinWidth: (minWidthPx: number) => boolean): string | null;

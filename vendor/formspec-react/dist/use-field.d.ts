@@ -42,6 +42,7 @@ export interface UseFieldResult {
         onBlur: () => void;
         required: boolean;
         readOnly: boolean;
+        tabIndex?: number;
         'aria-invalid': boolean;
         'aria-required': boolean;
     };

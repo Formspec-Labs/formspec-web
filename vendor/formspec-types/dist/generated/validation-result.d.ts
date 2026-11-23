@@ -26,11 +26,11 @@ export interface ValidationResult {
      * - 'required': A required field (Bind required=true) is null, empty string, or empty array. Standard code: REQUIRED.
      * - 'type': The field's value does not conform to its declared dataType (e.g., 'abc' in an integer field). Standard code: TYPE_MISMATCH.
      * - 'cardinality': A repeatable group violates its minRepeat or maxRepeat bounds. Standard codes: MIN_REPEAT, MAX_REPEAT.
-     * - 'constraint': A Bind 'constraint' expression evaluated to false (e.g., '$ > 0' on a negative value), or has a definition error (it failed to parse or calls an undefined function). Standard codes: CONSTRAINT_FAILED, CONSTRAINT_PARSE_ERROR.
+     * - 'constraint': A Bind 'constraint' expression evaluated to false (e.g., '$ > 0' on a negative value). Standard code: CONSTRAINT_FAILED.
      * - 'shape': A named Validation Shape's constraint or composition evaluated to invalid. Standard code: SHAPE_FAILED. The shapeId property identifies which Shape.
      * - 'external': Injected by an external system (server-side API, third-party validator, business rule engine). Standard code: EXTERNAL_FAILED. The source property will be 'external' and sourceId identifies the system.
      * - 'explanation': Derived by the submit-profile check for a warning Shape answer. Codes: EXPLANATION_REQUIRED, EXPLANATION_STALE, EXPLANATION_UNUSED. See Core §5.3.1.
-     * - 'definition': An error in the authored Definition. Standard codes: UNSUBSCRIPTED_REPEAT_REFERENCE, CIRCULAR_DEPENDENCY.
+     * - 'definition': An error in the authored Definition. Standard codes: SYNTAX_ERROR, UNDEFINED_FUNCTION, ARITY_MISMATCH, SEED_PREDICATE_SCOPE, UNSUBSCRIPTED_REPEAT_REFERENCE, UNASSEMBLED_DEFINITION_REFERENCE, CIRCULAR_DEPENDENCY.
      */
     constraintKind: 'required' | 'type' | 'cardinality' | 'constraint' | 'shape' | 'external' | 'explanation' | 'definition';
     /**
@@ -45,8 +45,12 @@ export interface ValidationResult {
      * - MIN_REPEAT — fewer repeat instances than minRepeat
      * - MAX_REPEAT — more repeat instances than maxRepeat
      * - CONSTRAINT_FAILED — Bind constraint returned false
-     * - CONSTRAINT_PARSE_ERROR — Bind constraint expression has a definition error: it failed to parse or calls an undefined function
+     * - UNDEFINED_FUNCTION — an authored FEL expression calls a function outside the built-in catalog and the evaluation’s extension registry
+     * - SYNTAX_ERROR — an authored FEL expression does not conform to the grammar
+     * - ARITY_MISMATCH — an authored FEL expression calls a built-in or registered extension function with the wrong number of arguments
+     * - SEED_PREDICATE_SCOPE — a seedFrom.where predicate reads a source outside its creation scope
      * - UNSUBSCRIPTED_REPEAT_REFERENCE — a field path continues past a repeatable group without a subscript
+     * - UNASSEMBLED_DEFINITION_REFERENCE — a Group $ref inclusion was not assembled before evaluation
      * - CIRCULAR_DEPENDENCY — the dependency graph contains a cycle
      * - SHAPE_FAILED — Shape constraint returned false (when no specific code declared)
      * - EXTERNAL_FAILED — external system reported failure (when no specific code declared)

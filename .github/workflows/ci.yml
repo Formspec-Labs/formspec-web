@@ -66,15 +66,15 @@ jobs:
         with:
           repository: Formspec-Labs/integrity-stack
           ref: ${{ steps.refs.outputs.integrity_stack }}
-          path: integrity-source
+          path: integrity-stack
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm --prefix formspec-source ci
-      - run: npm --prefix integrity-source ci
+      - run: npm --prefix integrity-stack ci
       - run: npm run check:surface-bundle-vendor
         env:
           FORMSPEC_SOURCE_DIR: formspec-source
-          INTEGRITY_STACK_SOURCE_DIR: integrity-source
+          INTEGRITY_STACK_SOURCE_DIR: integrity-stack

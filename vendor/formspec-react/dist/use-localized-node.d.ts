@@ -5,12 +5,11 @@ export declare const RepeatInstanceContext: import("react").Context<string>;
 /**
  * The live title of a node the planner titled (same rule as the web component's `plannedTitle`): a page
  * made from a group is titled by that group's label (`titleBind`), a page nobody authored by its `$ui`
- * chrome key (`titleKey`); undefined for any other node. Read inside a locale-signal subscription.
+ * locale key (`titleLocaleKey`); undefined for any other node. Read inside a locale-signal subscription.
  */
 export declare function plannedTitle(engine: IFormEngine, props: {
     title?: unknown;
     titleBind?: unknown;
-    titleKey?: unknown;
     titleLocaleKey?: unknown;
     titleIndex?: unknown;
 } | undefined): string | undefined;

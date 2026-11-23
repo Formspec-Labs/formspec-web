@@ -1,4 +1,3 @@
-/** @filedesc Diffs batch evaluation snapshots into per-signal patch payloads. */
 import { deepEqual } from './json-values.js';
 function diffRecord(previous, next) {
     const changed = {};

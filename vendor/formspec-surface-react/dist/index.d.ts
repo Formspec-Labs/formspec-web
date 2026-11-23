@@ -7,7 +7,8 @@
  * not React facts, and a second renderer must not have to re-derive them.
  */
 export { SurfaceApp, SurfaceNav, useSurfaceApp, type FireTransition, type SurfaceTransitionSource, type SurfaceTransitionOutcome, type SurfaceCurrentRouteState, type SurfaceAppModel, type SurfaceAppProps, type SurfaceNavProps, type UseSurfaceAppInput, } from './SurfaceApp.js';
-export { BrowserSurfaceApp, type BrowserSurfaceAppProps, type SurfaceBrowserVisit, type SurfacePreviewEdition, } from './BrowserSurfaceApp.js';
+export { BrowserSurfaceApp, type SurfaceHostAdapters, type BrowserSurfaceAppProps, type SurfaceBrowserVisit, type SurfacePreviewEdition, } from './BrowserSurfaceApp.js';
+export { createSurfacePreviewEdition } from './preview-host.js';
 export { useBrowserLocation, type SurfaceBrowserMode } from './browser-location.js';
 export { SURFACE_APPEARANCE_SCRIPT } from './browser-appearance.js';
 export { SurfaceRouteView, type SurfaceRouteViewProps } from './SurfaceRoute.js';

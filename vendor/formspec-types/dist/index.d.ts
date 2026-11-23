@@ -61,10 +61,7 @@ export type FormItem = Item & {
         path: string;
         editable?: boolean;
     };
-    seedFrom?: {
-        instance: string;
-        path: string;
-    };
+    seedFrom?: import('./generated/definition.js').SeedFrom;
     /** Definition-local documents this Field declares as its attestation scope. */
     attests?: import('./generated/definition.js').DocumentId[];
     presentation?: Presentation;
@@ -110,8 +107,8 @@ export interface ProjectBundle {
      * to the Definition-driven layout.
      */
     component?: ComponentDocument;
-    /** The theme (presentation) artifact. */
-    theme: ThemeDocument;
+    /** The Theme when supplied or authored. */
+    theme?: ThemeDocument;
     /** Named collection of mapping (data transform) artifacts. */
     mappings: Record<string, MappingDocument>;
     /** Locale documents keyed by BCP 47 code (present only when locales are loaded). */

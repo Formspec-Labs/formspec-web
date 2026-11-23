@@ -8,10 +8,10 @@
  */
 import type { SurfaceScenarioActionOutcome, SurfacePreviewScenario } from '@formspec-org/types';
 import type { ResolvedBundle } from './bundle.js';
-import { type ResponseRecordTools } from './response-records.js';
+import { type PreparedResponseFixtures, type ResponseRecordTools } from './response-records.js';
 import type { DataSourceAuthorizer, DataSourceDescriptor, DataSourceLoader, DataSourcePayloadValidationResult } from './data-source-loader.js';
 import type { TransitionExecutor } from './transitions.js';
-export declare const SURFACE_SCENARIO_DIAGNOSTIC_CODES: readonly ["SURFACE-SCENARIO-SCHEMA", "SURFACE-SCENARIO-PROFILE-UNRESOLVED", "SURFACE-SCENARIO-INITIAL-ROUTE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-AMBIGUOUS", "SURFACE-SCENARIO-ACTION-UNRESOLVED", "SURFACE-SCENARIO-ACTION-AMBIGUOUS", "SURFACE-SCENARIO-PAYLOAD-SCHEMA", "SURFACE-SCENARIO-FILING-FIXTURE"];
+export declare const SURFACE_SCENARIO_DIAGNOSTIC_CODES: readonly ["SURFACE-SCENARIO-SCHEMA", "SURFACE-SCENARIO-PROFILE-UNRESOLVED", "SURFACE-SCENARIO-INITIAL-ROUTE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-AMBIGUOUS", "SURFACE-SCENARIO-ACTION-UNRESOLVED", "SURFACE-SCENARIO-ACTION-AMBIGUOUS", "SURFACE-SCENARIO-PAYLOAD-SCHEMA", "SURFACE-SCENARIO-FILING-FIXTURE", "SURFACE-SCENARIO-DRAFT-FIXTURE"];
 export type SurfaceScenarioDiagnosticCode = (typeof SURFACE_SCENARIO_DIAGNOSTIC_CODES)[number];
 export interface SurfaceScenarioDiagnostic {
     code: SurfaceScenarioDiagnosticCode;
@@ -43,6 +43,7 @@ export type SurfaceScenarioPayloadValidator = (request: SurfaceScenarioPayloadVa
 export interface ValidateSurfacePreviewScenarioInput {
     scenario: unknown;
     bundle: ResolvedBundle;
+    scope?: string | undefined;
     validateSchema?: SurfaceScenarioSchemaValidator | undefined;
     validatePayload?: SurfaceScenarioPayloadValidator | undefined;
     responseTools?: ResponseRecordTools | undefined;
@@ -50,6 +51,7 @@ export interface ValidateSurfacePreviewScenarioInput {
 export type SurfaceScenarioValidationResult = {
     valid: true;
     scenario: SurfacePreviewScenario;
+    preparedFixtures?: ReadonlyMap<string, PreparedResponseFixtures> | undefined;
     diagnostics: readonly [];
 } | {
     valid: false;
@@ -71,6 +73,8 @@ export interface SurfacePreviewRuntime {
  * not carry a second JSON-Schema implementation.
  */
 export declare function validateSurfacePreviewScenario(input: ValidateSurfacePreviewScenarioInput): Promise<SurfaceScenarioValidationResult>;
+/** Start at the authored entry. Only a sidecar can supply example subjects or fixture facts. */
+export declare function deriveSurfacePreviewScenario(bundle: ResolvedBundle): SurfacePreviewScenario;
 /**
  * Adapt a selected scenario profile to the existing loader, authorizer, and
  * transition-executor ports. Missing profiles, missing exact source outcomes,

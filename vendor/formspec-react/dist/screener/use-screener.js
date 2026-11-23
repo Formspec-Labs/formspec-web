@@ -25,8 +25,6 @@ function itemOptions(item) {
  * current answers using the engine's FEL evaluator.
  */
 export function isItemRequired(item, screener, answers) {
-    if (item.required === true)
-        return true;
     const binds = screener?.binds ?? [];
     const bind = binds.find((b) => b.path === item.key);
     if (!bind || bind.required == null)

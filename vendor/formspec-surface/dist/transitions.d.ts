@@ -1,3 +1,5 @@
+import { autoPlacedDefinitionActions, type IFormEngine } from '@formspec-org/engine';
+import type { ComponentDocument, FormDefinition, ThemeDocument } from '@formspec-org/types';
 import { type SurfaceDiagnostic } from './diagnostics.js';
 import { type SurfaceApp, type SurfaceRouteHandle } from './composition.js';
 import type { SlotPlan } from './slot-plan.js';
@@ -126,6 +128,22 @@ export interface TransitionPlanResult {
     transitions: readonly PlannedTransition[];
     diagnostics: readonly SurfaceDiagnostic[];
 }
+export declare function ownDataPropertyValue(obj: unknown, key: string): {
+    present: boolean;
+    value: unknown;
+};
+export declare function isStrictPlainRecord(obj: unknown): obj is Record<string, unknown>;
+export declare function ownPlainActions(document: unknown): readonly Record<string, unknown>[];
+/**
+ * Find the unique strict plain-JSON action matching `actionRef` across loaded
+ * Response Actions documents without invoking structural getters or trusting
+ * inherited/class/non-plain wrappers. Malformed documents are skipped without
+ * throwing so unrelated broken documents cannot abort valid action lookup.
+ */
+export declare function findUniquePlainAction<TDocument extends ResponseActionsDocumentLike>(documents: readonly TDocument[], actionRef: string): {
+    document: TDocument;
+    action: Record<string, unknown>;
+} | undefined;
 /**
  * The one Response Actions document the form renderer may use for a Definition.
  *
@@ -135,7 +153,7 @@ export interface TransitionPlanResult {
  */
 export declare function responseActionsDocumentForDefinition<TDocument extends ResponseActionsDocumentLike>(documents: readonly TDocument[], definitionRef: string): TDocument | undefined;
 /**
- * Every trigger a control **already on this route** can raise.
+ * Every resolved `Action.id` a control **already on this route** can raise.
  *
  * `surface-shell-spec.md` §5.3: "Resolving `supplied-by-slot` is a walk, not a
  * lookup." Two halves, and getting either wrong is the same defect —
@@ -147,11 +165,15 @@ export declare function responseActionsDocumentForDefinition<TDocument extends R
  *    control the host route renders — the same transitivity §4.4 applies to the
  *    theme grant. A shell that scans only a route's own `slots[]` reports a
  *    working page as dead.
- * 2. **The check follows the controls this binding actually places.**
- *    `FormspecForm` auto-places each uniquely identified Action with a literal
- *    or Locale-reference label from the one response-scoped document targeting the
- *    rendered Definition. Action ids are always exact; a closed-core intent is
- *    credited only when exactly one loaded Action publishes it.
+ * 2. **The check follows the exact controls this binding actually places.**
+ *    First, the Definition-scoped Response Actions document is validated
+ *    fail-closed with the renderer's own document predicate. Then the slot's
+ *    layout plan (explicit `ComponentDocument` tree when selected, plus
+ *    `autoPlacedDefinitionActions` fallback controls) determines the exact
+ *    rendered `ActionButton` `actionRef`s — crediting explicitly authored
+ *    `autosave` buttons while excluding unauthored background actions. Only
+ *    exact resolved `Action.id` values enter this set so `planTransitions` and
+ *    completion matching preserve exact-ID precedence over intent triggers.
  *
  * A module widget contributes only through the complete declared chain:
  * Registry action output -> Surface action binding -> exact loaded action.
@@ -160,8 +182,27 @@ export declare function responseActionsDocumentForDefinition<TDocument extends R
  * do not place controls, and drawing a button from one would derive layout from
  * Experience (experience-spec §1.4.1 prohibition 2).
  */
-export declare function slotSuppliedTriggers(slots: readonly SlotPlan<unknown>[], responseActions?: readonly ResponseActionsDocumentLike[], options?: {
+export interface SlotSuppliedTriggersOptions {
     includeWidgetActions?: boolean | undefined;
+    /** Effective route Theme grant used by mounted Definition forms. */
+    themeDocument?: ThemeDocument | undefined;
+    /** Explicit active breakpoint override when already known by the caller. */
+    activeBreakpoint?: string | null | undefined;
+    /** Pure viewport predicate `(minWidthPx) => boolean` for responsive Component/Theme planning. */
+    matchesMinWidth?: ((minWidthPx: number) => boolean) | undefined;
+    /** Mounted Definition form engines keyed by slot path (`slotId` or `embedSlotId/childSlotId`) for live visibility evaluation. */
+    slotFormEngines?: ReadonlyMap<string, IFormEngine> | undefined;
+    /** Mounted Definition form reachable action refs keyed by slot path (`slotId` or `embedSlotId/childSlotId`), measured from live DOM/computed styles. */
+    slotRenderedActionRefs?: ReadonlyMap<string, ReadonlySet<string>> | undefined;
+}
+/**
+ * Collect sorted unique numeric `minWidth` thresholds declared across a route's
+ * granted Theme and all `definition-form` Component documents (descending `embed-route`).
+ */
+export declare function collectSlotBreakpointThresholds(slots: readonly SlotPlan<unknown>[], themeDocument?: ThemeDocument | undefined): readonly number[];
+export declare function slotSuppliedTriggers(slots: readonly SlotPlan<unknown>[], responseActions?: readonly ResponseActionsDocumentLike[], options?: SlotSuppliedTriggersOptions): ReadonlySet<string>;
+export declare function plannedDefinitionFormActionRefs(definition: FormDefinition, componentDocument: ComponentDocument | undefined, responseActionsDocument: Parameters<typeof autoPlacedDefinitionActions>[0], options?: Pick<SlotSuppliedTriggersOptions, 'themeDocument' | 'activeBreakpoint' | 'matchesMinWidth'> & {
+    evalEngine?: IFormEngine | undefined;
 }): ReadonlySet<string>;
 export declare function planTransitions(input: TransitionPlanInput): TransitionPlanResult;
 export {};

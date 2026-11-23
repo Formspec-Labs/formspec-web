@@ -6,6 +6,7 @@ import { useChromeText } from '../../use-chrome-text';
 import { NativeSelectControl } from './controls/native-select';
 import { ComboboxSelect } from './controls/combobox-select';
 import { MoneyInputControl } from './controls/money-input';
+import { currencyCodeFromPrefix, useCurrencyDraft } from './controls/currency-format';
 import { SliderControl } from './controls/slider';
 import { RatingControl } from './controls/rating';
 import { SignatureControl } from './controls/signature';
@@ -32,7 +33,8 @@ function adornedDescribedBy(describedBy, id, { prefix, suffix }) {
 export function renderControl(field, node, describedBy, isProtected = false, extensionAttrs = {}, resolvePlaceholder = (value) => value, itemAdornments = {}) {
     const { dataType, id, path, value } = field;
     const isReadonly = field.readonly || isProtected;
-    const showError = !!(field.error && field.touched);
+    const hasShapeError = field.errors.some((e) => e.severity === 'error' && e.constraintKind === 'shape');
+    const showError = !!(field.error && (field.touched || hasShapeError));
     const autoComplete = node.props?.autoComplete || undefined;
     const common = {
         id,
@@ -42,6 +44,7 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
         'aria-required': field.required,
         required: field.required,
         'aria-disabled': isProtected || undefined,
+        ...(isReadonly ? { tabIndex: -1 } : {}),
         onBlur: () => field.touch(),
         autoComplete,
     };
@@ -74,10 +77,19 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
             const step = node.props?.step;
             const showStepper = node.props?.showStepper;
             const placeholder = resolvePlaceholder(node.props?.placeholder);
+            const numberAdornments = {
+                prefix: node.props?.prefix ?? itemAdornments.prefix,
+                suffix: node.props?.suffix ?? itemAdornments.suffix,
+            };
+            const currencyCode = !showStepper ? currencyCodeFromPrefix(numberAdornments.prefix) : null;
             // Prefix/suffix hug the input; stepper buttons sit outside them.
-            const numberInput = withAdornments(_jsx("input", { ...common, "aria-describedby": adornedDescribedBy(describedBy, id, itemAdornments), type: "number", value: jsonValueText(value), readOnly: isReadonly, placeholder: placeholder, min: min != null ? jsonValueText(min) : undefined, max: max != null ? jsonValueText(max) : undefined, step: step != null ? jsonValueText(step) : dataType === 'integer' ? '1' : 'any', onChange: isReadonly
+            const numberControl = currencyCode ? (_jsx(CurrencyNumberInput, { field: field, common: common, describedBy: adornedDescribedBy(describedBy, id, numberAdornments), isReadonly: isReadonly, placeholder: placeholder, min: min != null ? jsonValueText(min) : undefined, max: max != null ? jsonValueText(max) : undefined, step: step != null ? jsonValueText(step) : dataType === 'integer' ? '1' : 'any', currencyCode: currencyCode, currencySymbol: numberAdornments.prefix.trim() })) : (_jsx("input", { ...common, "aria-describedby": adornedDescribedBy(describedBy, id, numberAdornments), type: "number", value: jsonValueText(value), readOnly: isReadonly, placeholder: placeholder, min: min != null ? jsonValueText(min) : undefined, max: max != null ? jsonValueText(max) : undefined, step: step != null ? jsonValueText(step) : dataType === 'integer' ? '1' : 'any', onWheel: (e) => {
+                    if (document.activeElement === e.currentTarget)
+                        e.currentTarget.blur();
+                }, onChange: isReadonly
                     ? undefined
-                    : (e) => field.setValue(e.target.value === '' ? null : e.target.value) }), id, itemAdornments);
+                    : (e) => field.setValue(e.target.value === '' ? null : e.target.value) }));
+            const numberInput = withAdornments(numberControl, id, numberAdornments);
             if (showStepper) {
                 const stepVal = step ?? 1;
                 const decrement = stepJsonNumber(value, stepVal, -1, min, max);
@@ -95,7 +107,7 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
         case 'Rating':
             return (_jsx(RatingControl, { field: field, node: node, isReadonly: isReadonly, describedBy: describedBy }));
         case 'Signature':
-            return _jsx(SignatureControl, { field: field, node: node, describedBy: describedBy });
+            return _jsx(SignatureControl, { field: field, node: node, describedBy: describedBy, isReadonly: isReadonly });
         case 'TextInput':
         default: {
             const maxLines = node.props?.maxLines;
@@ -117,13 +129,29 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
                 // Invalid while Formspec validation shows an error or the text is over the count limit.
                 'aria-invalid': common['aria-invalid'] || (countLimit !== undefined && length > countLimit),
             };
-            const control = isTextarea ? (_jsx("textarea", { ...controlProps, rows: maxLines, placeholder: resolvePlaceholder(placeholder), value: jsonValueText(value), readOnly: isReadonly, maxLength: maxLength, onChange: (e) => field.setValue(e.target.value) })) : (_jsx("input", { ...controlProps, type: extensionAttrs.type || 'text', value: jsonValueText(value), readOnly: isReadonly, placeholder: resolvePlaceholder(placeholder), inputMode: (extensionAttrs.inputMode || inputMode), maxLength: maxLength, pattern: extensionAttrs.pattern, autoComplete: extensionAttrs.autoComplete || autoComplete, onChange: (e) => field.setValue(e.target.value) }));
+            const textValue = jsonValueText(value);
+            const inputType = extensionAttrs.type || 'text';
+            const wrapLongReadonlyText = isReadonly && !isTextarea && inputType === 'text' && textValue.length > 20;
+            const textInputEl = (_jsx("input", { ...controlProps, type: inputType, value: textValue, title: isReadonly && textValue ? textValue : undefined, readOnly: isReadonly, placeholder: resolvePlaceholder(placeholder), inputMode: (extensionAttrs.inputMode || inputMode), maxLength: maxLength, pattern: extensionAttrs.pattern, autoComplete: extensionAttrs.autoComplete || autoComplete, onChange: (e) => field.setValue(e.target.value) }));
+            const control = isTextarea ? (_jsx("textarea", { ...controlProps, rows: maxLines, placeholder: resolvePlaceholder(placeholder), value: textValue, readOnly: isReadonly, maxLength: maxLength, onChange: (e) => field.setValue(e.target.value) })) : wrapLongReadonlyText ? (_jsxs("div", { className: "formspec-readonly-text-wrap", "data-readonly-wrapped": "true", title: textValue, children: [textInputEl, _jsx("div", { className: "formspec-readonly-text-value", "aria-hidden": "true", children: textValue })] })) : textInputEl;
             const adorned = withAdornments(control, id, adornments);
             if (countLimit === undefined)
                 return adorned;
             return (_jsxs(_Fragment, { children: [adorned, _jsx(CharacterCount, { fieldId: id, length: length, maxLength: countLimit })] }));
         }
     }
+}
+/** Currency-prefixed decimal/integer NumberInput: comma-formatted on blur/readOnly, draft-preserving raw value while focused. */
+function CurrencyNumberInput({ field, common, describedBy, isReadonly, placeholder, min, max, step, currencyCode, currencySymbol, }) {
+    const { displayValue, handleFocus, handleBlur, handleChange } = useCurrencyDraft({
+        rawStr: jsonValueText(field.value),
+        currencyCode,
+        currencySymbol,
+        isReadonly,
+        onCommit: (normalized) => field.setValue(normalized),
+        onBlur: common.onBlur,
+    });
+    return (_jsx("input", { ...common, "aria-describedby": describedBy, type: "text", inputMode: "decimal", pattern: '-?[0-9,]*\\.?[0-9]*', className: "formspec-money-amount", value: displayValue, readOnly: isReadonly, placeholder: placeholder, min: min, max: max, step: step, onFocus: isReadonly ? undefined : handleFocus, onBlur: handleBlur, onChange: isReadonly ? undefined : handleChange }));
 }
 /**
  * The plain `<select>` — a component, not a branch, so it reads the form's own chrome strings

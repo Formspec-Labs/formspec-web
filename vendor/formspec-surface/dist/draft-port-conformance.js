@@ -1,3 +1,5 @@
+/** @filedesc Reusable behavioral checks for authorized Surface draft storage. */
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 const definitionUrl = 'https://example.test/definition';
 const query = {
     key: 'summary',
@@ -8,17 +10,17 @@ const query = {
 const subject = { id: 'unit-a', type: 'urn:test:unit', keys: { year: 2025 } };
 const key = { definitionUrl, scope: 'scope-a', subject };
 const counts = { total: 1, filled: 1, toFix: 0, toCheck: 0 };
-function saveInput(revision, answer = 'first', address = key) {
+function saveInput(revision, answer = 'first', address = key, data) {
     const progress = { ...counts, filled: answer ? 1 : 0 };
     return {
         key: address,
         definitionVersion: '1.0.0',
         expectedRevision: revision,
-        snapshotJson: JSON.stringify({ definitionUrl: address.definitionUrl, definitionVersion: '1.0.0', data: { answer } }),
+        snapshotJson: JSON.stringify({ definitionUrl: address.definitionUrl, definitionVersion: '1.0.0', data: data?.editable ?? { answer } }),
         responseJson: JSON.stringify({
             $formspecResponse: '1.0', id: 'urn:uuid:55146a6e-46fc-43db-956c-b03de240f971', definitionUrl: address.definitionUrl,
             definitionVersion: '1.0.0', status: 'in-progress', authored: '2026-01-01T00:00:00Z',
-            subject: address.subject, data: { answer },
+            subject: address.subject, data: data?.filtered ?? { answer },
         }),
         summary: {
             sections: query.sections,
@@ -29,6 +31,12 @@ function saveInput(revision, answer = 'first', address = key) {
 function check(value, message) {
     if (!value)
         throw new Error(message);
+}
+async function creationPins(fixture) {
+    const outcome = await fixture.select();
+    check(outcome.status === 'available' && outcome.pinned, 'fixture selection did not deliver a pin');
+    const { status: _status, newer: _newer, ...delivery } = outcome;
+    return { [fixture.instance]: delivery };
 }
 export const draftPortConformance = {
     async 'isolates scopes, Definitions and subjects'({ port, key: address = key, otherKeys }) {
@@ -85,6 +93,18 @@ export const draftPortConformance = {
             loaded.draft.revision === winner.revision &&
             JSON.parse(loaded.draft.snapshotJson).data.answer === (left.status === 'saved' ? 'left' : 'right'), 'create race did not preserve the winning revision');
     },
+    async 'round-trips editable and filtered draft data separately'({ port, key: address = key }) {
+        const filtered = { answer: 'visible', amount: parseJsonExact('1.234567890123456789') };
+        const editable = { ...filtered, hidden: 'retained', rows: [{}] };
+        const input = { ...saveInput(null, filtered.answer, address, { editable, filtered }), summary: null };
+        const { snapshotJson, responseJson } = input;
+        const saved = await port.save(input);
+        check(saved.status === 'saved', 'save refused distinct editable and filtered data');
+        const loaded = await port.load(address, input.definitionVersion);
+        check(loaded.status === 'loaded' && loaded.draft.revision === saved.revision, 'load returned the wrong revision');
+        check(loaded.draft.snapshotJson === snapshotJson, 'editable snapshot changed');
+        check(loaded.draft.responseJson === responseJson, 'filtered response changed');
+    },
     async 'commits answers and summary at the winning revision'({ port, key: address = key }) {
         const first = await port.save(saveInput(null, 'first', address));
         check(first.status === 'saved', 'initial save failed');
@@ -130,7 +150,7 @@ export const draftPortConformance = {
     },
     async 'records an empty at-open pin'({ port, key: address = key, pins }) {
         check(pins, 'supply a Definition with an at-open Response instance and whenNone empty');
-        const created = await port.save(saveInput(null, 'first', address));
+        const created = await port.save({ ...saveInput(null, 'first', address), creationPins: await creationPins(pins) });
         check(created.status === 'saved', 'a successful empty selection refused draft creation');
         const loaded = await port.load(address, '1.0.0');
         const pin = loaded.status === 'loaded' && loaded.draft.pins[pins.instance];
@@ -143,7 +163,13 @@ export const draftPortConformance = {
     async 'records an at-open pin once and reports a newer filing without changing the pin'({ port, key: address = key, pins }) {
         check(pins, 'supply a Definition with an at-open Response instance');
         await pins.addInitial();
-        const created = await port.save(saveInput(null, 'first', address));
+        for (const observed of [undefined, {}]) {
+            const staleSeed = await port.save({ ...saveInput(null, 'stale seed', address),
+                ...(observed && { creationPins: observed }) });
+            check(staleSeed.status === 'pin-unavailable' && staleSeed.instance === pins.instance, 'creating save admitted answers without the observed filing');
+            check((await port.load(address, '1.0.0')).status === 'absent', 'pin mismatch committed a partial draft');
+        }
+        const created = await port.save({ ...saveInput(null, 'first', address), creationPins: await creationPins(pins) });
         check(created.status === 'saved', 'the available filing did not admit creation');
         const original = await port.load(address, '1.0.0');
         const pin = original.status === 'loaded' && original.draft.pins[pins.instance];
@@ -158,3 +184,27 @@ export const draftPortConformance = {
             selection.newer?.responseId === pins.newerResponseId, 'selection did not retain the pin and identify the newer filing');
     },
 };
+/** Run against a fresh store with the input Definition and authorized parents. */
+export async function checkMintedDraftStart(port, input) {
+    check(port.start, 'adapter must implement explicit creation');
+    const start = (attemptId) => port.start({ ...input, attemptId });
+    const [first, retry, second] = await Promise.all([start('first'), start('first'), start('second')]);
+    check(first.status === 'started' && retry.status === 'started' && second.status === 'started', 'start failed');
+    check(first.subject.id === retry.subject.id && first.subject.id !== second.subject.id, 'attempt identity lost');
+    for (const [index, subject] of [first.subject, second.subject].entries()) {
+        const key = { scope: input.scope, definitionUrl: input.definitionUrl, subject };
+        const initial = await port.load(key, input.definitionVersion);
+        check(initial.status === 'initialized', 'untouched unit must resume without a saved Response');
+        const answer = String(index);
+        const edit = saveInput(initial.revision, answer, key);
+        const response = { ...JSON.parse(edit.responseJson), definitionVersion: input.definitionVersion };
+        const snapshot = { ...JSON.parse(edit.snapshotJson), definitionVersion: input.definitionVersion };
+        const result = await port.save({ ...edit, definitionVersion: input.definitionVersion,
+            snapshotJson: JSON.stringify(snapshot), responseJson: JSON.stringify(response) });
+        check(result.status === 'saved', 'first edit failed');
+    }
+    for (const [index, subject] of [first.subject, second.subject].entries()) {
+        const result = await port.load({ scope: input.scope, definitionUrl: input.definitionUrl, subject }, input.definitionVersion);
+        check(result.status === 'loaded' && JSON.parse(result.draft.responseJson).data.answer === String(index), 'unit lost its own edits');
+    }
+}

@@ -1,5 +1,13 @@
 /** @filedesc ValidationSummary rows every renderer draws: which results show, deduped, worded as the field shows them, linked to their control. */
 import { validationResultIdentity } from '@formspec-org/types';
+/** Strip one or more leading severity prefixes (`WARNING:`, `Error:`, `Info —`, etc.). */
+export function stripSeverityPrefix(message) {
+    return message.replace(/^(?:(?:warning|error|info(?:rmation)?)\s*[:—-]+\s*)+/i, '').trim();
+}
+/** Collapse doubled leading severity prefixes (`Warning: WARNING: ...` → `Warning: ...`). */
+export function dedupeSeverityPrefix(message) {
+    return message.replace(/^((?:warning|error|info(?:rmation)?))\s*:\s*(?:(?:warning|error|info(?:rmation)?)\s*[:—-]+\s*)+/i, '$1: ');
+}
 /** The path a finding names: its source when it has one, else its path. */
 export function validationResultPath(result) {
     const raw = result.sourceId || result.path || '';
@@ -43,21 +51,34 @@ export function readValidationSummaryRows(comp, source, options) {
                 continue;
             seen.add(key);
         }
-        const field = formLevel ? null : source.field(path);
-        const label = field?.label ?? (formLevel ? null : path.replace(/\[\d+\]/g, ''));
-        const cleanLabel = label === null ? null : label.replace(/\.$/, '');
-        const canJump = jumpLinks && !formLevel && (source.jumpable ? source.jumpable(path) : field !== null);
         rows.push({
             identity: validationResultIdentity(result),
             severity,
             path,
             formLevel,
             message,
-            label,
-            text: cleanLabel === null ? message : source.chrome('validationSummary.row', { label: cleanLabel, message }),
-            jumpPath: canJump ? path : null,
-            jumpHref: canJump && field?.controlId ? `#${field.controlId}` : null,
+            ...summaryRowWording(source, path, message, jumpLinks),
         });
     }
     return rows;
+}
+/**
+ * @internal Word one row for a path (empty at form level) as its field shows it, linked when the field can
+ * take the jump. Finding rows and owed follow-up rows read the same.
+ */
+export function summaryRowWording(source, path, message, jumpLinks) {
+    const formLevel = path === '';
+    const field = formLevel ? null : source.field(path);
+    const rawLabel = field?.label ?? (formLevel ? null : path.replace(/\[\d+\]/g, ''));
+    const label = rawLabel === null ? null : (rawLabel.trimEnd().replace(/[:.]+$/, '') || rawLabel);
+    const rowMessage = label === null
+        ? (dedupeSeverityPrefix(message) || message)
+        : (stripSeverityPrefix(message) || message);
+    const canJump = jumpLinks && !formLevel && (source.jumpable ? source.jumpable(path) : field !== null);
+    return {
+        label,
+        text: label === null ? rowMessage : source.chrome('validationSummary.row', { label, message: rowMessage }),
+        jumpPath: canJump ? path : null,
+        jumpHref: canJump && field?.controlId ? `#${field.controlId}` : null,
+    };
 }

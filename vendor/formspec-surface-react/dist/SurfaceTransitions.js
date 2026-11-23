@@ -22,7 +22,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from 'react';
 import { generationNeedAnchors, mergeNeedAnchors, resolveSurfaceStrings, } from '@formspec-org/surface';
 import { needTraceAttributes } from './need-trace.js';
-export function SurfaceTransitions({ from, transitions, strings, onFire, onAdvance, }) {
+export function SurfaceTransitions({ from, transitions, strings, hasDefinitionForm, draftReviewTargetRouteRefs, onFire, onAdvance, }) {
     // A `supplied-by-slot` transition already has its control on the page — the
     // form's own submit button. Drawing a second one beside it would give a person
     // two things that look like the same act.
@@ -31,9 +31,14 @@ export function SurfaceTransitions({ from, transitions, strings, onFire, onAdvan
     if (shown.length === 0)
         return null;
     const text = strings ?? resolveSurfaceStrings();
-    return (_jsx("div", { className: "fs-surface-transitions", "data-probe": "transitions", children: shown.map((transition) => (_jsx(SurfaceTransition, { from: from, transition: transition, strings: text, ...(onFire ? { onFire } : {}), ...(onAdvance ? { onAdvance } : {}) }, `${transition.trigger}->${transition.to}`))) }));
+    const usesDefaultContinueTemplate = text('transitionContinue', { target: '__TARGET__' }) === 'Continue to __TARGET__';
+    return (_jsx("div", { className: "fs-surface-transitions", "data-probe": "transitions", children: shown.map((transition, index) => {
+            const isBackToReviewedForm = Boolean(draftReviewTargetRouteRefs?.has(transition.to));
+            const secondary = Boolean(hasDefinitionForm || index > 0);
+            return (_jsx(SurfaceTransition, { from: from, transition: transition, strings: text, secondary: secondary, backToForm: isBackToReviewedForm && usesDefaultContinueTemplate, usesDefaultContinueTemplate: usesDefaultContinueTemplate, ...(onFire ? { onFire } : {}), ...(onAdvance ? { onAdvance } : {}) }, `${transition.trigger}->${transition.to}`));
+        }) }));
 }
-function SurfaceTransition({ from, transition, strings, onFire, onAdvance, }) {
+function SurfaceTransition({ from, transition, strings, secondary, backToForm, usesDefaultContinueTemplate, onFire, onAdvance, }) {
     const [pending, setPending] = useState(false);
     const [failure, setFailure] = useState(undefined);
     if (transition.status !== 'fireable' || !onFire) {
@@ -41,11 +46,21 @@ function SurfaceTransition({ from, transition, strings, onFire, onAdvance, }) {
                 ? { 'data-transition-unfireable-reason': transition.unfireableReason }
                 : {}), "data-probe": "transition-blocked", role: "status", ...needTraceAttributes(transition.needAnchors), children: transition.reason }));
     }
-    const label = transition.target?.route.title ?? transition.to;
+    const rawLabel = transition.target?.route.title ?? transition.to;
+    const targetLabel = usesDefaultContinueTemplate
+        ? rawLabel.replace(/^The\s+/, 'the ')
+        : rawLabel;
+    const buttonText = pending
+        ? strings('transitionPending')
+        : backToForm
+            ? 'Back to form'
+            : strings('transitionContinue', { target: targetLabel });
     const renderedAnchors = mergeNeedAnchors(transition.needAnchors, transition.target
         ? generationNeedAnchors(transition.target.route)
         : []);
-    return (_jsxs("div", { className: "fs-surface-transition", "data-transition-status": transition.status, "data-probe": "transition-fireable", ...needTraceAttributes(renderedAnchors), children: [_jsx("button", { type: "button", className: "fs-surface-transition__button", disabled: pending, onClick: () => {
+    return (_jsxs("div", { className: "fs-surface-transition", "data-transition-status": transition.status, "data-probe": "transition-fireable", ...needTraceAttributes(renderedAnchors), children: [_jsx("button", { type: "button", className: secondary
+                    ? 'fs-surface-transition__button fs-surface-transition__button--secondary'
+                    : 'fs-surface-transition__button', disabled: pending, onClick: () => {
                     setPending(true);
                     setFailure(undefined);
                     void onFire(transition, from)
@@ -59,5 +74,5 @@ function SurfaceTransition({ from, transition, strings, onFire, onAdvance, }) {
                         setFailure(error instanceof Error ? error.message : String(error));
                     })
                         .finally(() => setPending(false));
-                }, children: pending ? strings('transitionPending') : strings('transitionContinue', { target: label }) }), failure && (_jsx("p", { className: "fs-surface-transition__failure", role: "alert", children: failure }))] }));
+                }, children: buttonText }), failure && (_jsx("p", { className: "fs-surface-transition__failure", role: "alert", children: failure }))] }));
 }

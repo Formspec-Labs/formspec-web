@@ -35,26 +35,40 @@ import { admitScreenerPresentation } from './screener-slot.js';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { parseRouteSubjectKey, resolveDraftReviewTarget, widgetActionScopeMatches } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
+import { resolvePageSequence } from '@formspec-org/layout';
+import { formHref, matchRoute, routeHref } from './composition.js';
+import { planDraftStart } from './draft-start.js';
 import { planFilingStatus } from './filing-status.js';
 import { planExperienceUnit, } from './experience-unit.js';
 import { planStaticContent, } from './static-content.js';
+import { findUniquePlainAction, isStrictPlainRecord, ownDataPropertyValue, } from './transitions.js';
 import { dataSourceAvailableToWidget, resolveDataSourceDescriptor, } from './data-source-loader.js';
 import { generationNeedAnchors } from './need-trace.js';
 import { planDefinitionFormInitialData, } from './definition-form-initial-data.js';
 const KNOWN_SLOT_TYPES = {
     'screener': true,
     'filing-status': true,
+    'draft-start': true,
     'definition-form': true,
     'experience-unit': true,
     'module-widget': true,
     'static-content': true,
     'embed-route': true,
 };
+function isTrackerBand(slot, handle) {
+    return handle.surface.$formspecSurface === '0.4' && slot.slotType === 'filing-status'
+        && ownRecord(slot, 'binding')?.placement === 'band';
+}
 export function planRoute(context) {
     const diagnostics = [];
     const base = context.headingBaseLevel ?? 2;
-    const slots = context.handle.route.slots.map((slot) => planSlot(slot, context, base, new Set([context.handle.routeId]), diagnostics));
-    return { handle: context.handle, slots, diagnostics };
+    const visited = new Set([context.handle.routeId]);
+    const slots = context.handle.route.slots.filter(slot => !isTrackerBand(slot, context.handle)).map(slot => planSlot(slot, context, base, visited, diagnostics));
+    const bands = context.handle.surface.routes.flatMap(route => route.slots.filter(slot => isTrackerBand(slot, context.handle)).flatMap(slot => {
+        const planned = planSlot(slot, context, base, visited, diagnostics, route);
+        return planned.slotType === 'filing-status' ? [{ routeId: route.id, slot: planned }] : [];
+    }));
+    return { handle: context.handle, slots, bands, diagnostics };
 }
 function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, bindingRoute = context.handle.route) {
     const site = {
@@ -93,9 +107,17 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
                 diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The native Screener slot is unavailable.', site, { reason }));
             return { ...shared, slotType: 'screener', ...(handle ? { screener: handle } : {}), allowedTargets, status: reason ? 'unresolved' : 'ready', ...(reason ? { reason } : {}) };
         }
+        case 'draft-start': {
+            const start = context.filingStatus && planDraftStart(context.filingStatus.app, context.handle, bindingRoute, binding, context.definitions, context.params ?? {});
+            if (!start)
+                diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The new draft target or its parent parameters are unavailable.', site));
+            return { ...shared, slotType: 'draft-start', start };
+        }
         case 'filing-status': {
             const tracker = context.filingStatus ? planFilingStatus({
                 ...context.filingStatus,
+                slotId: slot.id,
+                dataSources: context.dataSources,
                 handle: context.handle,
                 bindingRoute,
                 binding,
@@ -107,7 +129,7 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
             }) : { status: 'unresolved', reason: 'route-table-unavailable' };
             if (tracker.status === 'unresolved')
                 diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The filing tracker cannot resolve its form links.', site, { reason: tracker.reason }));
-            else
+            else if (tracker.status === 'ready')
                 for (const group of tracker.groups)
                     for (const row of group.rows) {
                         if (row.status === 'disabled')
@@ -147,6 +169,9 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
                     plan.componentDocument = component;
                 if (subject)
                     plan.subject = subject;
+                const draftReviewHref = context.filingStatus && planDraftReviewHref(context, context.filingStatus.app, bindingRoute.id, slot.id, site, diagnostics);
+                if (draftReviewHref !== undefined)
+                    plan.draftReviewHref = draftReviewHref;
                 if (binding.initialData !== undefined) {
                     const initialData = planDefinitionFormInitialData({
                         binding: binding.initialData,
@@ -198,7 +223,7 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
             const diagnostic = context.widgets.diagnose(key, resolution, site);
             if (diagnostic)
                 diagnostics.push(diagnostic);
-            const widgetShape = resolution.status !== 'undeclared' ? resolution.entry?.widgetShape : undefined;
+            const widgetShape = resolvedWidgetShape(resolution);
             const declaredInputs = Array.isArray(widgetShape?.dataInputs)
                 ? widgetShape.dataInputs
                 : [];
@@ -360,7 +385,7 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, b
                     params.push([target, value]);
             }
             const childContext = { ...context, params: Object.fromEntries(params) };
-            const slots = embedded.slots.map((child) => planSlot(child, childContext, nestedBase, nested, diagnostics, embedded));
+            const slots = embedded.slots.filter(slot => !isTrackerBand(slot, context.handle)).map((child) => planSlot(child, childContext, nestedBase, nested, diagnostics, embedded));
             return { ...plan, slots, status: 'ready' };
         }
     }
@@ -372,38 +397,48 @@ function exhaustive(value) {
     throw new Error(`Unhandled slot type: ${String(value)}`);
 }
 function resolveWidgetAction(documents, actionRef, responseInput, inputs, definitions) {
-    const matches = documents.flatMap((document) => (document.actions ?? [])
-        .filter((action) => action.id === actionRef)
-        .map((action) => ({ document, action })));
-    if (matches.length !== 1)
-        return undefined;
-    const match = matches[0];
+    const match = findUniquePlainAction(documents, actionRef);
     if (!match)
         return undefined;
     const selectedInputs = inputs.filter((input) => input.name === responseInput);
     const selected = selectedInputs.length === 1 ? selectedInputs[0] : undefined;
     const descriptor = selected?.status === 'ready' ? selected.descriptor : undefined;
-    const target = match.document.targetDefinition;
-    const targetPin = target && typeof target.url === 'string'
-        ? { url: target.url, ...(ownString(target, 'compatibleVersions') ? { compatibleVersions: ownString(target, 'compatibleVersions') } : {}) }
+    const targetProp = ownDataPropertyValue(match.document, 'targetDefinition');
+    const target = isStrictPlainRecord(targetProp.value) ? targetProp.value : undefined;
+    const targetUrlProp = target ? ownDataPropertyValue(target, 'url') : undefined;
+    const targetCompatProp = target ? ownDataPropertyValue(target, 'compatibleVersions') : undefined;
+    const targetPin = targetUrlProp?.present && typeof targetUrlProp.value === 'string'
+        ? {
+            url: targetUrlProp.value,
+            ...(targetCompatProp?.present && typeof targetCompatProp.value === 'string' && targetCompatProp.value.length > 0
+                ? { compatibleVersions: targetCompatProp.value }
+                : {}),
+        }
         : undefined;
     const candidates = [...definitions.values()].filter((definition) => targetDefinitionMatches(targetPin, definition));
     const definition = candidates.length === 1 ? candidates[0] : undefined;
     if (!widgetActionScopeMatches({ document: match.document, responseInput, inputs,
         sourceSchema: descriptor?.source.schema, definition }))
         return undefined;
-    const responseContext = match.document.scope === 'app' ? undefined
+    const scopeProp = ownDataPropertyValue(match.document, 'scope');
+    const responseContext = scopeProp.value === 'app' ? undefined
         : descriptor && definition && typeof responseInput === 'string' ? { inputName: responseInput, descriptor, definition } : undefined;
-    if (match.document.scope !== 'app' && !responseContext)
+    if (scopeProp.value !== 'app' && !responseContext)
         return undefined;
     const { action } = match;
-    if (!action || typeof action.intent !== 'string')
+    const intentProp = ownDataPropertyValue(action, 'intent');
+    if (!intentProp.present || typeof intentProp.value !== 'string')
         return undefined;
-    const labelRecord = typeof action.label === 'object' && action.label !== null && !Array.isArray(action.label)
-        ? action.label
+    const labelProp = ownDataPropertyValue(action, 'label');
+    const labelRecord = isStrictPlainRecord(labelProp.value) ? labelProp.value : undefined;
+    const literalProp = labelRecord ? ownDataPropertyValue(labelRecord, 'literal') : undefined;
+    const refProp = labelRecord ? ownDataPropertyValue(labelRecord, 'ref') : undefined;
+    const literal = literalProp?.present && typeof literalProp.value === 'string' && literalProp.value.length > 0
+        ? literalProp.value
         : undefined;
-    const literal = labelRecord ? ownString(labelRecord, 'literal') : undefined;
-    const ref = labelRecord ? ownString(labelRecord, 'ref') : undefined;
+    const ref = refProp?.present && typeof refProp.value === 'string' && refProp.value.length > 0
+        ? refProp.value
+        : undefined;
     const label = literal !== undefined && ref === undefined
         ? { literal }
         : ref !== undefined && literal === undefined
@@ -412,7 +447,7 @@ function resolveWidgetAction(documents, actionRef, responseInput, inputs, defini
     const needAnchors = generationNeedAnchors(action);
     const metadata = {
         actionRef,
-        intent: action.intent,
+        intent: intentProp.value,
         ...(label !== undefined ? { label } : {}),
         ...(needAnchors.length > 0 ? { needAnchors } : {}),
     };
@@ -428,7 +463,78 @@ function planDraftReview(context, binding, widgetShape) {
     const subject = resolveFormSubject(definition, target.formBinding, context.handle.route, context.params ?? {});
     if (subject === false)
         return { status: 'unresolved', reason: 'subject-keys-invalid' };
-    return { status: 'ready', definition, ...(subject && { subject }) };
+    let targetFormHref;
+    let sections;
+    if (context.filingStatus) {
+        const review = ownRecord(binding, 'draftReview');
+        const routeRef = review && ownString(review, 'routeRef');
+        const slotRef = review && ownString(review, 'slotRef');
+        const destination = routeRef
+            ? context.filingStatus.app.routes.find(candidate => candidate.surface === context.handle.surface && candidate.routeId === routeRef)
+            : undefined;
+        if (destination && slotRef) {
+            const link = routeHref(destination, context.params ?? {});
+            if (!link.refusal && matchRoute(context.filingStatus.app, link.href).match?.handle === destination) {
+                const theme = context.filingStatus.themeAuthority.grantFor(destination.route, {
+                    surfaceId: destination.surfaceId,
+                    routeId: destination.routeId,
+                }).themeDocument;
+                const component = context.resolveDefinitionComponent?.({
+                    surfaceRef: context.surfaceRef,
+                    routeId: destination.routeId,
+                    slotId: slotRef,
+                    definition,
+                });
+                const sequence = resolvePageSequence(definition, {
+                    ...(theme ? { theme } : {}),
+                    ...(component ? { component } : {}),
+                });
+                targetFormHref = formHref(link.href, slotRef);
+                sections = sequence.map(({ id, fields }) => ({
+                    ...(id === undefined ? {} : { id }),
+                    fields,
+                    href: formHref(link.href, slotRef, id),
+                }));
+            }
+        }
+    }
+    return {
+        status: 'ready',
+        definition,
+        ...(subject && { subject }),
+        ...(targetFormHref !== undefined && { formHref: targetFormHref }),
+        ...(sections !== undefined && { sections }),
+    };
+}
+function resolvedWidgetShape(resolution) {
+    return resolution.status !== 'undeclared' ? resolution.entry?.widgetShape : undefined;
+}
+/**
+ * The reverse of a draft review's `formHref`: the one review route whose own binding resolves to this form
+ * slot. Two or more would make the link a guess, so the slot binding is reported incomplete instead.
+ */
+function planDraftReviewHref(context, app, routeId, slotId, site, diagnostics) {
+    const reviews = app.routes.filter(candidate => candidate.surface === context.handle.surface &&
+        (candidate.route.slots ?? []).some(reviewSlot => {
+            if (reviewSlot.slotType !== 'module-widget')
+                return false;
+            const binding = (reviewSlot.binding ?? {});
+            const review = ownRecord(binding, 'draftReview');
+            if (!review || ownString(review, 'routeRef') !== routeId || ownString(review, 'slotRef') !== slotId)
+                return false;
+            const key = { moduleId: ownString(binding, 'moduleId') ?? '', widgetName: ownString(binding, 'widgetName') ?? '' };
+            const widgetShape = resolvedWidgetShape(context.widgets.resolve(key));
+            return resolveDraftReviewTarget(candidate.surface, candidate.route, binding, widgetShape).status === 'ready';
+        }));
+    if (reviews.length > 1) {
+        diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'More than one review route reviews this form, so its Findings cannot link to one.', site, { reason: 'draft-review-ambiguous', routes: reviews.map(candidate => candidate.routeId) }));
+        return undefined;
+    }
+    const [review] = reviews;
+    if (!review)
+        return undefined;
+    const link = routeHref(review, context.params ?? {});
+    return !link.refusal && matchRoute(app, link.href).match?.handle === review ? link.href : undefined;
 }
 function resolveFormSubject(definition, binding, route, params) {
     const hasBinding = Object.hasOwn(binding, 'subjectKeys');

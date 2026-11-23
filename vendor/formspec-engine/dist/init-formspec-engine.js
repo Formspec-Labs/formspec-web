@@ -1,6 +1,6 @@
 /** @filedesc Public `initFormspecEngine` / `isFormspecEngineInitialized` — runtime WASM only until tools APIs run (ADR 0050). */
 import { initWasm, isWasmReady } from './wasm-bridge-runtime.js';
-import { initWasmTools, isWasmToolsReady } from './wasm-bridge-tools.js';
+import { initWasmTools, isWasmToolsReady, wasmLintDocument } from './wasm-bridge-tools.js';
 /**
  * Initialize the Formspec engine (loads and links the Rust/WASM module).
  *
@@ -30,4 +30,10 @@ export async function initFormspecEngineTools() {
 /** Whether the tools WASM module has completed initialization. */
 export function isFormspecEngineToolsInitialized() {
     return isWasmToolsReady();
+}
+/** Load the native document linter for hosts performing bundle admission. */
+export async function loadProjectionLinter() {
+    await initFormspecEngine();
+    await initFormspecEngineTools();
+    return wasmLintDocument;
 }

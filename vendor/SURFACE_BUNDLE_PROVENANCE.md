@@ -32,6 +32,9 @@ fails on any byte of drift. Both first run each sibling workspace's own
 formspec's pinned image (`docker/wasm-build`: Rust, wasm-pack and binaryen
 pinned; sources at fixed `/src` paths), the same image its publish workflow
 uses, so these bytes are the published bytes on any host with Docker.
+`formspec-engine/wasm-build-receipt.json` records the source revisions, pinned
+image recipe and artifact hashes for both WASM packages. The vendor check
+rebuilds the pair and verifies the receipt against the resulting files.
 `upstream-refs.json` records the formspec, fel-core and integrity-stack commits a
 full `vendor:refresh` built from; CI checks out exactly those and still gates on
 the byte comparison.

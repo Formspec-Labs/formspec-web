@@ -1,5 +1,5 @@
 /**
- * Capture only Definition paths present in retained Response data, including
+ * Capture labels for recorded answers and warning explanations, including
  * indexed repeat rows. Copy metadata so subsequent reader changes cannot alter
  * this snapshot. Reader refusals propagate. No evaluation or Locale lookup occurs.
  */
@@ -39,5 +39,15 @@ export function captureResponseFieldMetadata(definition, response, reader) {
         }
     }
     walk(definition.items, response.data);
+    for (const entry of response.explanations ?? []) {
+        for (const path of 'paths' in entry ? entry.paths : [entry.path]) {
+            if (path === '#' || Object.hasOwn(fields, path))
+                continue;
+            const label = reader.label(path);
+            if (typeof label !== 'string' || !label)
+                throw new Error('response-review-label-unavailable');
+            Object.defineProperty(fields, path, { value: { label }, enumerable: true });
+        }
+    }
     return fields;
 }

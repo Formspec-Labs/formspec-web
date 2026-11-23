@@ -1,8 +1,8 @@
 /** @filedesc Tools-side public surface — FEL facade, assembly, mapping, view-models, taxonomy, locale store, WASM eval/lint/screener (ADR 0050 §8 — excluded from `engine-render-entry`). */
-export { normalizeIndexedPath, itemAtPath, tokenizeFEL, analyzeFEL, normalizePathSegment, splitNormalizedPath, itemLocationAtPath, rewriteFELReferences, rewriteMessageTemplate, lintDocument, parseRegistry, findRegistryEntry, validateLifecycleTransition, wellKnownRegistryUrl, generateChangelog, printFEL, tryLiftConditionGroup, evaluateDefinition, getBuiltinFELFunctionCatalog, getFELDependencies, isValidFELIdentifier, sanitizeFELIdentifier, validateExtensionUsage, createSchemaValidator, rewriteFEL, } from './fel/fel-api.js';
+export { normalizeIndexedPath, itemAtPath, tokenizeFEL, analyzeFEL, normalizePathSegment, splitNormalizedPath, itemLocationAtPath, rewriteFELReferences, rewriteMessageTemplate, lintDocument, parseRegistry, findRegistryEntry, validateLifecycleTransition, wellKnownRegistryUrl, generateChangelog, printFEL, tryLiftConditionGroup, evaluateDefinition, evaluateFiled, getBuiltinFELFunctionCatalog, getFELDependencies, isValidFELIdentifier, sanitizeFELIdentifier, validateExtensionUsage, createSchemaValidator, rewriteFEL, } from './fel/fel-api.js';
 export { checkInstanceProjection } from './fel/fel-api-tools.js';
 export { createMappingEngine, RuntimeMappingEngine } from './mapping/RuntimeMappingEngine.js';
-export { isValidResponseAuthored, responseSubjectId, selectResponses } from './wasm-bridge-tools.js';
+export { attachVerifiedJsonToken, isValidResponseAuthored, parseVerifiedJsonObject, selectResponses } from './wasm-bridge-tools.js';
 /** FEL eval for tooling (WASM); returns a JSON-compatible value. */
 export { wasmEvalFel as evalFEL } from './wasm-bridge-runtime.js';
 /** @deprecated Use `lintDocument(doc, { registryDocuments })`. */

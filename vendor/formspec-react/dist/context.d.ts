@@ -6,7 +6,8 @@ import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, T
 import { admitFieldHelpUri } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
 import type { SemanticControlScope, SemanticResponseBinding } from './semantic-controls';
-import { type WorkspacePage } from './plan-page-mode';
+import type { WorkspacePage } from '@formspec-org/layout';
+import { type ExplanationState } from './explanation-state';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
 export type { ActionRefFinding, ActionResolution, ResponseAction, ResponseActionInvocationResult, };
 export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
@@ -20,6 +21,9 @@ export type ResponseActionInvokerResult<TDetail = SubmitResult> = ResponseAction
     invocation: ResponseActionInvocationResult<TDetail>;
 };
 export type ResponseActionInvoker<TDetail = SubmitResult> = (input: ResponseActionInvokerInput<TDetail>) => ResponseActionInvokerResult<TDetail> | Promise<ResponseActionInvokerResult<TDetail>>;
+export interface FormspecActionResultMeta {
+    nodeId: string;
+}
 export interface SubmitResult {
     response: FormResponse;
     validationReport: ValidationReport | null;
@@ -76,8 +80,10 @@ export interface FormspecContextValue {
     onHostEvent?: (eventName: string, detail: unknown, action: ResponseAction) => void;
     /** Callback invoked when ActionButton actionRef resolution produces a finding. */
     onActionFinding?: (finding: ActionRefFinding) => void;
-    /** Callback invoked after every ActionButton invocation terminal. */
+    /** Callback invoked after every ActionButton or background autosave invocation terminal. */
     onActionResult?: (result: ResponseActionInvocationResult<SubmitResult>) => void;
+    /** Callback invoked only when an interactive ActionButton control finishes an invocation. */
+    onControlActionResult?: (result: ResponseActionInvocationResult<SubmitResult>, meta: FormspecActionResultMeta) => void;
     /** Optional host-owned invoker that can wrap the engine executor with durable runtime plumbing. */
     responseActionInvoker?: ResponseActionInvoker<SubmitResult> | null;
     /** Host precondition evaluator for Response Actions that declare FEL preconditions. */
@@ -104,6 +110,11 @@ export interface FormspecContextValue {
     isTouched: (path: string) => boolean;
     /** The latest submit through this provider's form — null before the first. A `submit`-sourced ValidationSummary reads it. */
     latestSubmit: ReadonlyEngineSignal<SubmitResult | null>;
+    /**
+     * @internal The engine's explanation state, read once typing pauses and at once for an answer or a Submit,
+     * so the warning controls and the Findings margin share one Submit evaluation. Null when nothing asks for one.
+     */
+    explanationState: ReadonlyEngineSignal<ExplanationState | null>;
     /** Record a submit's result, so `latestSubmit` follows it. The submit port calls this. */
     recordSubmit: (result: SubmitResult) => void;
     /** Registry entries for extension resolution. */
@@ -121,17 +132,35 @@ export interface FormspecContextValue {
     workspaceNavigation?: WorkspaceNavigationProps;
     /** Synchronize the `show-validation-summary` attribute from `.formspec-container`. */
     setShowValidationSummaryAttr?: (show: boolean) => void;
+    /** Register a paged-layout field jump handler (Wizard / Workspace) for root panels. */
+    registerFieldJump?: (handler: ((path: string, options?: {
+        notifyRoute?: boolean;
+    }) => boolean) | null) => void;
+    /** Jump to a field across Wizard steps or Workspace sections if a paged layout is active. */
+    jumpToField?: (path: string, options?: {
+        notifyRoute?: boolean;
+    }) => boolean;
 }
 /** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
 export declare const FormspecContext: React.Context<FormspecContextValue | null>;
 export interface WorkspaceNavigationProps {
     /** A supplied value (including undefined) makes the host own section selection. */
     activeSection?: string | undefined;
+    /** Optional resolved field path requested by route navigation (e.g. from respondent review). */
+    focusField?: string | undefined;
     onActiveSectionChange?: ((section: string) => void) | undefined;
     /** Suppress section focus while another form owns the host's active location. */
     sectionNavigationActive?: boolean | undefined;
     /** Format a link for normal browser behavior such as opening a new tab. */
     hrefForSection?: ((section: string) => string | undefined) | undefined;
+    /**
+     * Address the control that accepts an owed group acknowledgement (Core §5.3.1), such as a draft review
+     * route; `navigate` follows a plain click the way the host's own links do. Absent, the Findings row is text.
+     */
+    acknowledgementLink?: ((code: string) => {
+        href: string;
+        navigate?: () => void;
+    } | undefined) | undefined;
     /** Let a host compose the page title. An undefined title clears the current section. */
     onSectionTitleChange?: ((title: string | undefined) => void) | undefined;
     /** Opt in to prefixing the document title with the active section when no title callback is supplied. */
@@ -193,8 +222,10 @@ export interface FormspecProviderProps extends WorkspaceNavigationProps {
     onHostEvent?: (eventName: string, detail: unknown, action: ResponseAction) => void;
     /** Callback for ActionButton actionRef resolution findings. */
     onActionFinding?: (finding: ActionRefFinding) => void;
-    /** Callback invoked after every ActionButton invocation terminal. */
+    /** Callback invoked after every ActionButton or background autosave invocation terminal. */
     onActionResult?: (result: ResponseActionInvocationResult<SubmitResult>) => void;
+    /** Callback invoked only when an interactive ActionButton control finishes an invocation. */
+    onControlActionResult?: (result: ResponseActionInvocationResult<SubmitResult>, meta: FormspecActionResultMeta) => void;
     /** Optional host-owned invoker that can wrap the engine executor with durable runtime plumbing. */
     responseActionInvoker?: ResponseActionInvoker<SubmitResult> | null;
     /** Host precondition evaluator for Response Actions that declare FEL preconditions. */

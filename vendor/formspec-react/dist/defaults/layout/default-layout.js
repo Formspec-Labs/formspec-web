@@ -1,9 +1,12 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Default layout component — semantic HTML containers with CSS class structure. */
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useContext, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { bindAutoModal, positionPopupNearTrigger, clearPopupFixedPosition, MODAL_FIRST_FOCUSABLE_SELECTOR, } from '@formspec-org/layout';
+import { FormspecContext } from '../../context';
 import { useWhen } from '../../use-when';
+import { usePathShapeErrors } from '../../use-field-error';
+import { WarningExplanations } from '../../warning-explanations';
 import { projectionMetadataAttrs } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
 import { HeadingLevelContext, useHeadingLevel, useIsSection } from '../../heading-level';
@@ -88,6 +91,7 @@ function stackJustifyContent(value) {
 // ── Stack ─────────────────────────────────────────────────────────
 function StackLayout({ node, children, themeClass, style }) {
     const props = node.props ?? {};
+    const ctx = useContext(FormspecContext);
     const headingLevel = useHeadingLevel();
     const section = useIsSection();
     const direction = props.direction;
@@ -96,9 +100,19 @@ function StackLayout({ node, children, themeClass, style }) {
     const wrap = props.wrap;
     const gap = props.gap ?? style?.gap;
     const justifyContent = stackJustifyContent(justify);
+    const autoGridColumns = typeof props.autoGridColumns === 'number'
+        && props.autoGridColumns >= 2
+        && props.autoGridColumns <= 6
+        ? props.autoGridColumns
+        : undefined;
+    const hasAutoGrid = autoGridColumns !== undefined && direction !== 'horizontal';
+    const groupErrors = usePathShapeErrors(node.bindPath);
+    const hasGroupErrors = groupErrors.length > 0;
     const stackStyle = {
-        display: 'flex',
-        flexDirection: direction === 'horizontal' ? 'row' : 'column',
+        ...(hasAutoGrid ? {} : {
+            display: 'flex',
+            flexDirection: direction === 'horizontal' ? 'row' : 'column',
+        }),
         ...(alignment ? { alignItems: alignment } : {}),
         ...(justifyContent ? { justifyContent } : {}),
         ...(wrap ? { flexWrap: 'wrap' } : {}),
@@ -110,9 +124,19 @@ function StackLayout({ node, children, themeClass, style }) {
     // the planner emits Stack for definition groups, Card for explicit cards)
     const title = props.title;
     if (title && node.bindPath) {
-        return (_jsxs("section", { className: mergeClasses(section ? 'formspec-group formspec-group--section' : 'formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [React.createElement(`h${headingLevel}`, { className: 'formspec-group-title' }, title), _jsx(HeadingLevelContext.Provider, { value: headingLevel + 1, children: children })] }));
+        const groupClasses = [
+            section ? 'formspec-group formspec-group--section' : 'formspec-group',
+            hasAutoGrid ? 'formspec-auto-grid' : '',
+            hasGroupErrors ? 'formspec-group--invalid' : '',
+        ].filter(Boolean).join(' ');
+        return (_jsxs("section", { className: mergeClasses(groupClasses, themeClass), style: surfaceStyle(props, style), "data-group-path": node.bindPath, "data-auto-grid": hasAutoGrid ? String(autoGridColumns) : undefined, "data-invalid": hasGroupErrors ? 'true' : undefined, ...elevationAttrs(props), ...accessibilityAttrs(node), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [React.createElement(`h${headingLevel}`, { className: 'formspec-group-title' }, title), hasGroupErrors && (_jsx("div", { className: "formspec-group-errors", role: "alert", children: groupErrors.map((err, i) => _jsx("p", { children: err.message }, i)) })), _jsx(HeadingLevelContext.Provider, { value: headingLevel + 1, children: children }), ctx && _jsx(WarningExplanations, { path: node.bindPath })] }));
     }
-    return (_jsx("div", { className: mergeClasses('formspec-stack', themeClass), style: stackStyle, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: children }));
+    const stackClasses = [
+        'formspec-stack',
+        hasAutoGrid ? 'formspec-auto-grid' : '',
+        hasGroupErrors ? 'formspec-group--invalid' : '',
+    ].filter(Boolean).join(' ');
+    return (_jsxs("div", { className: mergeClasses(stackClasses, themeClass), style: Object.keys(stackStyle).length > 0 ? stackStyle : undefined, "data-group-path": node.bindPath, "data-auto-grid": hasAutoGrid ? String(autoGridColumns) : undefined, "data-invalid": hasGroupErrors ? 'true' : undefined, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [hasGroupErrors && (_jsx("div", { className: "formspec-group-errors", role: "alert", children: groupErrors.map((err, i) => _jsx("p", { children: err.message }, i)) })), children] }));
 }
 // ── Grid ─────────────────────────────────────────────────────────
 function GridLayout({ node, children, themeClass, style }) {

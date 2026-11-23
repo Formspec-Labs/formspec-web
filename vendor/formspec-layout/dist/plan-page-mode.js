@@ -1,4 +1,4 @@
-import { resolvePageSequence } from '@formspec-org/layout';
+import { findAuthoredPageSection, hasWizardSections, resolvePageSequence } from './page-sequence.js';
 function stack(id, children) {
     return { id, component: 'Stack', category: 'layout', props: {}, cssClasses: [], children };
 }
@@ -8,9 +8,6 @@ function withoutTitle(node) {
 }
 function isSharedControl(node) {
     return node.component === 'ActionButton' || node.component === 'ValidationSummary';
-}
-function findAuthoredSection(page) {
-    return page.nodes.find(node => node.component === 'Section' && node.props.id === page.id);
 }
 function pageContent(page) {
     const nodes = page.nodes.filter(node => !isSharedControl(node));
@@ -41,7 +38,7 @@ export function planPageMode(definition, ctx, mode) {
     if (mode === 'workspace') {
         const controls = sequence.flatMap(page => page.nodes.filter(isSharedControl));
         const workspace = sequence.map(section => {
-            const authored = section.id === undefined ? undefined : findAuthoredSection(section);
+            const authored = section.id === undefined ? undefined : findAuthoredPageSection(section);
             const children = pageContent(section).map(node => node === authored ? withoutTitle(node) : node);
             const content = section.container
                 ? { ...section.container, id: ctx.nextId('workspace-page'), children }
@@ -51,14 +48,21 @@ export function planPageMode(definition, ctx, mode) {
         return { root: stack(ctx.nextId('workspace'), [...workspace.map(page => page.content), ...controls, ...shared]), workspace };
     }
     // With no page authority, leave a flat form alone.
-    if (!sequence.some(page => page.id || findAuthoredSection(page)))
+    if (!hasWizardSections(sequence))
         return undefined;
     const container = sequence[0]?.container;
     const root = container?.component === 'Stack' ? { ...container } : stack(ctx.nextId('root'), []);
+    let inner;
+    if (container && container.component !== 'Stack') {
+        const { componentGraphIdentity, uiGraphRoutePolicy, accessibility, needAnchors, ...layout } = container;
+        const { id, ...props } = layout.props;
+        Object.assign(root, { props: id ? { id } : {}, componentGraphIdentity, uiGraphRoutePolicy, accessibility, needAnchors });
+        inner = { ...layout, props };
+    }
     root.pageMode = mode;
     root.children = sequence.flatMap((page, index) => {
         const controls = page.nodes.filter(isSharedControl);
-        const authored = findAuthoredSection(page);
+        const authored = findAuthoredPageSection(page);
         const content = pageContent(page);
         // A Section's condition and scope apply only to its authored descendants.
         const separate = authored && content.length > 1 && (authored.when || authored.scopeChange
@@ -78,7 +82,7 @@ export function planPageMode(definition, ctx, mode) {
                 return [node];
             return separate ? [withoutTitle(node)] : node.children;
         });
-        const children = container && container.component !== 'Stack' ? [{ ...container, children: nodes }] : nodes;
+        const children = inner ? [{ ...inner, children: nodes }] : nodes;
         return [...controls, { ...section, props, children }];
     });
     // Keep trailing instructions next to the shared actions, outside the active page.

@@ -30,11 +30,13 @@ export declare function createActionFeedbackStore(engine: IFormEngine, draftSave
     state: import("@preact/signals-core").Signal<OwnedFeedback>;
     connect(): () => void;
     register(outlet: string): () => void;
+    primaryOutlet(): string | undefined;
     start(outlet: string, intent: string | undefined, candidates: readonly string[], source?: HTMLElement | null): Ticket | undefined;
     focusSourceWillDetach(source: HTMLElement): void;
     focusSourceDidAttach(source: HTMLElement, previous?: HTMLElement | null): void;
     recoverFocus(ticket: Ticket, target: HTMLElement): void;
     settle(ticket: Ticket | undefined, status: Status): void;
+    cancel(ticket: Ticket | undefined): void;
 };
 type FeedbackStore = ReturnType<typeof createActionFeedbackStore>;
 export declare function ActionFeedbackProvider({ engine, responseId, renderInstanceId, draftSaveFeedback, children }: {
@@ -47,6 +49,18 @@ export declare function ActionFeedbackProvider({ engine, responseId, renderInsta
 export declare function useActionFeedbackOutlet(): {
     id: string;
     store: FeedbackStore;
+} | undefined;
+export declare function useActionFeedbackStore(): {
+    state: import("@preact/signals-core").Signal<OwnedFeedback>;
+    connect(): () => void;
+    register(outlet: string): () => void;
+    primaryOutlet(): string | undefined;
+    start(outlet: string, intent: string | undefined, candidates: readonly string[], source?: HTMLElement | null): Ticket | undefined;
+    focusSourceWillDetach(source: HTMLElement): void;
+    focusSourceDidAttach(source: HTMLElement, previous?: HTMLElement | null): void;
+    recoverFocus(ticket: Ticket, target: HTMLElement): void;
+    settle(ticket: Ticket | undefined, status: Status): void;
+    cancel(ticket: Ticket | undefined): void;
 } | undefined;
 /** The outlet lives outside recursive When branches and announces only its origin. */
 export declare function ActionFeedbackContent({ children }: {

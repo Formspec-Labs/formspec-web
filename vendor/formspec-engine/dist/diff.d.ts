@@ -1,30 +1,39 @@
+/** @filedesc Diffs batch evaluation snapshots into per-signal patch payloads. */
+import type { DraftExplanation, ExplanationFinding } from './engine/warning-explanations.js';
+import type { EngineBindConfig } from './engine/helpers.js';
 export interface EvalValidation {
     path: string;
     shapeId?: string;
     [key: string]: unknown;
 }
 /**
- * Author-facing FEL error from a bind constraint or shape expression (Rust `EvalDiagnostic`); never shown to
- * respondents. Evaluation errors (Core §3.10.2) pass as null; an undefined function (§3.10.1) also fails.
+ * Author-facing diagnostic from Response creation or FEL evaluation.
  */
 export interface EvalDiagnostic {
     /** Resolved instance path of the bind or shape target (`#` for form-level shapes). */
     path: string;
     expression: string;
     shapeId?: string;
+    /** FEL diagnostic code, such as `FEL_AMBIGUOUS_ROW_LOOKUP`, when the error has one. */
+    code?: string;
     message: string;
 }
 export interface EvalResult {
+    refused: boolean;
     values: Record<string, unknown>;
     data: Record<string, unknown>;
     validations: EvalValidation[];
     diagnostics: EvalDiagnostic[];
+    explanationFindings?: ExplanationFinding[];
+    candidateExplanations?: DraftExplanation[];
     nonRelevant: string[];
     variables: Record<string, unknown>;
     scopedVariables?: Record<string, Record<string, unknown>>;
     preservedValues?: Record<string, unknown>;
     filingOnlyPaths?: string[];
     repeatCounts?: Record<string, number>;
+    calculatedPaths?: string[];
+    indexedBinds?: Record<string, EngineBindConfig>;
     required: Record<string, boolean>;
     readonly: Record<string, boolean>;
 }

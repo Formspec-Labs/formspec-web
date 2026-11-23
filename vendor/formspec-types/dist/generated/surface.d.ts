@@ -12,7 +12,7 @@ export type SurfaceDocument = {
     [k: string]: unknown;
 } & {
     /**
-     * Surface specification version. Screener slots require 0.3 or later. Filing-status slots and draft-review bindings require 0.4.
+     * Surface specification version. Screener slots require 0.3 or later. Filing-status slots, draft-start slots and draft-review bindings require 0.4.
      */
     $formspecSurface: '0.2' | '0.3' | '0.4';
     /**
@@ -58,9 +58,9 @@ export type Slot = {
      */
     id: string;
     /**
-     * Closed slot-type taxonomy; 0.3 adds native Screener presentation and 0.4 adds filing-status. Each value pins a binding shape (see allOf gates below). Extensions land via the module Registry's `slot-type` contribution category in a future revision.
+     * Closed slot-type taxonomy; 0.3 adds native Screener presentation and 0.4 adds filing-status and draft-start. Each value pins a binding shape (see allOf gates below). Extensions land via the module Registry's `slot-type` contribution category in a future revision.
      */
-    slotType: 'definition-form' | 'experience-unit' | 'module-widget' | 'static-content' | 'embed-route' | 'screener' | 'filing-status';
+    slotType: 'definition-form' | 'experience-unit' | 'module-widget' | 'static-content' | 'embed-route' | 'screener' | 'filing-status' | 'draft-start';
     /**
      * OPTIONAL renderer hint naming a layout position (e.g. 'left', 'main', 'right', 'header'). Author-defined; renderers consume per their layout model. v0.2 carries no normative position vocabulary.
      */
@@ -78,12 +78,14 @@ export type Slot = {
     [k: `x-${string}`]: unknown;
 };
 /**
- * Either an explicit value or the name of a parameter declared by the current route.
+ * An explicit value, a parameter on the declaring route, or a field on the current repeat row.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "FilingStatusParamSource".
  */
 export type FilingStatusParamSource = {
+    rowField: string;
+} | {
     value: string;
 } | {
     routeParam: string;
@@ -248,6 +250,10 @@ export interface RouteNavigation {
      */
     order?: number;
     /**
+     * Optional sibling route id within this Surface that owns this route as a nested navigation item (for example, an Overview hub route). Ignored when self-referential, cyclic, or not a visible sibling in the same navigation scope.
+     */
+    parent?: string;
+    /**
      * This interface was referenced by `RouteNavigation`'s JSON-Schema definition
      * via the `patternProperty` "^x-".
      *
@@ -297,12 +303,31 @@ export interface RouteParamMap {
     [k: string]: string;
 }
 /**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "DraftStartBinding".
+ */
+export interface DraftStartBinding {
+    routeRef: string;
+    /**
+     * Id of a Definition-form slot on the referenced route.
+     */
+    slotRef: string;
+    /**
+     * Visible label for the control that starts a new draft.
+     */
+    label: string;
+}
+/**
  * An ordered overview of Definition forms in this Surface. Each group represents one filing unit.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "FilingStatusBinding".
  */
 export interface FilingStatusBinding {
+    /**
+     * Show this tracker in a collapsible band on every route of this Surface. Omit to show it inline on its declaring route.
+     */
+    placement?: 'band';
     /**
      * @minItems 1
      */
@@ -319,10 +344,29 @@ export interface FilingStatusGroup {
      */
     id: string;
     label: string;
+    repeat?: FilingStatusRepeat;
     /**
      * @minItems 1
      */
     forms: [FilingStatusEntry, ...FilingStatusEntry[]];
+    'x-generation'?: Generation;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "FilingStatusRepeat".
+ */
+export interface FilingStatusRepeat {
+    catalogRef: string;
+    sourceRef: string;
+    /**
+     * Select this array property when the catalog delivers an object.
+     */
+    rowsField?: string;
+    labelField: string;
+    /**
+     * Label for members with a confirmed outstanding filing.
+     */
+    waitingLabel: string;
     'x-generation'?: Generation;
 }
 /**
@@ -337,12 +381,48 @@ export interface FilingStatusEntry {
     slotRef: string;
     hint?: string;
     /**
-     * One authored source per parameter declared by the target route.
+     * Authored sources for parameters declared by the target route. Required for every target route parameter unless `subject` selects the filing unit and the target Definition-form slot binds the remaining parameters through `subjectKeys`.
      */
     params?: {
         [k: string]: FilingStatusParamSource;
     };
+    /**
+     * Predicates over keys declared by the target Definition subject, selecting the single matching filing unit in scope and populating target route parameters bound by the destination slot's `subjectKeys`.
+     *
+     * @minItems 1
+     */
+    subject?: [FilingStatusSubjectPredicate, ...FilingStatusSubjectPredicate[]];
     'x-generation'?: Generation;
+}
+/**
+ * Typed comparison against a key declared by the target Definition subject.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "FilingStatusSubjectPredicate".
+ */
+export interface FilingStatusSubjectPredicate {
+    /**
+     * Key declared by the target Definition subject.
+     */
+    key: string;
+    /**
+     * Compare the candidate unit's subject key against the resolved source value plus any offset. `le` and `ge` apply only to integer keys; `eq` preserves the declared key type.
+     */
+    op: 'eq' | 'le' | 'ge';
+    /**
+     * An explicit value, a parameter on the declaring route, or a field on the current repeat row.
+     */
+    from: {
+        rowField: string;
+    } | {
+        value: string;
+    } | {
+        routeParam: string;
+    };
+    /**
+     * Optional integer added to the resolved source value before comparison; allowed only for integer subject keys.
+     */
+    offset?: number;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema

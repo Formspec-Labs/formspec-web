@@ -6,6 +6,15 @@ export interface UseFocusFieldResult {
 }
 export declare function useFocusField(): UseFocusFieldResult;
 /**
+ * Measure the bottom edge (in px) of stacked sticky/fixed top chrome bars overlapping the top of
+ * the viewport so field/section jumps clear host headers without slicing headings or labels.
+ */
+export declare function measureStickyTopOffset(el: HTMLElement | null): number;
+/** Sync `--formspec-sticky-offset` on `container` when stacked host top bars are detected. */
+export declare function syncStickyOffsetVar(container: HTMLElement | null): number;
+/** Scroll `target` into view cleanly below any measured sticky top chrome. */
+export declare function scrollTargetIntoView(target: HTMLElement, block?: ScrollLogicalPosition, stickyOffsetPx?: number): void;
+/**
  * Focus the field rendered at `path` (its `[data-name]` root) inside `container`, first revealing it:
  * open ancestor `<details>`, activate a hidden tab panel, or navigate a hidden wizard step.
  * Returns true if a focusable control was found and focused.

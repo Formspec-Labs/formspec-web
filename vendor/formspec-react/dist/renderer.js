@@ -6,13 +6,14 @@ import { buildPlatformTheme, emitMergedThemeCssVars } from '@formspec-org/layout
 const defaultThemeJson = buildPlatformTheme();
 import { FormspecProvider } from './context';
 import { useFormspecContext } from './context';
-import { FormspecNode } from './node-renderer';
+import { WarningExplanations } from './warning-explanations';
+import { FormspecNode, layoutOwnsRootWarningExplanations } from './node-renderer';
 import { ActionFeedbackContent } from './action-feedback.js';
 import { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
 import { FormspecScreener } from './screener/FormspecScreener';
 import { useForm } from './use-form';
 import { useLocale } from './use-locale';
-import { focusFirstInvalidField } from './use-focus-field';
+import { focusFieldIn, focusFirstInvalidField } from './use-focus-field';
 /** Match `<formspec-render>`: emit theme + component tokens on `.formspec-container` so CSS variables resolve the same as the web component (e.g. radio group border). */
 function syncSystemAppearanceClass(el, systemPrefersDark) {
     if (!el)
@@ -114,10 +115,31 @@ function ScreenerGate({ screenerDocument, className, seedAnswers, renderExternal
 }
 /** Render the current provider's form, including its scoped tokens and issuer chrome. */
 export function FormspecFormContent({ className }) {
-    const { engine, layoutPlan, recordSubmit, onSubmit, setShowValidationSummaryAttr, } = useFormspecContext();
+    const { engine, layoutPlan, workspacePages, workspaceNavigation, touchField, jumpToField, recordSubmit, onSubmit, setShowValidationSummaryAttr, } = useFormspecContext();
     const { submit: submitForm } = useForm();
     const { activeLocale, direction } = useLocale();
     const containerRef = useEmitThemeTokensOnFormspecContainerRef();
+    const handledFocusField = useRef(undefined);
+    useLayoutEffect(() => {
+        const target = workspaceNavigation?.sectionNavigationActive !== false ? workspaceNavigation?.focusField : undefined;
+        if (!target) {
+            handledFocusField.current = undefined;
+            return;
+        }
+        if (handledFocusField.current === target)
+            return;
+        const el = containerRef.current;
+        if (!el)
+            return;
+        handledFocusField.current = target;
+        if (!jumpToField?.(target, { notifyRoute: false })) {
+            touchField(target);
+            focusFieldIn(el, target);
+        }
+        return () => {
+            handledFocusField.current = undefined;
+        };
+    }, [workspaceNavigation?.sectionNavigationActive, workspaceNavigation?.focusField, jumpToField, touchField]);
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el)
@@ -170,7 +192,8 @@ export function FormspecFormContent({ className }) {
     if (!layoutPlan) {
         return (_jsxs("div", { ref: containerRef, className: containerClass, "data-formspec-render-root": "", lang: activeLocale || undefined, dir: activeLocale ? direction : undefined, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), "No layout plan available."] }));
     }
-    return (_jsxs("div", { ref: containerRef, className: containerClass, "data-formspec-render-root": "", lang: activeLocale || undefined, dir: activeLocale ? direction : undefined, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), _jsx(ActionFeedbackContent, { children: _jsx(FormspecNode, { node: layoutPlan }) })] }));
+    const definition = engine.getDefinition();
+    return (_jsxs("div", { ref: containerRef, className: containerClass, "data-formspec-render-root": "", "data-formspec-form": "", "data-formspec-url": definition.url, "data-formspec-version": definition.version, "data-formspec-title": definition.title ?? '', lang: activeLocale || undefined, dir: activeLocale ? direction : undefined, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), _jsx(ActionFeedbackContent, { children: _jsx(FormspecNode, { node: layoutPlan }) }), !layoutOwnsRootWarningExplanations(layoutPlan, workspacePages) && _jsx(WarningExplanations, {})] }));
 }
 /** Check whether a standalone screener document is active. */
 function hasActiveScreenerDoc(screenerDocument) {

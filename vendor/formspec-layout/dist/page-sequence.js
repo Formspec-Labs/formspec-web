@@ -155,6 +155,39 @@ function readPlacements(nodes, ctx, fields, groups, repeats = []) {
         readPlacements(node.children, ctx, fields, groups, childRepeats);
     }
 }
+/** Core ordering still renders Items a partial Component leaves unbound (Component §11.4). */
+function unboundDefinitionNodes(nodes, ctx) {
+    const fields = new Set();
+    const groups = new Set();
+    readPlacements(nodes, ctx, fields, groups);
+    const boundItems = new Set([...fields].map(placementKey));
+    const boundGroups = new Set([...groups].map(placementKey));
+    walkNodes(nodes, node => {
+        if (node.bindPath && ctx.findItem(node.bindPath)?.type === 'display') {
+            boundItems.add(placementKey(node.bindPath));
+        }
+    });
+    function retainUnbound(items, prefix) {
+        return items.flatMap(item => {
+            const path = prefix ? `${prefix}.${item.key}` : item.key;
+            if (item.type !== 'group')
+                return boundItems.has(path) ? [] : [item];
+            const original = item.children ?? [];
+            const children = retainUnbound(original, path);
+            return children.length || (original.length === 0 && !boundGroups.has(path))
+                ? [{ ...item, children }]
+                : [];
+        });
+    }
+    const fallback = planDefinitionFallback(retainUnbound(ctx.items, ''), ctx, '', false);
+    walkNodes(fallback, node => {
+        // A fallback fragment may render more fields of a repeat without adding a second row control.
+        if (node.isRepeatTemplate && node.bindPath && boundGroups.has(placementKey(node.bindPath))) {
+            node.props = { ...node.props, allowAdd: false, allowRemove: false };
+        }
+    });
+    return fallback;
+}
 function definitionSections(nodes, ctx) {
     const groups = ctx.items.filter(item => item.type === 'group');
     const keys = new Set(groups.map(item => item.key));
@@ -240,7 +273,7 @@ function planSections(ctx) {
         const unplaced = root ? ctx.items.filter(item => !represented.has(item.key)) : [];
         sections = themeSections([...base, ...planDefinitionFallback(unplaced, ctx, '', false)], ctx);
     }
-    sections ?? (sections = definitionSections(base, ctx));
+    sections ?? (sections = definitionSections(root ? [...base, ...unboundDefinitionNodes(base, ctx)] : base, ctx));
     return { sections: sections.map(section => ({ ...section, container })), sharedNodes };
 }
 function nameLooseSections(sections, painted, ctx) {
@@ -358,4 +391,57 @@ export function resolvePageSequence(definition, options = {}) {
     if (last && painted.sharedNodes.length)
         last.sharedNodes = painted.sharedNodes;
     return pages;
+}
+/** Title source for an explicit Wizard child, shared by the renderer and authoring checks. */
+export function describeWizardStep(node, index) {
+    const id = stringProp(node.props.id);
+    const title = stringProp(node.props.title);
+    return {
+        id,
+        authoredSection: node.component === 'Section',
+        title: title ?? node.fieldItem?.label,
+        titleBind: stringProp(node.props.titleBind),
+        titleLocaleKey: stringProp(node.props.titleLocaleKey) ?? (id && title ? `$component.${id}.title` : undefined),
+        titleIndex: index + 1,
+    };
+}
+export function findAuthoredPageSection(page) {
+    return page.nodes.find(node => node.component === 'Section' && node.props.id === page.id);
+}
+export function hasWizardSections(pages) {
+    return pages.some(page => page.id || findAuthoredPageSection(page) !== undefined);
+}
+/** Apply the normal Component planner when the document supplies its own page control. */
+export function planExplicitPageRoot(definition, options) {
+    const component = options.component;
+    if (!component || (component.tree.component !== 'Wizard' && component.tree.component !== 'Tabs'))
+        return undefined;
+    const componentPresentation = 'formPresentation' in component ? component.formPresentation : undefined;
+    const presentation = options.context?.formPresentation
+        ?? mergeFormPresentationForPlanning(definition.formPresentation, componentPresentation);
+    return planComponentTree(component.tree, preparePlanContext({
+        ...options.context,
+        items: definition.items,
+        findItem: path => findItemAtPath(definition.items, path),
+        componentDocument: component,
+        theme: options.theme,
+        formPresentation: presentation,
+    }));
+}
+/** Section titles from the same planner inputs the respondent view uses. */
+export function resolveSectionTitlePlan(definition, options = {}) {
+    const component = options.component;
+    const componentPresentation = component && 'formPresentation' in component ? component.formPresentation : undefined;
+    const presentation = mergeFormPresentationForPlanning(definition.formPresentation, componentPresentation);
+    if (component?.tree.component === 'Wizard' && presentation?.pageMode !== 'workspace') {
+        return planExplicitPageRoot(definition, options)?.children.map(describeWizardStep) ?? [];
+    }
+    if (presentation?.pageMode !== 'workspace' && presentation?.pageMode !== 'wizard')
+        return [];
+    if (presentation.pageMode === 'wizard' && component?.tree.component === 'Tabs')
+        return [];
+    const pages = resolvePageSequence(definition, options);
+    if (presentation.pageMode === 'wizard' && !hasWizardSections(pages))
+        return [];
+    return pages.map((page, index) => ({ ...page, titleIndex: index + 1 }));
 }

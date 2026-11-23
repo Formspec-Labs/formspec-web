@@ -37,11 +37,110 @@ function isRawJson(value) {
     const json = JSON;
     return json.isRawJSON?.(value) ?? false;
 }
-function isPlainObject(value) {
+export function isPlainJsonObject(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value) || isRawJson(value))
         return false;
+    if (Object.getOwnPropertySymbols(value).length > 0)
+        return false;
     const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
+    if (prototype === Object.prototype || prototype === null)
+        return true;
+    // Plain object created in another JavaScript realm (e.g. iframe / node:vm):
+    // its prototype is that realm's Object.prototype, whose own prototype is null.
+    if (Object.getPrototypeOf(prototype) !== null)
+        return false;
+    if (Object.getOwnPropertyDescriptor(prototype, Symbol.toStringTag) !== undefined)
+        return false;
+    const ctorDesc = Object.getOwnPropertyDescriptor(prototype, 'constructor');
+    if (!ctorDesc || !Object.prototype.hasOwnProperty.call(ctorDesc, 'value'))
+        return false;
+    const ctor = ctorDesc.value;
+    if (typeof ctor !== 'function' || ctor.prototype !== prototype)
+        return false;
+    if (!Object.prototype.hasOwnProperty.call(prototype, 'hasOwnProperty'))
+        return false;
+    return Object.prototype.toString.call(value) === '[object Object]';
+}
+export function isPlainJsonArray(value) {
+    if (!Array.isArray(value))
+        return false;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Array.prototype) {
+        if (!prototype || typeof prototype !== 'object')
+            return false;
+        const objProto = Object.getPrototypeOf(prototype);
+        if (!objProto || Object.getPrototypeOf(objProto) !== null)
+            return false;
+        const ctorDesc = Object.getOwnPropertyDescriptor(prototype, 'constructor');
+        if (!ctorDesc || !Object.prototype.hasOwnProperty.call(ctorDesc, 'value'))
+            return false;
+        const ctor = ctorDesc.value;
+        if (typeof ctor !== 'function' || ctor.prototype !== prototype)
+            return false;
+        if (!Array.isArray(prototype))
+            return false;
+    }
+    if (Object.getOwnPropertySymbols(value).length > 0)
+        return false;
+    const ownKeys = Object.getOwnPropertyNames(value);
+    if (ownKeys.length !== value.length + 1)
+        return false;
+    for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable) {
+            return false;
+        }
+    }
+    return true;
+}
+export function isValidPlainJsonValue(value, seen = new Set()) {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean')
+        return true;
+    if (typeof value === 'number')
+        return Number.isFinite(value);
+    if (typeof value !== 'object')
+        return false;
+    if (isRawJson(value))
+        return true;
+    if (seen.has(value))
+        return false;
+    seen.add(value);
+    try {
+        if (Array.isArray(value)) {
+            if (!isPlainJsonArray(value))
+                return false;
+            for (let index = 0; index < value.length; index += 1) {
+                const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+                if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+                    return false;
+                }
+                if (!isValidPlainJsonValue(descriptor.value, seen))
+                    return false;
+            }
+            return true;
+        }
+        if (!isPlainJsonObject(value))
+            return false;
+        if (Object.getOwnPropertySymbols(value).length > 0)
+            return false;
+        for (const key of Object.getOwnPropertyNames(value)) {
+            if (FORBIDDEN_PROPERTY_NAMES.has(key))
+                return false;
+            const descriptor = Object.getOwnPropertyDescriptor(value, key);
+            if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+                return false;
+            }
+            if (!isValidPlainJsonValue(descriptor.value, seen))
+                return false;
+        }
+        return true;
+    }
+    finally {
+        seen.delete(value);
+    }
+}
+function isPlainObject(value) {
+    return isPlainJsonObject(value);
 }
 function ownDataValue(value, segment, label) {
     if (FORBIDDEN_PROPERTY_NAMES.has(segment)) {

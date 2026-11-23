@@ -292,6 +292,50 @@ export function applyMigrationsToResponseData(definition_json, response_data_jso
 }
 
 /**
+ * Attach the evidence from available Response instance resolutions.
+ *
+ * # Errors
+ * Returns a JavaScript error if input cannot be decoded or delivery validation fails.
+ * @param {string} definition_json
+ * @param {string} response_json
+ * @param {string} evaluation_json
+ * @param {string} resolution_json
+ * @returns {string}
+ */
+export function assembleCandidate(definition_json, response_json, evaluation_json, resolution_json) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(definition_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(response_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(evaluation_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(resolution_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len3 = WASM_VECTOR_LEN;
+        wasm.assembleCandidate(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr5 = r0;
+        var len5 = r1;
+        if (r3) {
+            ptr5 = 0; len5 = 0;
+            throw takeObject(r2);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
  * @param {string} definition_json
  * @param {string} fragments_json
  * @returns {string}
@@ -348,29 +392,29 @@ export function checkFelExtensionName(name) {
 /**
  * Return projection diagnostics for every eligible published upstream Definition version.
  *
- * Pass the consuming Definition's subject as JSON, or `null` for catalog route
+ * Pass the instance or prefill consumer as JSON, or `null` for widget route
  * parameters. Pass all published Definitions for the upstream URL as a JSON array.
  *
  * # Errors
  *
  * Returns a JavaScript error on invalid input JSON.
  * @param {string} instance_json
- * @param {string} consumer_subject_json
+ * @param {string} consumer_json
  * @param {string} upstream_definitions_json
  * @returns {string}
  */
-export function checkInstanceProjection(instance_json, consumer_subject_json, upstream_definitions_json) {
+export function checkResponseProjection(instance_json, consumer_json, upstream_definitions_json) {
     let deferred5_0;
     let deferred5_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passStringToWasm0(instance_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(consumer_subject_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const ptr1 = passStringToWasm0(consumer_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(upstream_definitions_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len2 = WASM_VECTOR_LEN;
-        wasm.checkInstanceProjection(retptr, ptr0, len0, ptr1, len1, ptr2, len2);
+        wasm.checkResponseProjection(retptr, ptr0, len0, ptr1, len1, ptr2, len2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -818,6 +862,49 @@ export function evaluateDefinition(definition_json, data_json, context_json, ext
         var ptr2 = isLikeNone(context_json) ? 0 : passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         var len2 = WASM_VECTOR_LEN;
         wasm.evaluateDefinition(retptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr4 = r0;
+        var len4 = r1;
+        if (r3) {
+            ptr4 = 0; len4 = 0;
+            throw takeObject(r2);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * Prepare stable Response data and its submit verdict with the supplied clock.
+ *
+ * # Errors
+ *
+ * Returns an error for invalid JSON, invalid context, or data that do not settle.
+ * @param {string} definition_json
+ * @param {string} data_json
+ * @param {string | null} [context_json]
+ * @param {FelExtensionHost | null} [extensions]
+ * @returns {string}
+ */
+export function evaluateFiled(definition_json, data_json, context_json, extensions) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(definition_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(data_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        var ptr2 = isLikeNone(context_json) ? 0 : passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        var len2 = WASM_VECTOR_LEN;
+        wasm.evaluateFiled(retptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -1675,6 +1762,7 @@ export function sanitizeFelIdentifier(s) {
  *
  * # Errors
  *
+ * Records require a store-owned `kind` of `open-draft` or `filing`.
  * Returns an error for invalid input JSON, including an omitted `upstreamSubject`.
  * Supply JSON null when the upstream Definition declares no subject.
  * @param {string} records_json
@@ -1715,6 +1803,13 @@ export function selectResponsesJson(records_json, selection_json, context_json) 
 
 /**
  * Derive the canonical id of a typed Response subject.
+ *
+ * Respondent hosts key drafts by this id before an engine exists; the engine derives
+ * `Response.subject.id` through the same function.
+ *
+ * # Errors
+ *
+ * Returns an error for malformed or untyped keys JSON or an out-of-range integer key.
  * @param {string} subject_type
  * @param {string} keys_json
  * @returns {string}

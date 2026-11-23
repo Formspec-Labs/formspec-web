@@ -79,6 +79,8 @@ export interface ParsedRoutePath {
  * (§2.3) so `/apply` and `/apply/` are the same address rather than two.
  */
 export declare function routePathSegments(path: string): string[];
+/** Encode a filled Surface route for a browser address without changing escaped segments. */
+export declare function serializeRoutePath(path: string): string;
 /**
  * The one parse every other function in this module goes through. Segments,
  * markers and unpinned grammars come out of the same walk, so a caller cannot

@@ -1,6 +1,6 @@
 {
-  "formspec": "00d3e90cf8938c3f9caa4477ebcc7917608a099e",
-  "fel-core": "21a1442f506267a2ac689e733dc58b79783f0086",
-  "integrity-stack": "bc97a80dc8e9c9b24e771f809ee9a665ad19d2ad",
+  "formspec": "2768fa28c7a6921ed31ae187d04b3bb37a3f70b2",
+  "fel-core": "55d2f539c8514bc596bda0091e124a4d8b5fb177",
+  "integrity-stack": "ff7a945e1b8962c79c289f84c5e50b54f18b47ab",
   "formspec-server": "6a034c18877b7758296a2536aa0c4604b34e5ceb"
 }

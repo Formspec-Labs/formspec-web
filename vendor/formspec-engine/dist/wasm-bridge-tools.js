@@ -107,6 +107,31 @@ export function resetToolsWasmDynamicImportCountForTest() {
 // ---------------------------------------------------------------------------
 // Typed wrappers — tools `formspec_wasm_tools` only
 // ---------------------------------------------------------------------------
+const verifiedObjectToken = new WeakMap();
+const verifiedRecordToken = new WeakMap();
+/**
+ * Parse exact JSON once and return an unforgeable token proving the text is
+ * one complete JSON object so `selectResponses` can embed it without re-parsing.
+ */
+export function parseVerifiedJsonObject(text) {
+    if (typeof text !== 'string') {
+        throw new TypeError('A selection record must contain one Response object.');
+    }
+    const value = parseJsonExact(text);
+    if (typeof value !== 'object' || value === null || Array.isArray(value)
+        || Object.getPrototypeOf(value) !== Object.prototype) {
+        throw new TypeError('A selection record must contain one Response object.');
+    }
+    const token = Object.freeze({});
+    verifiedObjectToken.set(token, text);
+    return { value: value, token };
+}
+/** Associate a previously verified JSON object token with a shallow copy of a selection record. */
+export function attachVerifiedJsonToken(record, token) {
+    const tagged = { ...record };
+    verifiedRecordToken.set(tagged, token);
+    return tagged;
+}
 /**
  * Execute an authorized preview Response selection after initializing tools WASM.
  * Set `context.upstreamSubject` to null when the upstream Definition has no subject.
@@ -115,24 +140,26 @@ export const selectResponses = (records, selection, context) => {
     const recordJson = records.map(record => {
         if (record.responseJson === undefined)
             return JSON.stringify(record);
-        const { scope, implicitSubjectId, responseJson } = record;
+        const { scope, kind, implicitSubjectId, responseJson } = record;
         // Validate one complete object before embedding it. A bracket check alone
         // would allow the text to inject sibling record fields. Pass the original
         // text to Rust as RawValue so digits and duplicate members stay visible.
-        const parsed = JSON.parse(responseJson);
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-            throw new TypeError('A selection record must contain one Response object.');
+        const token = verifiedRecordToken.get(record);
+        if (token === undefined || verifiedObjectToken.get(token) !== responseJson) {
+            if (typeof responseJson !== 'string') {
+                throw new TypeError('A selection record must contain one Response object.');
+            }
+            const parsed = JSON.parse(responseJson);
+            if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                throw new TypeError('A selection record must contain one Response object.');
+            }
         }
-        const metadata = JSON.stringify({ scope, implicitSubjectId });
+        const metadata = JSON.stringify({ scope, kind, implicitSubjectId });
         return `${metadata.slice(0, -1)},"response":${responseJson}}`;
     });
     const resultJson = wasmTools().selectResponsesJson(`[${recordJson.join(',')}]`, JSON.stringify(selection), JSON.stringify(context));
     return parseJsonExact(resultJson);
 };
-/** Calculate a filing-unit id from the declared type and exact typed keys. */
-export function responseSubjectId(subjectType, keys) {
-    return wasmTools().subjectIdJson(subjectType, JSON.stringify(keys));
-}
 /** Check whether authored specifies a valid Response ordering instant. */
 export function isValidResponseAuthored(authored) {
     return wasmTools().isValidResponseAuthored(authored);
@@ -191,14 +218,17 @@ export function wasmExecuteMappingDoc(doc, source, direction) {
     return JSON.parse(resultJson);
 }
 /** Check an instance or catalog source against every eligible upstream Definition. */
-export function checkInstanceProjection(source, consumerSubject, upstreamDefinitions) {
+export function checkInstanceProjection(source, projectionConsumer, upstreamDefinitions) {
     assertWasmToolsReadySync();
-    return JSON.parse(wasmTools().checkInstanceProjection(JSON.stringify(source), JSON.stringify(consumerSubject ?? null), JSON.stringify(upstreamDefinitions)));
+    return JSON.parse(wasmTools().checkResponseProjection(JSON.stringify(source), JSON.stringify(projectionConsumer), JSON.stringify(upstreamDefinitions)));
 }
 /** Lint a Formspec document, or check a response projection when given upstream Definitions. */
 export function wasmLintDocument(doc, options) {
     if (options?.upstreamDefinitions !== undefined) {
-        const instanceProjectionDiagnostics = checkInstanceProjection(doc, options.consumerSubject, options.upstreamDefinitions);
+        if (options.projectionConsumer === undefined) {
+            throw new TypeError('Projection checks require the receiving form and binding, or null for a widget.');
+        }
+        const instanceProjectionDiagnostics = checkInstanceProjection(doc, options.projectionConsumer, options.upstreamDefinitions);
         return { documentType: null, valid: instanceProjectionDiagnostics.length === 0, diagnostics: [], instanceProjectionDiagnostics };
     }
     assertWasmToolsReadySync();

@@ -8,6 +8,7 @@
  */
 export { SurfaceApp, SurfaceNav, useSurfaceApp, } from './SurfaceApp.js';
 export { BrowserSurfaceApp, } from './BrowserSurfaceApp.js';
+export { createSurfacePreviewEdition } from './preview-host.js';
 export { useBrowserLocation } from './browser-location.js';
 export { SURFACE_APPEARANCE_SCRIPT } from './browser-appearance.js';
 export { SurfaceRouteView } from './SurfaceRoute.js';

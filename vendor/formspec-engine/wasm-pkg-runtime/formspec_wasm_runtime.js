@@ -292,6 +292,50 @@ export function applyMigrationsToResponseData(definition_json, response_data_jso
 }
 
 /**
+ * Attach the evidence from available Response instance resolutions.
+ *
+ * # Errors
+ * Returns a JavaScript error if input cannot be decoded or delivery validation fails.
+ * @param {string} definition_json
+ * @param {string} response_json
+ * @param {string} evaluation_json
+ * @param {string} resolution_json
+ * @returns {string}
+ */
+export function assembleCandidate(definition_json, response_json, evaluation_json, resolution_json) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(definition_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(response_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(evaluation_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(resolution_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len3 = WASM_VECTOR_LEN;
+        wasm.assembleCandidate(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr5 = r0;
+        var len5 = r1;
+        if (r3) {
+            ptr5 = 0; len5 = 0;
+            throw takeObject(r2);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
  * Throws when `name` may not be registered: a FEL built-in or reserved word (Core §3.12 rule 1).
  * @param {string} name
  */
@@ -666,6 +710,49 @@ export function evaluateDefinition(definition_json, data_json, context_json, ext
 }
 
 /**
+ * Prepare stable Response data and its submit verdict with the supplied clock.
+ *
+ * # Errors
+ *
+ * Returns an error for invalid JSON, invalid context, or data that do not settle.
+ * @param {string} definition_json
+ * @param {string} data_json
+ * @param {string | null} [context_json]
+ * @param {FelExtensionHost | null} [extensions]
+ * @returns {string}
+ */
+export function evaluateFiled(definition_json, data_json, context_json, extensions) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(definition_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(data_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        var ptr2 = isLikeNone(context_json) ? 0 : passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        var len2 = WASM_VECTOR_LEN;
+        wasm.evaluateFiled(retptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr4 = r0;
+        var len4 = r1;
+        if (r3) {
+            ptr4 = 0; len4 = 0;
+            throw takeObject(r2);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
  * Evaluate a standalone Screener Document against respondent inputs.
  *
  * Returns a Determination Record JSON string (always non-null).
@@ -997,6 +1084,48 @@ export function sanitizeFelIdentifier(s) {
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
         wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Derive the canonical id of a typed Response subject.
+ *
+ * Respondent hosts key drafts by this id before an engine exists; the engine derives
+ * `Response.subject.id` through the same function.
+ *
+ * # Errors
+ *
+ * Returns an error for malformed or untyped keys JSON or an out-of-range integer key.
+ * @param {string} subject_type
+ * @param {string} keys_json
+ * @returns {string}
+ */
+export function subjectIdJson(subject_type, keys_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(subject_type, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(keys_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.subjectIdJson(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
     }
 }
 function __wbg_get_imports() {

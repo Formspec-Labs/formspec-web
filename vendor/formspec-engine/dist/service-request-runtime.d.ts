@@ -30,6 +30,9 @@ export interface ExtractedServiceRequestOutputs {
     /** Host-private values to persist in the session store. */
     sessionBindings: Readonly<Record<string, string>>;
 }
+export declare function isPlainJsonObject(value: unknown): value is Record<string, unknown>;
+export declare function isPlainJsonArray(value: unknown): value is unknown[];
+export declare function isValidPlainJsonValue(value: unknown, seen?: Set<object>): boolean;
 /** Resolve one closed runtime selector without evaluating code or inherited properties. */
 export declare function resolveRuntimeValueSelector(selector: RuntimeValueSelector, sources: ServiceRequestSources): JsonValue;
 /** Resolve one request id exactly once; duplicate ids fail closed. */

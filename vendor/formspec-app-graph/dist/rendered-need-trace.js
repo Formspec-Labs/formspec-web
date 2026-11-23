@@ -350,6 +350,9 @@ function surfaceNodes(handle, entries) {
                                 return;
                             const groupPointer = `${bindingPointer}/groups/${groupIndex}`;
                             out.push(generationNode(handle, 'surface-filing-status-group', groupPointer, group, stringProp(group, 'label') ?? `groups[${groupIndex}]`));
+                            const repeat = record(group.repeat);
+                            if (repeat)
+                                out.push(generationNode(handle, 'surface-filing-status-repeat', groupPointer + '/repeat', repeat, 'Filing tracker roster'));
                             if (Array.isArray(group.forms))
                                 group.forms.forEach((rawEntry, entryIndex) => {
                                     const entry = record(rawEntry);
@@ -644,6 +647,13 @@ function previewScenarioNodes(handle) {
                 if (!filing || !Object.prototype.hasOwnProperty.call(filing, 'x-generation'))
                     return;
                 out.push(generationNode(handle, 'surface-preview-filing', `${profilePointer}/filings/${filingIndex}`, filing, 'Preview filing fixture'));
+            });
+            const drafts = Array.isArray(profile.drafts) ? profile.drafts : [];
+            drafts.forEach((rawDraft, draftIndex) => {
+                const draft = record(rawDraft);
+                if (!draft || !Object.prototype.hasOwnProperty.call(draft, 'x-generation'))
+                    return;
+                out.push(generationNode(handle, 'surface-preview-draft', `${profilePointer}/drafts/${draftIndex}`, draft, 'Preview draft fixture'));
             });
         });
     }

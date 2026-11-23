@@ -162,6 +162,8 @@ export type WidgetDataDelivery = {
     diagnostics: readonly SurfaceDiagnostic[];
 };
 export interface LoadWidgetDataInputsRequest {
+    /** A roster used to report outstanding work requires current membership. */
+    requireFresh?: boolean;
     inputs: readonly WidgetDataInputPlan[];
     context: DataSourceActiveContext;
     loader?: DataSourceLoader | undefined;

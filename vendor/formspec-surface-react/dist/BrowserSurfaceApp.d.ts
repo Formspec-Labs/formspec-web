@@ -1,21 +1,27 @@
 import { type ResolvedBundle } from '@formspec-org/surface';
 import { type SurfaceAppProps } from './SurfaceApp.js';
 import { type SurfaceBrowserMode } from './browser-location.js';
+import type { ResponseSelector } from '@formspec-org/types';
 import { type SurfaceDraftStorage } from './draft-session.js';
 import type { DraftCheckpointPorts } from './draft-writer.js';
+import type { DataSourceLoader } from '@formspec-org/surface';
 export interface SurfacePreviewEdition {
     /** Stable browser draft scope, unique to this edition on the hosting origin. */
     scope: string;
     bundle: ResolvedBundle;
+    adapters: SurfaceHostAdapters;
+    initialPath: string;
 }
 export interface SurfaceBrowserVisit {
     path: string | undefined;
     previewScope: string | undefined;
 }
-type BrowserSurfaceOptions = Omit<SurfaceAppProps, 'bundle' | 'location' | 'onNavigate' | 'resolveNavigationHref' | 'activeLocale' | 'header' | 'appTitle' | 'strings' | 'resolveRouteTitle' | 'navigationLabel'> & {
+export type SurfaceHostAdapters = Omit<SurfaceAppProps, 'bundle' | 'location' | 'onNavigate' | 'resolveNavigationHref' | 'activeLocale' | 'header' | 'appTitle' | 'strings' | 'resolveRouteTitle' | 'navigationLabel'> & {
     mode?: SurfaceBrowserMode;
-    /** Authorized host storage. Preview editions otherwise use browser IndexedDB. */
-    draftStorage?: SurfaceDraftStorage | undefined;
+    responses?: ResponseSelector;
+    withResponseLoader?: (readResponse: DataSourceLoader) => DataSourceLoader;
+    /** Storage selected by this composition. */
+    draftStorage?: Omit<SurfaceDraftStorage, 'responses'> | undefined;
     /** Host preconditions and unrelated effects for actions that checkpoint a draft. */
     checkpointPorts?: DraftCheckpointPorts | undefined;
     /** Absolute mount pathname in history mode. Serve the app at deep paths under it. */
@@ -23,12 +29,15 @@ type BrowserSurfaceOptions = Omit<SurfaceAppProps, 'bundle' | 'location' | 'onNa
     /** Await the current draft writer before controlled route and edition changes. */
     beforeLeave?: ((visit: SurfaceBrowserVisit) => boolean | Promise<boolean>) | undefined;
 };
-export type BrowserSurfaceAppProps = BrowserSurfaceOptions & ({
+type PreviewEditions = readonly [SurfacePreviewEdition, ...SurfacePreviewEdition[]];
+export type BrowserSurfaceAppProps = {
     bundle: ResolvedBundle;
+    adapters: SurfaceHostAdapters;
     previewEditions?: never;
 } | {
+    previewEditions: PreviewEditions;
+    adapters?: Pick<SurfaceHostAdapters, 'mode'>;
     bundle?: never;
-    previewEditions: readonly [SurfacePreviewEdition, ...SurfacePreviewEdition[]];
-});
-export declare function BrowserSurfaceApp({ mode, basePath, beforeLeave, previewEditions, draftStorage, checkpointPorts, ...props }: BrowserSurfaceAppProps): import("react/jsx-runtime").JSX.Element;
+};
+export declare function BrowserSurfaceApp(input: BrowserSurfaceAppProps): import("react/jsx-runtime").JSX.Element;
 export {};

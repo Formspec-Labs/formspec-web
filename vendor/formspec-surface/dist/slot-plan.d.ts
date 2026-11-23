@@ -36,13 +36,14 @@ import type { ComponentDocument, FormDefinition, RegistryEntry } from '@formspec
 import type { ExperienceDocument } from '@formspec-org/types';
 import { type SurfaceDiagnostic } from './diagnostics.js';
 import type { SurfaceRoute } from './route-path.js';
-import type { SurfaceApp, SurfaceRouteHandle } from './composition.js';
+import { type SurfaceApp, type SurfaceRouteHandle } from './composition.js';
+import { type DraftStartPlan } from './draft-start.js';
 import { type FilingSectionLocaleLookup, type FilingStatusPlan } from './filing-status.js';
 import type { ThemeAuthority } from './theme-authority.js';
 import { type ExperienceDocumentHandle, type ExperienceUnitPlan } from './experience-unit.js';
 import { type HeadingLevel, type StaticContentPlan, type SurfaceStaticAssetResolver } from './static-content.js';
 import type { WidgetKey, WidgetRegistry, WidgetResolution } from './registry.js';
-import type { ResponseActionsDocumentLike } from './transitions.js';
+import { type ResponseActionsDocumentLike } from './transitions.js';
 import { type DataSourceCatalogHandle, type WidgetDataInputPlan, type DataSourceDescriptor, type DataSourceSubject } from './data-source-loader.js';
 import { type DefinitionFormInitialDataPlan, type MappingDocumentHandle } from './definition-form-initial-data.js';
 export type SurfaceSlot = SurfaceRoute['slots'][number];
@@ -65,6 +66,8 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     definition?: FormDefinition;
     componentDocument?: ComponentDocument;
     subject?: DataSourceSubject;
+    /** The one draft review route that reviews this slot, addressed with this route's parameters. */
+    draftReviewHref?: string;
     registryEntries: readonly RegistryEntry[];
     status: 'ready' | 'unresolved';
 } | {
@@ -73,6 +76,9 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     allowedTargets: readonly string[];
     status: 'ready' | 'unresolved';
     reason?: string;
+} | {
+    slotType: 'draft-start';
+    start: DraftStartPlan | undefined;
 } | {
     slotType: 'filing-status';
     tracker: FilingStatusPlan;
@@ -171,10 +177,17 @@ export interface WidgetActionResponsePlan {
     definition: FormDefinition;
     descriptor: DataSourceDescriptor;
 }
+export interface DraftReviewSectionLink {
+    id?: string;
+    fields: readonly string[];
+    href: string;
+}
 export type DraftReviewPlan = {
     status: 'ready';
     definition: FormDefinition;
     subject?: DataSourceSubject;
+    formHref?: string;
+    sections?: readonly DraftReviewSectionLink[];
 } | {
     status: 'unresolved';
     reason: 'invalid-binding' | 'form-unresolved' | 'subject-keys-invalid';
@@ -182,6 +195,12 @@ export type DraftReviewPlan = {
 export interface RoutePlan<TComponent> {
     handle: SurfaceRouteHandle;
     slots: readonly SlotPlan<TComponent>[];
+    bands?: readonly {
+        routeId: string;
+        slot: Extract<SlotPlan<TComponent>, {
+            slotType: 'filing-status';
+        }>;
+    }[];
     diagnostics: readonly SurfaceDiagnostic[];
 }
 export declare function planRoute<TComponent>(context: SlotPlanContext<TComponent>): RoutePlan<TComponent>;

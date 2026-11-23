@@ -7,7 +7,6 @@ import { classifyComponent, extractProps, gridPlacementStyleFromLayout, needGene
 import { planDefinitionItem } from './planner-definition-fallback.js';
 import { carryWidthStop } from './planner-width-stops.js';
 import { componentTreeOwnsPages, findComponentNodeByPath, findNodeByBindPath, } from './planner-path-utils.js';
-import { applyGeneratedPageMode } from './planner-page-mode.js';
 import { buildThemePageNodes, collectAssignedTopLevelKeys, withoutThemePages, } from './planner-theme-pages.js';
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 export function planComponentTree(tree, ctx, prefix = '', customComponentStack, applyThemePages = prefix === '', graphPathSegments = []) {
@@ -17,7 +16,7 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
     if (applyThemePages && !prefix && planCtx.theme?.pages?.length && !componentTreeOwnsPages(tree)) {
         const themed = planThemePagesFromComponentTree(tree, planCtx, customComponentStack);
         if (themed) {
-            return finalizeRouteProjectionRoot(applyGeneratedPageMode(themed, themed.component, planCtx), planCtx, prefix, graphPathSegments);
+            return finalizeRouteProjectionRoot(themed, planCtx, prefix, graphPathSegments);
         }
     }
     const comp = resolveResponsiveProps(tree, planCtx.activeBreakpoint ?? null, mergeBreakpointNamespace(planCtx.theme?.breakpoints, planCtx.componentDocument?.breakpoints));
@@ -148,9 +147,6 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
         for (const child of comp.children) {
             node.children.push(planComponentTree(child, planCtx, childPrefix, customComponentStack, false, nextGraphPathSegments));
         }
-    }
-    if (applyThemePages) {
-        return finalizeRouteProjectionRoot(applyGeneratedPageMode(node, componentType, planCtx), planCtx, prefix, graphPathSegments);
     }
     return finalizeRouteProjectionRoot(node, planCtx, prefix, graphPathSegments);
 }

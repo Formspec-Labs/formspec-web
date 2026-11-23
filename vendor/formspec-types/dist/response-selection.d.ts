@@ -5,6 +5,8 @@ import type { FormDefinition } from './generated/definition.js';
 import type { FormResponse, ResolvedInstance, ResponseSelection } from './generated/response.js';
 export type ResponseSelectionRecord = {
     scope: string;
+    /** Supplied by the store even when an editable draft contains prepared, completed bytes. */
+    kind: 'open-draft' | 'filing';
     implicitSubjectId?: string;
 } & ({
     response: FormResponse;

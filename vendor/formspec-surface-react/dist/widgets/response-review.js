@@ -1,8 +1,8 @@
-import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Lossless frozen Response review with qualified labels and owned attachment previews. */
 import { useCallback, useEffect, useMemo, useRef, useState, } from "react";
 import canonicalize from "canonicalize";
-import { isQualifiedDraftReview } from '../internal/draft-review-qualification.js';
+import { getDraftReviewIrrelevantPaths, isQualifiedDraftReview } from '../internal/draft-review-qualification.js';
 import { canonicalFiniteJson, snapshotFiniteJson, } from "@formspec-org/surface";
 import { Heading, nextLevel } from "../heading.js";
 import { WidgetEmptyState } from "./empty-state.js";
@@ -48,6 +48,232 @@ function assertUnicode(value) {
         }
     }
 }
+function isStaticRelevantFalse(value) {
+    return value === false || (typeof value === "string" && value.trim().toLowerCase() === "false");
+}
+function collectBindHints(definition) {
+    const hints = new Map();
+    const binds = definition.binds;
+    if (!Array.isArray(binds))
+        return hints;
+    for (const bind of binds) {
+        if (!object(bind) || !text(bind.path))
+            continue;
+        const isReadonly = bind.readonly !== undefined && bind.readonly !== false && bind.readonly !== "false";
+        const isCalculate = bind.calculate !== undefined && bind.calculate !== "";
+        const isRelevantFalse = isStaticRelevantFalse(bind.relevant);
+        if (!isReadonly && !isCalculate && !isRelevantFalse)
+            continue;
+        const prev = hints.get(bind.path);
+        hints.set(bind.path, {
+            readonly: Boolean(prev?.readonly || isReadonly),
+            calculate: Boolean(prev?.calculate || isCalculate),
+            relevantFalse: Boolean(prev?.relevantFalse || isRelevantFalse),
+        });
+    }
+    return hints;
+}
+function lookupBindHint(bindHints, path) {
+    if (!bindHints)
+        return undefined;
+    return (bindHints.get(path) ??
+        bindHints.get(path.replace(/\[\d+\]/g, "[*]")) ??
+        bindHints.get(path.replace(/\[\d+\]/g, "")));
+}
+function isMoneyObject(value) {
+    if (!object(value))
+        return false;
+    const keys = Object.keys(value);
+    if (keys.length !== 2 || !own(value, "amount") || !own(value, "currency"))
+        return false;
+    const { amount, currency } = value;
+    const validAmount = (typeof amount === "number" && Number.isFinite(amount)) ||
+        (typeof amount === "string" && /^-?\d+(?:\.\d+)?$/.test(amount.trim()));
+    return validAmount && typeof currency === "string" && /^[A-Z]{3}$/.test(currency);
+}
+function formatMoneyValue(amount, currency, locale, options) {
+    const rawStr = typeof amount === "number" ? String(amount) : amount.trim();
+    const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(rawStr);
+    const effectiveLocale = locale || "en-US";
+    if (match) {
+        const [, sign, intPart, fracPart] = match;
+        const trimmedFrac = fracPart ? fracPart.replace(/0+$/, "") : "";
+        const exactFracLen = fracPart ? fracPart.length : 0;
+        const significantDigits = intPart.replace(/^0+/, "").length + (fracPart?.length ?? 0);
+        // Preserve exact precision for high-precision or >2-decimal amounts without silent rounding.
+        if (significantDigits <= 15) {
+            const numeric = Number(rawStr);
+            if (Number.isFinite(numeric)) {
+                const minFrac = options?.lossless
+                    ? exactFracLen
+                    : trimmedFrac.length > 0
+                        ? Math.max(2, trimmedFrac.length)
+                        : 0;
+                const maxFrac = options?.lossless
+                    ? exactFracLen
+                    : Math.max(2, trimmedFrac.length);
+                try {
+                    return new Intl.NumberFormat(effectiveLocale, {
+                        style: "currency",
+                        currency,
+                        minimumFractionDigits: minFrac,
+                        maximumFractionDigits: maxFrac,
+                    }).format(numeric);
+                }
+                catch {
+                    return `${currency} ${rawStr}`;
+                }
+            }
+        }
+        // High-precision (>15 significant digits) lossless formatting via BigInt grouping.
+        try {
+            const groupedInt = new Intl.NumberFormat(effectiveLocale, { useGrouping: true }).format(BigInt(intPart));
+            const parts = new Intl.NumberFormat(effectiveLocale, { style: "currency", currency }).formatToParts(0);
+            const currencyPart = parts.find((part) => part.type === "currency")?.value ?? `${currency} `;
+            const decimalSep = parts.find((part) => part.type === "decimal")?.value ?? ".";
+            const fractionSuffix = fracPart !== undefined
+                ? (options?.lossless ? `${decimalSep}${fracPart}` : trimmedFrac ? `${decimalSep}${trimmedFrac}` : "")
+                : "";
+            return `${sign}${currencyPart}${groupedInt}${fractionSuffix}`;
+        }
+        catch {
+            return `${currency} ${rawStr}`;
+        }
+    }
+    const num = typeof amount === "number" ? amount : Number(rawStr);
+    if (!Number.isFinite(num))
+        return `${currency} ${String(amount)}`;
+    try {
+        return new Intl.NumberFormat(effectiveLocale, {
+            style: "currency",
+            currency,
+            minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
+            maximumFractionDigits: 2,
+        }).format(num);
+    }
+    catch {
+        return `${currency} ${rawStr}`;
+    }
+}
+function formatDateValue(value, locale) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match)
+        return value;
+    const [, year, month, day] = match;
+    const y = Number(year);
+    const m = Number(month);
+    const d = Number(day);
+    const parsed = new Date(Date.UTC(y, m - 1, d));
+    if (parsed.getUTCFullYear() !== y ||
+        parsed.getUTCMonth() !== m - 1 ||
+        parsed.getUTCDate() !== d) {
+        return value;
+    }
+    if (!locale || /^en\b/i.test(locale)) {
+        return `${month}/${day}/${year}`;
+    }
+    try {
+        return new Intl.DateTimeFormat(locale, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            timeZone: "UTC",
+        }).format(parsed);
+    }
+    catch {
+        return `${month}/${day}/${year}`;
+    }
+}
+function isYearIntegerField(value, node) {
+    if (!Number.isInteger(value) ||
+        value < 1900 ||
+        value > 2199 ||
+        node.currency ||
+        node.prefix ||
+        node.suffix) {
+        return false;
+    }
+    if (/\b(?:count|total|number\s+of|amount|participants|people|individuals|households|clients|hours|days|months)\b/i.test(node.label)) {
+        return false;
+    }
+    const leafKey = node.path.split(".").pop()?.replace(/\[\d+\]/g, "") ?? "";
+    return (/\b(?:fiscal|calendar|tax|birth|reporting|program|grant|school|award|graduation|model|plan)\s+year\b|^\s*year\b|\byear\s*(?:\([^)]*\))?\s*:?\s*$/i.test(node.label) ||
+        /(?:^|[_-])(?:year|fy)(?:$|[_-])|year$/i.test(leafKey));
+}
+function formatNumericValue(value, node, locale) {
+    if (node.currency || node.prefix === "$") {
+        return formatMoneyValue(value, node.currency ?? "USD", locale);
+    }
+    if (isYearIntegerField(value, node)) {
+        return String(value);
+    }
+    const effectiveLocale = locale || "en-US";
+    let formatted;
+    try {
+        formatted = new Intl.NumberFormat(effectiveLocale, {
+            maximumFractionDigits: node.precision ?? 4,
+        }).format(value);
+    }
+    catch {
+        formatted = String(value);
+    }
+    const inferredPercent = !node.suffix &&
+        node.dataType === "decimal" &&
+        /(?:\(%|\bpercentage\b|%)/i.test(node.label);
+    const suffix = node.suffix ?? (inferredPercent ? "%" : undefined);
+    const prefix = node.prefix ?? "";
+    if (suffix) {
+        const glue = suffix === "%" || suffix.startsWith(" ") ? "" : " ";
+        return `${prefix}${formatted}${glue}${suffix}`;
+    }
+    return `${prefix}${formatted}`;
+}
+function isEmptyReviewValue(value) {
+    return (value === null ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0) ||
+        (object(value) && Object.keys(value).length === 0));
+}
+function filterEmptyReviewNodes(nodes) {
+    let unansweredCount = 0;
+    let hasConcreteAnswer = false;
+    const pendingCalculated = [];
+    const entries = [];
+    for (const node of nodes) {
+        if (node.kind === "value") {
+            if (isEmptyReviewValue(node.value)) {
+                if (node.calculatedReadonly) {
+                    pendingCalculated.push(node);
+                    entries.push({ node, calculatedEmpty: true });
+                }
+                else {
+                    unansweredCount += 1;
+                }
+            }
+            else {
+                hasConcreteAnswer = true;
+                entries.push({ node });
+            }
+        }
+        else {
+            const childResult = filterEmptyReviewNodes(node.children);
+            unansweredCount += childResult.unansweredCount;
+            if (childResult.hasConcreteAnswer && childResult.answered.length > 0) {
+                hasConcreteAnswer = true;
+                entries.push({ node: { ...node, children: childResult.answered } });
+            }
+        }
+    }
+    if (!hasConcreteAnswer) {
+        unansweredCount += pendingCalculated.length;
+        return { answered: [], unansweredCount, hasConcreteAnswer: false };
+    }
+    return {
+        answered: entries.map((entry) => entry.node),
+        unansweredCount,
+        hasConcreteAnswer: true,
+    };
+}
 function capture(props, acceptedSelectionProfile) {
     try {
         // Reject accessors/cycles before reading values; detach everything the display can consume.
@@ -76,7 +302,7 @@ function capture(props, acceptedSelectionProfile) {
             !object(p.fields))
             return undefined;
         if (p.phase === 'draft-review') {
-            if (!isQualifiedDraftReview(props.data) || r.status !== 'in-progress' || !text(p.revision))
+            if (!isQualifiedDraftReview(props.data) || !['in-progress', 'completed', 'amended'].includes(r.status) || !text(p.revision))
                 return undefined;
         }
         else if (!['before-sign', 'before-submit', 'accepted-record'].includes(p.phase) ||
@@ -89,6 +315,7 @@ function capture(props, acceptedSelectionProfile) {
             (acceptedSelectionProfile === 'legacy' && selected))
             return undefined;
         let selection;
+        let permittedPaths;
         if (selected) {
             if (p.phase !== 'accepted-record' || !own(p, 'fieldSelection'))
                 return undefined;
@@ -96,6 +323,7 @@ function capture(props, acceptedSelectionProfile) {
             const expected = resolveAcceptedResponseReviewFieldSelection(d, r, policy);
             if (canonicalize(expected) !== canonicalize(p.fieldSelection))
                 return undefined;
+            permittedPaths = new Set(expected.permittedPaths);
             selection = createAcceptedReviewFieldSelection(d.items, policy.fieldPaths);
         }
         else if (own(p, 'fieldSelection'))
@@ -140,8 +368,57 @@ function capture(props, acceptedSelectionProfile) {
             return undefined;
         const copy = c;
         const attachments = [];
-        const nodes = walk(d.items, r.data, "", p, copy, attachments, selection);
+        const bindHints = collectBindHints(d);
+        const defaultCurrency = object(d.formPresentation) &&
+            text(d.formPresentation.defaultCurrency)
+            ? d.formPresentation.defaultCurrency
+            : undefined;
+        const irrelevantPaths = p.phase === "draft-review"
+            ? getDraftReviewIrrelevantPaths(props.data)
+            : undefined;
+        const nodes = walk(d.items, r.data, "", p, copy, attachments, selection, bindHints, irrelevantPaths, defaultCurrency);
+        const explanations = p.phase === 'accepted-record' ? (r.explanations ?? []).filter(entry => {
+            if (!object(entry) || !object(entry.author) || !text(entry.author.id) || !text(entry.recorded) ||
+                (entry.author.name !== undefined && typeof entry.author.name !== 'string')) {
+                throw Error("Invalid recorded explanation stamp");
+            }
+            let paths;
+            if ('group' in entry) {
+                if (entry.group !== true || !text(entry.code) || !Array.isArray(entry.paths) ||
+                    !entry.paths.length || !entry.paths.every(text) ||
+                    (entry.partyRef !== undefined && !text(entry.partyRef)))
+                    throw Error("Invalid acknowledgement");
+                paths = entry.paths;
+            }
+            else {
+                if (!text(entry.shapeId) || !text(entry.path) ||
+                    (entry.text !== undefined && typeof entry.text !== 'string'))
+                    throw Error("Invalid explanation");
+                paths = [entry.path];
+            }
+            if (selection) {
+                const authorized = paths.every(path => {
+                    if (path === '#' || path.includes('*'))
+                        return false;
+                    if (permittedPaths.has(path))
+                        return true;
+                    try {
+                        return selection.includes(path);
+                    }
+                    catch {
+                        return false;
+                    }
+                });
+                if (!authorized)
+                    return false;
+            }
+            if (!paths.every(path => path === '#' || own(p.fields, path))) {
+                throw Error("Missing recorded explanation label");
+            }
+            return true;
+        }) : [];
         return {
+            explanations,
             headingLevel: props.headingLevel,
             data,
             copy,
@@ -154,10 +431,11 @@ function capture(props, acceptedSelectionProfile) {
         return undefined;
     }
 }
-function walk(items, values, prefix, p, copy, attachments, selection) {
+function walk(items, values, prefix, p, copy, attachments, selection, bindHints, irrelevantPaths, defaultCurrency) {
     const nodes = [];
     const consumed = new Set();
     const keys = new Set();
+    const isDraftReview = p.phase === "draft-review";
     for (const item of items) {
         if (!object(item) ||
             !text(item.key) ||
@@ -171,6 +449,12 @@ function walk(items, values, prefix, p, copy, attachments, selection) {
         if (selection && !(item.type === 'field' && selection.includes(path)) &&
             !(item.type === 'group' && selection.contains(path)))
             continue;
+        const bindHint = lookupBindHint(bindHints, path);
+        if (isDraftReview &&
+            (irrelevantPaths?.has(path) || isStaticRelevantFalse(item.relevant) || bindHint?.relevantFalse)) {
+            consumed.add(item.key);
+            continue;
+        }
         const value = values[item.key];
         const metadata = own(p.fields, path)
             ? p.fields[path]
@@ -186,12 +470,19 @@ function walk(items, values, prefix, p, copy, attachments, selection) {
                     kind: "group",
                     path,
                     label: metadata.label,
-                    children: value.flatMap((row, i) => selection && !selection.contains(`${path}[${i}]`) ? [] : [{
-                            kind: "group",
-                            path: `${path}[${i}]`,
-                            label: `${metadata.label} ${i + 1}`,
-                            children: walk(item.children, row, `${path}[${i}]`, p, copy, attachments, selection),
-                        }]).filter(row => !selection || row.children.length > 0),
+                    children: value.flatMap((row, i) => {
+                        const rowPath = `${path}[${i}]`;
+                        if (isDraftReview && irrelevantPaths?.has(rowPath))
+                            return [];
+                        if (selection && !selection.contains(rowPath))
+                            return [];
+                        return [{
+                                kind: "group",
+                                path: rowPath,
+                                label: `${metadata.label} ${i + 1}`,
+                                children: walk(item.children, row, rowPath, p, copy, attachments, selection, bindHints, irrelevantPaths, defaultCurrency),
+                            }];
+                    }).filter(row => !selection || row.children.length > 0),
                 });
                 // An empty repeated group is still a recorded value.
                 if (!value.length && !selection)
@@ -204,7 +495,7 @@ function walk(items, values, prefix, p, copy, attachments, selection) {
                     });
             }
             else if (object(value) && item.repeatable !== true) {
-                const children = walk(item.children, value, path, p, copy, attachments, selection);
+                const children = walk(item.children, value, path, p, copy, attachments, selection, bindHints, irrelevantPaths, defaultCurrency);
                 if (selection && !children.length)
                     continue;
                 nodes.push(children.length
@@ -237,6 +528,36 @@ function walk(items, values, prefix, p, copy, attachments, selection) {
                 attachments.push(...(Array.isArray(value) && value.length
                     ? value.map((_, i) => `${path}[${i}]`)
                     : [path]));
+            const itemReadonly = item.readonly !== undefined && item.readonly !== false && item.readonly !== "false";
+            const itemCalculate = item.calculate !== undefined && item.calculate !== "";
+            const calculatedReadonly = Boolean(itemCalculate || bindHint?.calculate || (itemReadonly || bindHint?.readonly));
+            const presentationObj = object(item.presentation) ? item.presentation : undefined;
+            const prefixText = text(item.prefix)
+                ? item.prefix
+                : presentationObj && text(presentationObj.prefix)
+                    ? presentationObj.prefix
+                    : undefined;
+            const explicitCurrency = text(item.currency)
+                ? item.currency
+                : presentationObj && text(presentationObj.currency)
+                    ? presentationObj.currency
+                    : undefined;
+            const isCurrencyField = item.dataType === "money" ||
+                prefixText === "$" ||
+                (presentationObj && presentationObj.format === "currency");
+            const currency = explicitCurrency ?? (isCurrencyField ? defaultCurrency : undefined);
+            const suffixText = text(item.suffix)
+                ? item.suffix
+                : presentationObj && text(presentationObj.suffix)
+                    ? presentationObj.suffix
+                    : presentationObj && text(presentationObj.unit)
+                        ? presentationObj.unit
+                        : text(item.unit)
+                            ? item.unit
+                            : undefined;
+            const precision = typeof item.precision === "number" && Number.isInteger(item.precision) && item.precision >= 0
+                ? item.precision
+                : undefined;
             nodes.push({
                 kind: "value",
                 path,
@@ -244,6 +565,12 @@ function walk(items, values, prefix, p, copy, attachments, selection) {
                 value,
                 attachment,
                 ...(metadata.options ? { options: metadata.options } : {}),
+                ...(text(item.dataType) ? { dataType: item.dataType } : {}),
+                ...(currency ? { currency } : {}),
+                ...(prefixText ? { prefix: prefixText } : {}),
+                ...(suffixText ? { suffix: suffixText } : {}),
+                ...(precision !== undefined ? { precision } : {}),
+                ...(calculatedReadonly ? { calculatedReadonly: true } : {}),
             });
         }
     }
@@ -260,29 +587,56 @@ function walk(items, values, prefix, p, copy, attachments, selection) {
         }
     return nodes;
 }
-function Value({ node, copy, }) {
+function Value({ node, copy, phase, locale, }) {
     const v = node.value;
-    if (v === null)
+    const isDraftReview = phase === "draft-review";
+    if (v === null) {
+        if (isDraftReview && node.calculatedReadonly) {
+            return _jsx("span", { className: "fs-response-review-calculated-empty", children: "\u2014" });
+        }
         return _jsx(_Fragment, { children: copy.nullValue });
+    }
     if (typeof v === "boolean")
         return _jsx(_Fragment, { children: v ? copy.trueValue : copy.falseValue });
-    if (v === "")
+    if (v === "") {
+        if (isDraftReview && node.calculatedReadonly) {
+            return _jsx("span", { className: "fs-response-review-calculated-empty", children: "\u2014" });
+        }
         return _jsx(_Fragment, { children: copy.emptyString });
+    }
     if (Array.isArray(v) && !v.length)
         return _jsx(_Fragment, { children: copy.emptyArray });
     if (object(v) && !Object.keys(v).length)
         return _jsx(_Fragment, { children: copy.emptyObject });
+    if (isMoneyObject(v)) {
+        return (_jsx("span", { className: "fs-response-review-number", children: formatMoneyValue(v.amount, v.currency, locale ?? "en-US", { lossless: !isDraftReview }) }));
+    }
+    if (typeof v === "number" && isDraftReview) {
+        return (_jsx("span", { className: "fs-response-review-number", children: formatNumericValue(v, node, locale ?? "en-US") }));
+    }
     if (typeof v === "string") {
         const option = node.options?.filter((o) => o.value === v);
-        return (_jsx(_Fragment, { children: option?.length === 1 ? (_jsxs(_Fragment, { children: [option[0].label, " ", _jsxs("span", { className: "fs-response-review-code", children: ["(", v, ")"] })] })) : (v) }));
+        if (option?.length === 1) {
+            if (isDraftReview)
+                return _jsx(_Fragment, { children: option[0].label });
+            return (_jsxs(_Fragment, { children: [option[0].label, " ", _jsxs("span", { className: "fs-response-review-code", children: ["(", v, ")"] })] }));
+        }
+        if (isDraftReview && node.dataType === "date") {
+            return _jsx(_Fragment, { children: formatDateValue(v, locale ?? "en-US") });
+        }
+        return _jsx(_Fragment, { children: v });
     }
     if (Array.isArray(v) && node.options)
-        return (_jsxs(_Fragment, { children: [_jsx("ul", { children: v.map((entry, i) => {
-                        const option = node.options?.filter((o) => o.value === entry);
-                        return (_jsx("li", { children: option?.length === 1
-                                ? `${option[0].label} (${String(entry)})`
-                                : JSON.stringify(entry) }, i));
-                    }) }), _jsx("pre", { className: "fs-response-review-json fs-surface-review__structured", children: JSON.stringify(v, null, 2) })] }));
+        return (_jsx("ul", { className: "fs-response-review-list", children: v.map((entry, i) => {
+                const option = node.options?.filter((o) => o.value === entry);
+                return (_jsx("li", { children: option?.length === 1
+                        ? isDraftReview
+                            ? option[0].label
+                            : `${option[0].label} (${String(entry)})`
+                        : isDraftReview && typeof entry === "string"
+                            ? entry
+                            : JSON.stringify(entry) }, i));
+            }) }));
     // JSON preserves all keys, values, array order and scalar types without string coercion.
     return (_jsx("pre", { className: "fs-response-review-json fs-surface-review__structured", children: JSON.stringify(v, null, 2) }));
 }
@@ -332,7 +686,7 @@ function Attachment({ capture: c, node, read, onStatus, }) {
         if (!descriptors.length)
             onStatus(node.path, "unavailable");
     }, [node.path, descriptors.length, onStatus]);
-    return (_jsxs(_Fragment, { children: [!descriptors.length ? (_jsx("p", { role: "status", children: c.copy.attachmentUnavailable })) : null, descriptors.map((descriptor, i) => (_jsx(AttachmentPreview, { capture: c, descriptor: descriptor, path: Array.isArray(node.value) ? `${node.path}[${i}]` : node.path, label: node.label, read: read, onStatus: onStatus }, i))), _jsxs("details", { children: [_jsx("summary", { children: c.copy.attachmentDetails }), _jsx(Value, { node: node, copy: c.copy })] })] }));
+    return (_jsxs(_Fragment, { children: [!descriptors.length ? (_jsx("p", { role: "status", children: c.copy.attachmentUnavailable })) : null, descriptors.map((descriptor, i) => (_jsx(AttachmentPreview, { capture: c, descriptor: descriptor, path: Array.isArray(node.value) ? `${node.path}[${i}]` : node.path, label: node.label, read: read, onStatus: onStatus }, i))), _jsxs("details", { children: [_jsx("summary", { children: c.copy.attachmentDetails }), _jsx(Value, { node: node, copy: c.copy, phase: c.data.presentation.phase, locale: c.data.presentation.locale })] })] }));
 }
 function AttachmentPreview({ capture: c, descriptor, path, label, read, onStatus, }) {
     const [view, setView] = useState({ state: "pending" });
@@ -392,10 +746,15 @@ function AttachmentPreview({ capture: c, descriptor, path, label, read, onStatus
 }
 function ReviewBody({ capture: c, options, }) {
     const { presentation: p, response: r } = c.data;
-    const [admitted, setAdmitted] = useState(p.phase === 'draft-review');
+    const isDraftReview = p.phase === "draft-review";
+    const [admitted, setAdmitted] = useState(isDraftReview);
     const [failed, setFailed] = useState(false);
     const [identity, setIdentity] = useState();
     const [previews, setPreviews] = useState({});
+    const [showUnanswered, setShowUnanswered] = useState(false);
+    const filtered = useMemo(() => (isDraftReview
+        ? filterEmptyReviewNodes(c.nodes)
+        : { answered: c.nodes, unansweredCount: 0, hasConcreteAnswer: true }), [isDraftReview, c.nodes]);
     const report = useCallback((status, contextIdentity) => {
         if (p.phase === 'draft-review')
             return;
@@ -466,9 +825,35 @@ function ReviewBody({ capture: c, options, }) {
     }, [admitted, identity, previews, report, c]);
     if (!admitted)
         return (_jsx(WidgetEmptyState, { children: failed ? c.copy.unavailable : c.copy.pending }));
-    const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsx("dd", { children: node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy })) })] }, node.path)));
-    return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), p.phase !== 'draft-review' && _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
-                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context fs-response-review__meta", children: [p.phase !== "accepted-record" && p.phase !== 'draft-review' ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel)), _jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] })] }));
+    const instances = new Map();
+    const groups = [];
+    for (const entry of c.explanations) {
+        const stamp = _jsxs(_Fragment, { children: [entry.author.name ?? entry.author.id, " \u00B7 ", _jsx("time", { dateTime: entry.recorded, children: entry.recorded })] });
+        if ('group' in entry) {
+            const count = entry.paths.length;
+            const summaryLabel = `${count} ${count === 1 ? 'question' : 'questions'} left unanswered (${entry.code})`;
+            groups.push(_jsxs("details", { "data-explanation-code": entry.code, children: [_jsxs("summary", { children: [summaryLabel, " \u2014 accepted by ", entry.author.name ?? entry.author.id, " at ", _jsx("time", { dateTime: entry.recorded, children: entry.recorded })] }), _jsx("ul", { children: entry.paths.map(path => _jsx("li", { children: path === '#' ? c.copy.heading : p.fields[path].label }, path)) })] }, JSON.stringify([entry.code, entry.partyRef])));
+        }
+        else {
+            const notes = instances.get(entry.path) ?? [];
+            notes.push(_jsxs("p", { children: [entry.text && _jsxs(_Fragment, { children: [entry.text, " \u00B7 "] }), stamp] }, entry.shapeId));
+            instances.set(entry.path, notes);
+        }
+    }
+    function notesFor(path) {
+        const notes = instances.get(path);
+        instances.delete(path);
+        return notes;
+    }
+    const displayedNodes = isDraftReview && !showUnanswered ? filtered.answered : c.nodes;
+    const signatureCount = r.authoredSignatures?.length ?? 0;
+    const showContext = !isDraftReview || signatureCount > 0;
+    const showRecordDetails = !isDraftReview;
+    const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), notesFor(node.path), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsxs("dd", { children: [node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy, phase: p.phase, locale: p.locale })), notesFor(node.path)] })] }, node.path)));
+    return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), !isDraftReview && _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
+                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), showContext && (_jsxs("dl", { className: "fs-response-review-context fs-response-review__meta", children: [p.phase !== "accepted-record" && !isDraftReview ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, !isDraftReview && (_jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] })), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: signatureCount })] })] })), isDraftReview && filtered.unansweredCount > 0 && (_jsx("div", { className: "fs-response-review-controls", children: _jsx("button", { type: "button", className: "fs-response-review-toggle", "aria-expanded": showUnanswered, onClick: () => setShowUnanswered((current) => !current), children: showUnanswered
+                        ? `Hide ${filtered.unansweredCount} unanswered ${filtered.unansweredCount === 1 ? "item" : "items"}`
+                        : `Show ${filtered.unansweredCount} unanswered ${filtered.unansweredCount === 1 ? "item" : "items"}` }) })), displayedNodes.length > 0 ? (render(displayedNodes, nextLevel(c.headingLevel))) : (isDraftReview && (_jsx("p", { className: "fs-response-review-empty", children: "No answers recorded yet." }))), [...instances].map(([path, notes]) => _jsxs("div", { children: [_jsx("strong", { children: path === '#' ? c.copy.heading : p.fields[path].label }), notes] }, path)), groups, showRecordDetails && (_jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] }))] }));
 }
 function unavailableCopy(props) {
     try {

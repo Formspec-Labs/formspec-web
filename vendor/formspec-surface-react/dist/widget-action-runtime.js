@@ -1,4 +1,4 @@
-import { snapshotFiniteJson, canonicalFiniteJson } from '@formspec-org/surface';
+import { findUniquePlainAction, snapshotFiniteJson, canonicalFiniteJson } from '@formspec-org/surface';
 import { widgetActionScopeMatches, CANONICAL_RESPONSE_SCHEMA_REF } from '@formspec-org/app-graph';
 let invocationSequence = 0;
 const UNSAFE_INPUT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -147,10 +147,7 @@ export function normalizeWidgetActionResult(result) {
  * Repeated ids across or within documents are ambiguous and resolve to none.
  */
 export function responseActionsDocumentForAction(documents, actionRef, responseContext) {
-    const matches = documents.flatMap((document) => (document.actions ?? [])
-        .filter((action) => action.id === actionRef)
-        .map(() => document));
-    const match = matches.length === 1 ? matches[0] : undefined;
+    const match = findUniquePlainAction(documents, actionRef)?.document;
     return match && widgetActionScopeMatches({ document: match,
         responseInput: responseContext?.inputName,
         inputs: responseContext ? [{ name: responseContext.inputName, required: true }] : [],

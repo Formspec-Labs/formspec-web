@@ -138,5 +138,7 @@ export declare function routeHref(handle: SurfaceRouteHandle, params?: Readonly<
     diagnostics: readonly SurfaceDiagnostic[];
     refusal: SurfaceRouteHrefRefusal | undefined;
 };
+/** Address a form slot and, optionally, one of its sections. */
+export declare function formHref(path: string, slot: string, section?: string): string;
 /** The route a transition targets, resolved within the transition's own Surface. */
 export declare function routeInSurface(app: SurfaceApp, surfaceId: string, routeId: string): SurfaceRouteHandle | undefined;

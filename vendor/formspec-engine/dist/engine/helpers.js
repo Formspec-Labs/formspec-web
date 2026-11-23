@@ -314,60 +314,6 @@ export function flattenObject(value, prefix = '', output = {}) {
 export function isEmptyValue(value) {
     return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
 }
-const INLINE_BIND_KEYS = [
-    'calculate',
-    'constraint',
-    'constraintMessage',
-    'relevant',
-    'required',
-    'readonly',
-    'default',
-    'precision',
-    'disabledDisplay',
-    'whitespace',
-    'nonRelevantBehavior',
-    'remoteOptions',
-    'excludedValue',
-];
-export function extractInlineBind(item, path) {
-    const bind = { path };
-    let used = false;
-    for (const key of INLINE_BIND_KEYS) {
-        const value = item[key];
-        if (value !== undefined) {
-            Object.assign(bind, { [key]: value });
-            used = true;
-        }
-    }
-    if (item.visible !== undefined && bind.relevant === undefined) {
-        bind.relevant = item.visible;
-        used = true;
-    }
-    return used ? bind : null;
-}
-export function detectNamedCycle(graph, message) {
-    const visiting = new Set();
-    const visited = new Set();
-    const visit = (node) => {
-        if (visited.has(node)) {
-            return;
-        }
-        if (visiting.has(node)) {
-            throw new Error(message);
-        }
-        visiting.add(node);
-        for (const dep of graph.get(node) ?? []) {
-            if (graph.has(dep)) {
-                visit(dep);
-            }
-        }
-        visiting.delete(node);
-        visited.add(node);
-    };
-    for (const node of graph.keys()) {
-        visit(node);
-    }
-}
 export function topoSortKeys(nodes, graph) {
     const pending = new Map(nodes.map((node) => [node.key, node]));
     const incoming = new Map();
@@ -498,13 +444,4 @@ export function resolveQualifiedGroupRefs(expression, currentItemPath, repeatAnc
         });
     }
     return result;
-}
-export function resolveRelativeDependency(dep, parentPath, selfPath) {
-    if (!dep) {
-        return selfPath;
-    }
-    if (dep.includes('.')) {
-        return dep;
-    }
-    return parentPath ? `${parentPath}.${dep}` : dep;
 }

@@ -4,7 +4,6 @@ import { resolvePresentation, resolveWidget } from './theme-resolver.js';
 import { getDefaultComponent } from './defaults.js';
 import { gridPlacementStyleFromLayout, needGenerationAnchors, normalizeCssClass, preparePlanContext, } from './node-utils.js';
 import { findItemAtPath, findItemPathByKey, getParentPath, } from './planner-path-utils.js';
-import { applyDefinitionPageMode, emitPageModePages, } from './planner-page-mode.js';
 import { buildThemePageNodes, collectAssignedTopLevelKeys } from './planner-theme-pages.js';
 import { carryWidthStop } from './planner-width-stops.js';
 export function planDefinitionFallback(items, ctx, prefix = '', applyThemePages = prefix === '') {
@@ -19,7 +18,163 @@ export function planDefinitionFallback(items, ctx, prefix = '', applyThemePages 
     for (const item of items) {
         nodes.push(planDefinitionItem(item, planCtx, prefix));
     }
-    return !prefix ? applyDefinitionPageMode(nodes, planCtx) : nodes;
+    return nodes;
+}
+const COMPACT_SCALAR_COMPONENTS = new Set([
+    'NumberInput',
+    'MoneyInput',
+    'DatePicker',
+    'Select',
+    'TextInput',
+]);
+const TABULAR_SCALAR_COMPONENTS = new Set([
+    'NumberInput',
+    'MoneyInput',
+    'DatePicker',
+]);
+const NARROW_WIDTH_STOPS = new Set(['2xs', 'xs', 'sm']);
+function isCompactScalarChild(child, rawItem) {
+    if (child.category !== 'field')
+        return false;
+    if (!COMPACT_SCALAR_COMPONENTS.has(child.component))
+        return false;
+    if (child.fieldItem?.dataType === 'text' || child.props?.maxLines != null)
+        return false;
+    if (child.component === 'Select' && (child.props?.multiple === true || child.props?.searchable === true)) {
+        return false;
+    }
+    const label = child.fieldItem?.label ?? '';
+    if (label.length > 80)
+        return false;
+    const hint = child.fieldItem?.hint ?? '';
+    if (hint.length > 120 || hint.includes('\n'))
+        return false;
+    const description = typeof rawItem?.description === 'string'
+        ? rawItem.description
+        : '';
+    if (description.length > 120 || description.includes('\n'))
+        return false;
+    return true;
+}
+/**
+ * Narrow scalars are safe inside dense 3–6 column auto-grids without clipping values:
+ * numbers, currency amounts, dates, or strings explicitly bounded to short codes/stops.
+ * General free-text/name strings and selects stay at full-width or max 2 columns.
+ */
+function isNarrowScalarChild(child, rawItem) {
+    if (!isCompactScalarChild(child, rawItem))
+        return false;
+    if (TABULAR_SCALAR_COMPONENTS.has(child.component))
+        return true;
+    if (child.component === 'TextInput') {
+        const width = typeof child.props?.width === 'string' ? child.props.width : undefined;
+        if (width && NARROW_WIDTH_STOPS.has(width))
+            return true;
+        const maxLength = child.presentation?.widgetConfig?.maxLength;
+        if (typeof maxLength === 'number' && maxLength > 0 && maxLength <= 16)
+            return true;
+    }
+    return false;
+}
+function longestContiguousRun(flags) {
+    let maxRun = 0;
+    let currentRun = 0;
+    for (const flag of flags) {
+        if (flag) {
+            currentRun += 1;
+            if (currentRun > maxRun)
+                maxRun = currentRun;
+        }
+        else {
+            currentRun = 0;
+        }
+    }
+    return maxRun;
+}
+function markFullWidth(children, keepInGrid) {
+    return children.map((child, idx) => {
+        if (keepInGrid[idx])
+            return child;
+        if (child.cssClasses.includes('formspec-auto-grid-full'))
+            return child;
+        return { ...child, cssClasses: [...child.cssClasses, 'formspec-auto-grid-full'] };
+    });
+}
+/**
+ * Infer responsive multi-column auto-grid metadata for definition-fallback groups without an
+ * explicit `presentation.layout.flow`. Keeps `groupNode.component === 'Stack'` and preserves
+ * `groupNode.children` 1:1 while arranging 3–6 narrow scalar fields (integer, decimal, money,
+ * date, short codes) side-by-side and keeping general free-text/name strings at max 2 columns
+ * or full-width above/below numeric rows so long names never clip in narrow cells.
+ */
+function inferScalarAutoGrid(children, rawChildren, item) {
+    const layout = item.presentation?.layout;
+    if (layout?.flow !== undefined || children.length < 2) {
+        return { children };
+    }
+    if (rawChildren.some((raw) => raw.type === 'group')) {
+        return { children };
+    }
+    const compactFlags = children.map((child, idx) => isCompactScalarChild(child, rawChildren[idx]));
+    const narrowFlags = children.map((child, idx) => isNarrowScalarChild(child, rawChildren[idx]));
+    const allCompact = compactFlags.every(Boolean);
+    const allNarrow = narrowFlags.every(Boolean);
+    if (allCompact) {
+        if (allNarrow) {
+            if (children.length <= 6) {
+                return { columns: children.length, children };
+            }
+            const allShortLabels = children.every((child) => (child.fieldItem?.label ?? '').length <= 60);
+            if (allShortLabels) {
+                const veryShortNumeric = children.every((child) => (child.component === 'NumberInput' || child.component === 'MoneyInput')
+                    && (child.fieldItem?.label ?? '').length <= 32);
+                return { columns: veryShortNumeric ? 3 : 2, children };
+            }
+            return { children };
+        }
+        // Group mixes general string/select fields with numeric/money/date fields, or has only
+        // general string/select fields. Never pack free-text strings into >= 3 narrow columns.
+        const maxNarrowRun = longestContiguousRun(narrowFlags);
+        if (children.length <= 6 && maxNarrowRun >= 2) {
+            return { columns: maxNarrowRun, children: markFullWidth(children, narrowFlags) };
+        }
+        if (children.length <= 6) {
+            return { columns: 2, children };
+        }
+        const tabularCount = children.filter((child) => TABULAR_SCALAR_COMPONENTS.has(child.component)).length;
+        const allShortLabels = children.every((child) => (child.fieldItem?.label ?? '').length <= 60);
+        if (allShortLabels && tabularCount / children.length >= 0.75) {
+            return { columns: 2, children };
+        }
+        return { children };
+    }
+    // Mixed group with no nested groups (e.g., intro display text + scalar columns + narrative textarea):
+    // find contiguous runs of compact scalars while protecting general strings from >= 3 columns.
+    const maxCompactRun = longestContiguousRun(compactFlags);
+    if (maxCompactRun < 2)
+        return { children };
+    const maxNarrowRun = longestContiguousRun(narrowFlags);
+    const compactHasWide = compactFlags.some((compact, idx) => compact && !narrowFlags[idx]);
+    if (compactHasWide && maxCompactRun >= 3) {
+        if (maxNarrowRun >= 2 && maxNarrowRun <= 6) {
+            return { columns: maxNarrowRun, children: markFullWidth(children, narrowFlags) };
+        }
+        if (maxCompactRun > 6) {
+            const compactNodes = children.filter((_, idx) => compactFlags[idx]);
+            const tabularCount = compactNodes.filter((child) => TABULAR_SCALAR_COMPONENTS.has(child.component)).length;
+            if (tabularCount / compactNodes.length < 0.75)
+                return { children };
+        }
+        return { columns: 2, children: markFullWidth(children, compactFlags) };
+    }
+    const columns = maxCompactRun <= 6 ? maxCompactRun : 2;
+    if (maxCompactRun > 6) {
+        const compactNodes = children.filter((_, idx) => compactFlags[idx]);
+        const tabularCount = compactNodes.filter((child) => TABULAR_SCALAR_COMPONENTS.has(child.component)).length;
+        if (tabularCount / compactNodes.length < 0.75)
+            return { children };
+    }
+    return { columns, children: markFullWidth(children, compactFlags) };
 }
 /**
  * Core §4.2.5 `layout.flow: 'grid'`: the group arranges its children on a grid, and each child's
@@ -106,8 +261,19 @@ export function planDefinitionItem(item, ctx, prefix = '') {
         }
         const childPrefix = isRepeat ? `${fullPath}[0]` : fullPath;
         if (Array.isArray(item.children)) {
-            const children = planDefinitionFallback(item.children, planCtx, childPrefix, false);
-            groupNode.children = wrapGridFlow(children, item, planCtx);
+            const rawChildren = item.children;
+            const children = planDefinitionFallback(rawChildren, planCtx, childPrefix, false);
+            const wrapped = wrapGridFlow(children, item, planCtx);
+            if (wrapped === children) {
+                const autoGrid = inferScalarAutoGrid(children, rawChildren, item);
+                if (autoGrid.columns !== undefined) {
+                    groupNode.props.autoGridColumns = autoGrid.columns;
+                }
+                groupNode.children = autoGrid.children;
+            }
+            else {
+                groupNode.children = wrapped;
+            }
         }
         return groupNode;
     }
@@ -185,15 +351,6 @@ function planThemePagesFromDefinitionItems(items, ctx) {
     const unassigned = items
         .filter((item) => !assignedTopLevelKeys.has(item.key))
         .map((item) => planDefinitionItem(item, ctx, ''));
-    const pageMode = ctx.formPresentation?.pageMode;
-    if ((pageMode === 'wizard' || pageMode === 'tabs') && pageNodes.length > 0) {
-        const pages = pageNodes.map((pn) => ({
-            id: typeof pn.props?.id === 'string' ? pn.props.id : undefined,
-            title: String(pn.props?.title || ''),
-            children: pn.children,
-        }));
-        return emitPageModePages(unassigned, pages, ctx.nextId);
-    }
     return [...pageNodes, ...unassigned];
 }
 export { findItemAtPath, findItemPathByKey };

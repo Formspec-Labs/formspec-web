@@ -149,6 +149,8 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     readSummaries?: FilingStatusOptions["readSummaries"];
     /** Change when a committed observation should be read again. */
     filingDraftRevision?: FilingStatusOptions["revision"];
+    /** Stable opaque viewer identity for browser preferences on a shared browser profile. */
+    viewerPreferenceKey?: string | undefined;
     /** Pure selection of an admitted Component for both the form and its tracker links. */
     resolveDefinitionComponent?: SurfaceDefinitionComponentResolver | undefined;
     /** Host form runtime seam; the current `FormspecForm` remains the default. */
@@ -236,6 +238,7 @@ interface BrowserPresentation extends SurfaceFormSession {
     anchor: boolean;
     direction: 'ltr' | 'rtl';
     entryPath: string | undefined;
+    lastSeenParams?: Readonly<Record<string, string>> | undefined;
     editionPicker: ReactNode;
     appearancePicker: ReactNode;
     saveNotice: string;

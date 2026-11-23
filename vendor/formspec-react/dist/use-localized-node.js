@@ -24,11 +24,10 @@ const UNCHANGED = signal(null);
 /**
  * The live title of a node the planner titled (same rule as the web component's `plannedTitle`): a page
  * made from a group is titled by that group's label (`titleBind`), a page nobody authored by its `$ui`
- * chrome key (`titleKey`); undefined for any other node. Read inside a locale-signal subscription.
+ * locale key (`titleLocaleKey`); undefined for any other node. Read inside a locale-signal subscription.
  */
 export function plannedTitle(engine, props) {
     const titleBind = typeof props?.titleBind === 'string' ? props.titleBind : undefined;
-    const titleKey = typeof props?.titleKey === 'string' ? props.titleKey : undefined;
     const localeKey = typeof props?.titleLocaleKey === 'string' ? props.titleLocaleKey : undefined;
     if (localeKey) {
         if (localeKey.startsWith('$ui.'))
@@ -38,7 +37,6 @@ export function plannedTitle(engine, props) {
             return localized;
     }
     return (titleBind && engine.getItemLabelSignal(titleBind)?.value)
-        || (titleKey && chromeText(engine, titleKey))
         || (typeof props?.titleIndex === 'number' ? chromeText(engine, 'wizard.stepTitle', { index: props.titleIndex }) : undefined);
 }
 function literalOf(value) {
@@ -63,7 +61,7 @@ export function useLocalizedNode(node) {
         const props = node.props ?? {};
         const id = typeof props.id === 'string' ? props.id : null;
         const groupPath = node.scopeChange && node.bindPath && typeof props.title === 'string' ? node.bindPath : null;
-        const planned = typeof props.titleBind === 'string' || typeof props.titleKey === 'string' || typeof props.titleLocaleKey === 'string' || typeof props.titleIndex === 'number';
+        const planned = typeof props.titleBind === 'string' || typeof props.titleLocaleKey === 'string' || typeof props.titleIndex === 'number';
         if (!id && !groupPath && !planned)
             return UNCHANGED;
         const group = groupPath ? findItemByKey(engine.getDefinition().items ?? [], groupPath) : null;

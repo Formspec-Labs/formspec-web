@@ -1,38 +1,67 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Mount an admitted Surface with browser navigation, Locale, and a shared masthead. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { composeSurfaceApp, matchRoute, responseSourceLoader, routeHref } from '@formspec-org/surface';
+import { canonicalFiniteJson, matchRoute, responseSourceLoader, routeHref } from '@formspec-org/surface';
 import { SurfaceAppView, useSurfaceApp } from './SurfaceApp.js';
 import { pushBrowserAddress, splitSurfaceLocation, surfaceBrowserLocation, useSurfaceBrowserAddress, } from './browser-location.js';
 import { useBrowserAppearance } from './browser-appearance.js';
 import { resolveBrowserLocale } from './browser-locale.js';
-import { createBrowserFilingStore } from './browser-draft-port.js';
 import { createDraftSession } from './draft-session.js';
 import { fenceDraftWidgetActions } from './draft-widget-action.js';
 import { readSessionDraft } from './draft-data-source.js';
-export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeave, previewEditions, draftStorage, checkpointPorts, ...props }) {
+function isBrowserPort(port) {
+    return !!port && 'subscribe' in port && 'restart' in port;
+}
+function samePreviewSession(previous, current) {
+    const before = previous.adapters;
+    const after = current.adapters;
+    return previous.scope === current.scope && previous.bundle === current.bundle &&
+        before.draftStorage?.port === after.draftStorage?.port && before.responses === after.responses &&
+        before.draftStorage?.author?.id === after.draftStorage?.author?.id &&
+        before.draftStorage?.author?.name === after.draftStorage?.author?.name &&
+        before.sessionGeneration === after.sessionGeneration;
+}
+export function BrowserSurfaceApp(input) {
+    const previewEditions = input.previewEditions;
+    if (previewEditions && (!previewEditions.length || new Set(previewEditions.map(entry => entry.scope)).size !== previewEditions.length ||
+        previewEditions.some(entry => !entry.scope)))
+        throw new Error('Preview editions require distinct, non-empty draft scopes.');
+    if (previewEditions?.some(({ scope, adapters }) => adapters.draftStorage && scope !== adapters.draftStorage.scope)) {
+        throw new Error('Preview edition and storage scopes must match.');
+    }
+    const mode = input.adapters?.mode ?? (previewEditions ? 'hash' : 'history');
+    const basePath = input.bundle ? input.adapters.basePath ?? '/' : '/';
     const browser = surfaceBrowserLocation(mode, basePath);
     const { address, routeAddress, anchor, currentRouteAddress } = useSurfaceBrowserAddress(mode);
     const location = browser.read(routeAddress);
     const query = location?.query ?? new URLSearchParams();
     const requestedScope = previewEditions ? query.get('edition') : null;
     const edition = previewEditions?.find(option => option.scope === requestedScope) ?? previewEditions?.[0];
-    const bundle = edition?.bundle ?? props.bundle;
+    const bundle = edition?.bundle ?? input.bundle;
+    const props = edition?.adapters ?? input.adapters ?? {};
+    const { beforeLeave, draftStorage, checkpointPorts, responses, withResponseLoader } = props;
     const previewScope = edition?.scope;
-    // A host can recreate the list while an editor still holds unsaved answers.
-    const [storeEditions, setStoreEditions] = useState(previewEditions);
-    if (storeEditions !== previewEditions && (storeEditions?.length !== previewEditions?.length ||
-        storeEditions?.some(loaded => !previewEditions?.some(candidate => candidate.scope === loaded.scope && candidate.bundle === loaded.bundle)))) {
-        setStoreEditions(previewEditions);
-    }
-    const localStores = useMemo(() => new Map(storeEditions?.map(({ scope, bundle }) => [scope, createBrowserFilingStore({ scope, definitions: bundle.definitions, catalogs: bundle.dataSources })])), [storeEditions]);
-    const localStore = !draftStorage && previewScope ? localStores.get(previewScope) : undefined;
-    const localPort = localStore?.drafts;
-    const port = draftStorage?.port ?? localPort;
+    const port = draftStorage?.port;
+    const localPort = isBrowserPort(port) ? port : undefined;
     const author = draftStorage?.author;
-    const checkpoint = useRef(checkpointPorts);
-    useLayoutEffect(() => { checkpoint.current = checkpointPorts; }, [checkpointPorts]);
-    const sessions = useMemo(() => new Map(), [draftStorage?.port, localStores, props.sessionGeneration, author?.id, author?.name]);
+    // Native history can leave a dirty editor without running controlled navigation.
+    // Keep its writer until the host replaces the edition's storage or identity.
+    const [retained, retain] = useState(() => ({ editions: previewEditions, sessions: new Map() }));
+    if (retained.editions !== previewEditions && (retained.editions?.length !== previewEditions?.length ||
+        retained.editions?.some(previous => !previewEditions?.some(current => samePreviewSession(previous, current))))) {
+        const sessions = new Map();
+        for (const previous of retained.editions ?? []) {
+            const session = retained.sessions.get(previous.scope);
+            if (session && previewEditions?.some(current => samePreviewSession(previous, current))) {
+                sessions.set(previous.scope, session);
+            }
+        }
+        retain({ editions: previewEditions, sessions });
+    }
+    const checkpoint = useRef({ checkpointPorts, previewEditions });
+    useLayoutEffect(() => { checkpoint.current = { checkpointPorts, previewEditions }; }, [checkpointPorts, previewEditions]);
+    const liveSessions = useMemo(() => new Map(), [port, responses, props.sessionGeneration, author?.id, author?.name]);
+    const sessions = previewEditions ? retained.sessions : liveSessions;
     const scope = draftStorage?.scope ?? previewScope;
     const drafts = useMemo(() => {
         if (!scope || !port)
@@ -40,50 +69,83 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
         const retained = sessions.get(scope);
         if (retained)
             return retained;
-        const session = createDraftSession({ scope, port, ...(author && { author }) }, localPort, input => checkpoint.current?.(input) ?? input.ports);
+        const session = createDraftSession({ scope, port, responses, definitions: bundle.definitions, ...(author && { author }) }, localPort, input => {
+            const current = checkpoint.current;
+            const ports = current.previewEditions ? current.previewEditions.find(entry => entry.scope === scope)?.adapters.checkpointPorts : current.checkpointPorts;
+            return ports?.(input) ?? input.ports;
+        });
         sessions.set(scope, session);
         return session;
-    }, [scope, port, sessions, localPort, author?.id, author?.name]);
-    const attachedSessions = useRef(new Set());
+    }, [scope, port, responses, bundle.definitions, sessions, localPort, author?.id, author?.name]);
+    const attachedSessions = useRef(undefined);
     useEffect(() => {
-        const attached = attachedSessions.current;
-        attached.add(sessions);
+        attachedSessions.current = sessions;
         return () => {
-            attached.delete(sessions);
+            attachedSessions.current = undefined;
             queueMicrotask(() => {
-                if (!attached.has(sessions))
-                    for (const session of sessions.values())
+                for (const [scope, session] of sessions) {
+                    if (attachedSessions.current?.get(scope) !== session)
                         session.dispose();
+                }
             });
         };
     }, [sessions]);
     const [draftRevision, setDraftRevision] = useState(0);
     useEffect(() => localPort?.subscribe(() => setDraftRevision(revision => revision + 1)), [localPort]);
     const dataSourceLoader = useMemo(() => {
-        if (!drafts)
+        if (!drafts && !responses && !withResponseLoader)
             return props.dataSourceLoader;
         const baseline = props.dataSourceLoader ?? (() => ({ status: 'unavailable', reason: 'Data source unavailable' }));
-        const readResponse = localStore ? responseSourceLoader(localStore.responses) : undefined;
-        return request => {
-            if (request.descriptor.source.runtime.delivery === 'draft')
+        const readResponse = responses && responseSourceLoader(responses);
+        const load = request => {
+            if (drafts && request.descriptor.source.runtime.delivery === 'draft')
                 return readSessionDraft(drafts, bundle.definitions, request);
             return readResponse && request.responseSelection ? readResponse(request) : baseline(request);
         };
-    }, [drafts, localStore, bundle.definitions, props.dataSourceLoader]);
+        return withResponseLoader ? withResponseLoader(load) : load;
+    }, [drafts, responses, withResponseLoader, bundle.definitions, props.dataSourceLoader]);
     const model = useSurfaceApp({ ...props, bundle });
     const entry = model.app.entry ? routeHref(model.app.entry, props.routeParams) : undefined;
     const entryPath = entry?.refusal === undefined ? entry?.href : undefined;
     const atEntry = location?.path === '' ||
         (location?.path === '/' && matchRoute(model.app, '/').refusal === 'unmatched');
     const path = requestedScope === null || requestedScope === previewScope
-        ? atEntry ? entryPath : location?.path
+        ? atEntry ? edition?.initialPath ?? entryPath : location?.path
         : undefined;
+    const baseRouteParamsKey = canonicalFiniteJson(props.routeParams ?? {});
+    const lastSeenParamsRef = useRef({
+        scope: previewScope,
+        generation: props.sessionGeneration,
+        baseParamsKey: baseRouteParamsKey,
+        params: {},
+    });
+    if (lastSeenParamsRef.current.scope !== previewScope
+        || lastSeenParamsRef.current.generation !== props.sessionGeneration
+        || lastSeenParamsRef.current.baseParamsKey !== baseRouteParamsKey) {
+        lastSeenParamsRef.current = {
+            scope: previewScope,
+            generation: props.sessionGeneration,
+            baseParamsKey: baseRouteParamsKey,
+            params: {},
+        };
+    }
+    const currentPathMatch = path !== undefined ? matchRoute(model.app, path).match : undefined;
+    if (currentPathMatch) {
+        const matchedEntries = Object.entries(currentPathMatch.params);
+        if (matchedEntries.some(([key, value]) => lastSeenParamsRef.current.params[key] !== value)) {
+            lastSeenParamsRef.current = {
+                ...lastSeenParamsRef.current,
+                params: { ...lastSeenParamsRef.current.params, ...currentPathMatch.params },
+            };
+        }
+    }
+    const lastSeenParams = lastSeenParamsRef.current.params;
     const localeDocuments = props.localeDocuments ?? bundle.localeDocuments;
     const locale = useMemo(() => resolveBrowserLocale(bundle, localeDocuments), [bundle, localeDocuments]);
     const { preference, appearance, choose } = useBrowserAppearance();
     const [save, setSave] = useState();
     const request = useRef(0);
-    const visit = useMemo(() => ({}), [address, bundle, props.sessionGeneration]);
+    const visit = useMemo(() => ({}), [address, bundle, drafts, previewScope, props.sessionGeneration]);
     const currentVisit = useRef(undefined);
     useLayoutEffect(() => {
         currentVisit.current = visit;
@@ -129,25 +191,19 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
         const selected = previewEditions?.find(option => option.scope === scope);
         if (!selected || scope === previewScope)
             return;
-        const { entry } = composeSurfaceApp(selected.bundle.surfaces, { entrySurface: selected.bundle.entrySurface });
-        const target = entry ? routeHref(entry, props.routeParams) : undefined;
-        if (target && !target.refusal)
-            navigate(target.href, scope);
+        navigate(selected.initialPath, scope);
     }
     function sectionDestination(slot, section) {
         const search = new URLSearchParams(query);
         search.set('slot', slot);
         search.set('section', section);
+        search.delete('field');
         return `${path}?${search}`;
-    }
-    if (previewEditions && (new Set(previewEditions.map(option => option.scope)).size !== previewEditions.length ||
-        previewEditions.some(option => !option.scope))) {
-        throw new Error('Preview editions require distinct, non-empty draft scopes.');
     }
     return _jsx(SurfaceAppView, { ...props, bundle: bundle, model: model, location: path ?? '', dataSourceLoader: dataSourceLoader, widgetActionExecutor: widgetActionExecutor, dataSourceRevision: request => {
             const ownerRevision = props.dataSourceRevision?.(request);
             const tracksDraft = drafts && (request.descriptor.source.runtime.delivery === 'draft' ||
-                (localStore && request.responseSelection !== undefined));
+                (responses && request.responseSelection !== undefined));
             if (!tracksDraft)
                 return ownerRevision;
             if (ownerRevision === undefined)
@@ -159,6 +215,7 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
             appearance,
             direction: locale.direction,
             entryPath,
+            lastSeenParams,
             anchor,
             previewScope,
             drafts,
@@ -170,7 +227,7 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
                     ? browser.read(currentRouteAddress())?.query.get('edition') ?? previewEditions[0].scope
                     : undefined;
                 if (currentScope === previewScope && currentVisit.current === visit) {
-                    setSave({ scope: previewScope, notice });
+                    setSave({ scope: previewScope, generation: props.sessionGeneration, notice });
                     if (!localPort && drafts && notice === 'saved')
                         setDraftRevision(revision => revision + 1);
                 }
@@ -178,11 +235,19 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
             workspace: {
                 slot: query.get('slot') ?? undefined,
                 activeSection: query.get('section') ?? undefined,
+                focusField: query.get('field') ?? undefined,
+                focusAcknowledgement: query.get('acknowledge') ?? undefined,
                 hrefForSection: (slot, section) => resolveHref(sectionDestination(slot, section)),
                 onActiveSectionChange: (slot, section) => navigate(sectionDestination(slot, section)),
             },
             editionPicker: previewEditions && previewEditions.length > 1 && (_jsxs("label", { children: [locale.strings('previewEditionLabel'), _jsx("select", { "data-surface-edition": "", value: previewScope, onChange: event => switchEdition(event.currentTarget.value), children: previewEditions.map(option => _jsx("option", { value: option.scope, children: option.bundle.title ?? option.scope }, option.scope)) })] })),
             appearancePicker: (_jsxs("label", { children: [locale.strings('appearanceLabel'), _jsxs("select", { "data-surface-appearance": "", value: preference, onChange: event => choose(event.currentTarget.value), children: [_jsx("option", { value: "system", children: locale.strings('appearanceSystem') }), _jsx("option", { value: "light", children: locale.strings('appearanceLight') }), _jsx("option", { value: "dark", children: locale.strings('appearanceDark') })] })] })),
-            saveNotice: save && save.scope === previewScope ? locale.strings(save.notice) : '',
+            saveNotice: save && save.scope === previewScope && save.generation === props.sessionGeneration
+                ? save.notice === 'submitted'
+                    ? (localPort ? 'Submitted in this browser.' : 'Submitted.')
+                    : save.notice === 'cleared'
+                        ? ''
+                        : locale.strings(save.notice)
+                : '',
         }, sessionGeneration: JSON.stringify([previewScope, props.sessionGeneration]) });
 }

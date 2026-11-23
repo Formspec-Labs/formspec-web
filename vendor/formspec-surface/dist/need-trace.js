@@ -1,19 +1,36 @@
 /** @filedesc Canonical Need-anchor extraction shared by Surface planners and bindings. */
+import { isPlainJsonArray, isPlainJsonObject } from '@formspec-org/engine/render';
 const NEED_ANCHOR = /^need:([a-zA-Z][a-zA-Z0-9_-]*)@[1-9][0-9]*$/;
 export function isCanonicalNeedAnchor(value) {
     return typeof value === 'string' && NEED_ANCHOR.test(value);
 }
-export function generationNeedAnchors(value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value))
-        return [];
-    const generation = value['x-generation'];
-    if (!generation || typeof generation !== 'object' || Array.isArray(generation)) {
-        return [];
+function ownEnumerableDataProperty(value, key) {
+    if (!isPlainJsonObject(value))
+        return { present: false, value: undefined };
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable) {
+        return { present: false, value: undefined };
     }
-    const anchors = generation.anchors;
-    return Array.isArray(anchors)
-        ? anchors.filter(isCanonicalNeedAnchor)
-        : [];
+    return { present: true, value: descriptor.value };
+}
+export function generationNeedAnchors(value) {
+    const genProp = ownEnumerableDataProperty(value, 'x-generation');
+    if (!genProp.present)
+        return [];
+    const anchorsProp = ownEnumerableDataProperty(genProp.value, 'anchors');
+    if (!anchorsProp.present || !isPlainJsonArray(anchorsProp.value))
+        return [];
+    const anchors = [];
+    for (let index = 0; index < anchorsProp.value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(anchorsProp.value, String(index));
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable) {
+            return [];
+        }
+        if (isCanonicalNeedAnchor(descriptor.value)) {
+            anchors.push(descriptor.value);
+        }
+    }
+    return anchors;
 }
 export function mergeNeedAnchors(...groups) {
     const merged = [];

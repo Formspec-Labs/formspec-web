@@ -70,7 +70,7 @@ export function readDataSourceSelection(descriptor, loaded) {
             || (record.responseHash === undefined
                 ? responseSelection.status === "completed"
                 : typeof record.responseHash !== "string" || !SHA256_DIGEST.test(record.responseHash)))
-        || (newer !== undefined && (none || responseSelection.pin !== "at-open"
+        || (newer !== undefined && (responseSelection.pin !== "at-open"
             || !newer || typeof newer.responseId !== "string" || !newer.responseId
             || typeof newer.responseHash !== "string" || !SHA256_DIGEST.test(newer.responseHash)))) {
         return undefined;
@@ -273,7 +273,7 @@ export async function loadWidgetDataInputs(request) {
             continue;
         }
         if (loaded.freshness === "stale" &&
-            input.descriptor.source.runtime.failureMode !== "stale-ok") {
+            (request.requireFresh || input.descriptor.source.runtime.failureMode !== "stale-ok")) {
             const failure = runtimeFailure(input, "stale-disallowed", "the loader returned stale data and the catalog does not allow it");
             if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);

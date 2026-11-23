@@ -1,9 +1,11 @@
 /** @filedesc Production-callable AppGraph report producer pipeline. */
 import { artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArtifacts, } from './artifact-resolver.js';
 import { moduleResolverInputFromAppGraph, resolveModules, snapshotModulePayloadSchemaResources, } from './module-resolver.js';
-import { validateAppGraph } from './validator.js';
+import { documentLintValidator } from './document-lint.js';
+import { requiresResponseProjectionCheck } from './instance-projection.js';
+import { prepareAppGraphValidation } from './validator.js';
 import { prepareComponentRouteResolver } from './component-route-resolution.js';
-function finishAppGraphValidationReport(request, artifactResolutionReport, manifestDiagnostics = []) {
+async function finishAppGraphValidationReport(request, artifactResolutionReport, manifestDiagnostics = []) {
     const graphInput = artifactResolutionGraphInput(artifactResolutionReport);
     const moduleResolutionReport = resolveModules(moduleResolverInputFromAppGraph({
         manifest: graphInput.manifest,
@@ -33,7 +35,14 @@ function finishAppGraphValidationReport(request, artifactResolutionReport, manif
         ...(request.renderedNeedTrace ? { renderedNeedTrace: request.renderedNeedTrace } : {}),
         ...(request.validationOptions ? { options: request.validationOptions } : {}),
     };
-    const report = validateAppGraph(validationRequest);
+    const prepared = prepareAppGraphValidation(validationRequest);
+    let validators = request.crossArtifactValidators;
+    if (prepared.canRunCrossArtifactChecks && request.loadProjectionLinter
+        && !validators?.some(validator => validator.checksResponseProjections)
+        && graphInput.handles.some(requiresResponseProjectionCheck)) {
+        validators = [...(validators ?? []), documentLintValidator(await request.loadProjectionLinter())];
+    }
+    const report = prepared.finish(validators);
     return {
         artifactResolutionReport,
         moduleResolutionReport,

@@ -61,7 +61,8 @@ export function createStaticResponseMetadataReader(input) {
         }
     }
     checkItems(definition.items);
-    function itemAt(path) {
+    const explained = new Set((response.explanations ?? []).flatMap(entry => 'group' in entry ? entry.paths : [entry.path]));
+    function itemAt(path, allowBlank = false) {
         const parsed = Path.parse(path);
         if (!path || parsed.toString() !== path || parsed.segments.some(segment => segment.kind !== PathSegmentKind.Exact && segment.kind !== PathSegmentKind.Indexed)) {
             refuse('path-invalid');
@@ -81,16 +82,21 @@ export function createStaticResponseMetadataReader(input) {
             }
             else if (segment.kind === PathSegmentKind.Exact) {
                 if (index > 0) {
-                    if (!item || item.type !== 'group' || Array.isArray(value))
+                    if (!item || item.type !== 'group' || Array.isArray(value) ||
+                        (item.repeatable && parsed.segments[index - 1]?.kind !== PathSegmentKind.Indexed))
                         refuse('path-invalid');
                     items = item.children ?? [];
                 }
                 const matches = items.filter(candidate => candidate.key === segment.key);
-                if (matches.length !== 1 || !isDataObject(value)
-                    || !Object.prototype.hasOwnProperty.call(value, segment.key))
+                if (matches.length !== 1 || !isDataObject(value))
                     refuse('path-unavailable');
                 item = matches[0];
-                value = value[segment.key];
+                if (Object.prototype.hasOwnProperty.call(value, segment.key))
+                    value = value[segment.key];
+                else if (allowBlank && explained.has(path))
+                    value = {};
+                else
+                    refuse('path-unavailable');
             }
         }
         if (!item || item.type === 'display')
@@ -104,7 +110,7 @@ export function createStaticResponseMetadataReader(input) {
     }
     return {
         label(path) {
-            const item = itemAt(path);
+            const item = itemAt(path, true);
             return resolveItemLabel({ localeStore: store, itemKey: item.key, inlineLabel: item.label,
                 labels: item.labels, context: null, interpolate: staticText }).value;
         },

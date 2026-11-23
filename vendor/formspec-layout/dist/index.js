@@ -12,7 +12,7 @@ export { resolvePresentation, resolveWidget, setTailwindMerge, } from './theme-r
 // Token resolution
 export { resolveToken, emitMergedThemeCssVars } from './tokens.js';
 // Responsive breakpoint merging
-export { resolveResponsiveProps } from './responsive.js';
+export { resolveResponsiveProps, extractBreakpointEntries, matchBreakpoint, } from './responsive.js';
 // Parameter interpolation (custom component expansion)
 export { interpolateParams } from './params.js';
 // Default component mapping
@@ -23,8 +23,9 @@ export { widgetTokenToComponent, KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT
 // Form presentation merge (definition + component document)
 export { mergeFormPresentationForPlanning } from './form-presentation.js';
 // Layout planner
-export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, ensureValidationSummary, createNodeIdGenerator, preparePlanContext, } from './planner.js';
-export { placementCovers, placementKey, resolvePageSequence } from './page-sequence.js';
+export { planComponentTree, planDefinitionFallback, planDefinitionLayout, planContains, ensureActionButton, ensureValidationSummary, createNodeIdGenerator, preparePlanContext, } from './planner.js';
+export { describeWizardStep, findAuthoredPageSection, hasWizardSections, placementCovers, placementKey, planExplicitPageRoot, resolvePageSequence, resolveSectionTitlePlan } from './page-sequence.js';
+export { planPageMode } from './plan-page-mode.js';
 export * from './form-progress.js';
 // Anchored overlays (Modal / Popover positioning)
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';
@@ -33,7 +34,8 @@ export { bindAutoModal } from './auto-modal.js';
 export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOUNCE_DELAY_MS, } from './character-count.js';
 // Closed renderer-chrome string inventory (Locale spec §3.1.10 `$ui.<ChromeStringKey>`)
 export { UI_STRINGS, fillUiParams } from './ui-strings.js';
-export { readValidationSummaryRows, validationResultPath } from './validation-summary.js';
+export { readValidationSummaryRows, validationResultPath, stripSeverityPrefix, dedupeSeverityPrefix, } from './validation-summary.js';
+export { readWarningAcknowledgementGroups, warningAcknowledgementLegend } from './warning-acknowledgement.js';
 // Platform defaults & theme generation
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 // UI Graph Policy route-landmark projection (shared by React + webcomponent)

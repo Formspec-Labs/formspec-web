@@ -34,6 +34,11 @@ export function planMatchedRoute(input) {
         params: input.params ?? {},
         slotSuppliedTriggers: slotSuppliedTriggers(route.slots, responseActions, {
             includeWidgetActions: input.hasWidgetActionExecutor ?? false,
+            themeDocument: grant.themeDocument,
+            ...(input.activeBreakpoint !== undefined ? { activeBreakpoint: input.activeBreakpoint } : {}),
+            ...(input.matchesMinWidth !== undefined ? { matchesMinWidth: input.matchesMinWidth } : {}),
+            ...(input.slotFormEngines !== undefined ? { slotFormEngines: input.slotFormEngines } : {}),
+            ...(input.slotRenderedActionRefs !== undefined ? { slotRenderedActionRefs: input.slotRenderedActionRefs } : {}),
         }),
         ...(input.evaluateCondition !== undefined
             ? { evaluateCondition: input.evaluateCondition }
@@ -45,6 +50,7 @@ export function planMatchedRoute(input) {
         surfaceRef: input.surfaceRef,
         params: input.params ?? {},
         slots: route.slots,
+        bands: route.bands,
         grant,
         transitions: transitions.transitions,
         headingBaseLevel,

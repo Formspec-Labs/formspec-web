@@ -43,4 +43,5 @@ export { ROUTE_CLASS_THEME_AUTHORITY, TENANT_THEMING_REFUSING_ROUTE_CLASSES, val
 export { artifactHandlesFor, validateAppGraph, } from './validator.js';
 export { parseRouteSubjectKey } from './surface-definition-slots.js';
 export { resolveDraftReviewTarget } from './surface-draft-review.js';
-export { filingStatusEntries, resolveFilingStatusTargets, validateFilingStatusTargets } from './filing-status-targets.js';
+export { filingRepeatFieldsValid, filingRepeatSubjectBound, filingStatusEntries, resolveFilingStatusTargets, validateFilingStatusTargets, } from './filing-status-targets.js';
+export { resolveDraftStartTarget } from './draft-start-target.js';

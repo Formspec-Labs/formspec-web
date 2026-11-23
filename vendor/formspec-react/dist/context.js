@@ -1,14 +1,15 @@
 'use client';
-import { jsx as _jsx } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc FormspecProvider — React context wrapping a FormEngine + optional layout plan. */
 import { createContext, useContext, useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { signal } from '@preact/signals-core';
-import { ActionFeedbackProvider } from './action-feedback.js';
-import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
-import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, planContains, preparePlanContext, ensureActionButton, ensureValidationSummary, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
-import { planPageMode } from './plan-page-mode';
+import { ActionFeedbackProvider, useActionFeedbackStore } from './action-feedback.js';
+import { generationNeedAnchors } from './projection-metadata.js';
+import { autoPlacedDefinitionActions, createFormEngine, findResponseActionByIntent, invokeResponseActionAsync, isValidDefinitionResponseActionsDocument, missingSubmitActionFinding, resolveResponseAction, createResponseActionAutosaveController, } from '@formspec-org/engine';
+import { buildPlatformTheme, mergePlatformAndTenantTheme, extractBreakpointEntries, matchBreakpoint, planDefinitionLayout, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
 import { useSignal } from './use-signal';
 import { chromeText } from './use-chrome-text';
+import { useExplanationState } from './explanation-state';
 const platformTheme = buildPlatformTheme();
 /**
  * Fail-closed browser policy for human Reference links — the shared rule, so React and the webcomponent admit
@@ -17,119 +18,13 @@ const platformTheme = buildPlatformTheme();
 export const admitDefaultFieldHelpUri = admitFieldHelpUri;
 /** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
 export const FormspecContext = createContext(null);
-const RESPONSE_ACTION_ID = /^[A-Za-z][A-Za-z0-9-]*$/;
-function record(value) {
-    return value && typeof value === 'object' && !Array.isArray(value)
-        ? value
-        : null;
-}
-function hasNonEmptyString(value) {
-    return typeof value === 'string' && value.trim().length > 0;
-}
-function hasValidResponseActionEffectShape(value) {
-    const effect = record(value);
-    if (!effect || typeof effect.type !== 'string')
-        return false;
-    if (effect.onError !== undefined
-        && effect.onError !== 'fail'
-        && effect.onError !== 'defer') {
-        return false;
-    }
-    switch (effect.type) {
-        case 'mappingExecution':
-            return hasNonEmptyString(effect.mappingRef)
-                && hasNonEmptyString(effect.idempotencyKey);
-        case 'ledgerAppend':
-            return hasNonEmptyString(effect.eventKind)
-                && hasNonEmptyString(effect.idempotencyKey);
-        case 'handoffAssembly':
-            return hasNonEmptyString(effect.handoffProfileRef)
-                && hasNonEmptyString(effect.recipientRef)
-                && hasNonEmptyString(effect.idempotencyKey);
-        case 'evidenceRequest':
-        case 'serviceRequest':
-            return hasNonEmptyString(effect.requestRef)
-                && hasNonEmptyString(effect.idempotencyKey);
-        case 'hostEvent':
-            return hasNonEmptyString(effect.eventName)
-                && effect.idempotencyKey === undefined;
-        case 'browserResource':
-            return (effect.operation === 'open' || effect.operation === 'download')
-                && hasNonEmptyString(effect.resourceRef)
-                && effect.idempotencyKey === undefined;
-        default:
-            return false;
-    }
-}
-function hasValidResponseActionShape(value) {
-    const action = record(value);
-    if (!action
-        || !hasNonEmptyString(action.id)
-        || !RESPONSE_ACTION_ID.test(action.id)
-        || !hasNonEmptyString(action.intent)
-        || !Array.isArray(action.effects)
-        || action.effects.length === 0
-        || !action.effects.every(hasValidResponseActionEffectShape)) {
-        return false;
-    }
-    const label = action.label;
-    if (label !== undefined) {
-        const candidate = record(label);
-        const hasLiteral = candidate ? hasNonEmptyString(candidate.literal) : false;
-        const hasRef = candidate ? hasNonEmptyString(candidate.ref) : false;
-        if (!candidate || hasLiteral === hasRef)
-            return false;
-    }
-    try {
-        resolveResponseActionValidationTuple(value);
-    }
-    catch {
-        return false;
-    }
-    return true;
-}
-function hasActionLabel(action) {
-    const label = record(action.label);
-    return label ? hasNonEmptyString(label.literal) || hasNonEmptyString(label.ref) : false;
-}
-/**
- * Select actions that the Definition auto-renderer can place without
- * inventing a control label. The document itself must be a matching,
- * response-scoped document with unique, structurally usable actions; one bad
- * action closes the whole auto-placement seam.
- */
-function autoPlacedDefinitionActions(document, definition) {
-    const candidate = record(document);
-    const target = record(candidate?.targetDefinition);
-    if (!candidate
-        || candidate.$formspecResponseActions !== '1.0'
-        || !hasNonEmptyString(candidate.version)
-        || (candidate.scope !== undefined && candidate.scope !== 'response')
-        || !target
-        || !hasNonEmptyString(target.url)
-        || target.url !== definition.url
-        || (target.compatibleVersions !== undefined
-            && !hasNonEmptyString(target.compatibleVersions))
-        || !Array.isArray(candidate.actions)
-        || candidate.actions.length === 0
-        || !candidate.actions.every(hasValidResponseActionShape)) {
-        return [];
-    }
-    const ids = new Set();
-    for (const action of candidate.actions) {
-        if (ids.has(action.id))
-            return [];
-        ids.add(action.id);
-    }
-    return candidate.actions.filter(hasActionLabel);
-}
 /**
  * Provides FormEngine and layout plan to descendant hooks and renderers.
  *
  * Accepts either a pre-built `engine` or a raw `definition` (creates engine internally).
  */
 export function FormspecProvider(props) {
-    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, showValidationSummary = false, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, showValidationSummary = false, onHostEvent, onActionFinding, onActionResult, onControlActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
     const shouldEmitThemeTokens = props.emitThemeTokens ?? true;
     const semanticResponseState = useMemo(() => ({
         responseRevision: semanticControlScope?.initialResponseRevision ?? 0,
@@ -213,105 +108,83 @@ export function FormspecProvider(props) {
         }
         return map;
     }, [registryEntries]);
-    // Responsive breakpoint detection — match component document breakpoints via matchMedia
-    const [activeBreakpoint, setActiveBreakpoint] = useState(() => {
-        if (typeof window === 'undefined' || !componentDocument?.breakpoints)
-            return null;
-        return detectBreakpoint(componentDocument.breakpoints);
-    });
+    // Responsive breakpoint detection — match merged Theme + Component breakpoints via matchMedia
+    const [activeBreakpoint, setActiveBreakpoint] = useState(() => detectBreakpoint(effectiveThemeDocument?.breakpoints, componentDocument?.breakpoints));
     useEffect(() => {
-        if (typeof window === 'undefined' || !componentDocument?.breakpoints)
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
             return;
-        const breakpoints = componentDocument.breakpoints;
-        const entries = Object.entries(breakpoints)
-            .map(([name, bp]) => {
-            const v = typeof bp === 'number' ? bp : (bp.minWidth ?? null);
-            return v != null ? [name, v] : null;
-        })
-            .filter((e) => e !== null)
-            .sort(([, a], [, b]) => a - b);
+        const entries = extractBreakpointEntries(effectiveThemeDocument?.breakpoints, componentDocument?.breakpoints);
+        const update = () => {
+            const next = detectBreakpoint(effectiveThemeDocument?.breakpoints, componentDocument?.breakpoints);
+            setActiveBreakpoint((prev) => (prev === next ? prev : next));
+        };
+        update();
         if (entries.length === 0)
             return;
         const queries = entries.map(([name, minWidth]) => ({
             name,
             mql: window.matchMedia(`(min-width: ${minWidth}px)`),
         }));
-        const update = () => setActiveBreakpoint(detectBreakpoint(breakpoints));
         for (const { mql } of queries)
             mql.addEventListener('change', update);
         return () => { for (const { mql } of queries)
             mql.removeEventListener('change', update); };
-    }, [componentDocument]);
+    }, [effectiveThemeDocument, componentDocument]);
     const mergedFormPresentation = useMemo(() => engine
         ? mergeFormPresentationForPlanning(engine.getDefinition().formPresentation, componentDocument?.formPresentation)
         : undefined, [engine, componentDocument]);
     const [showValidationSummaryAttr, setShowValidationSummaryAttr] = useState(false);
     const effectiveShowValidationSummary = showValidationSummary || showValidationSummaryAttr;
+    const activeDefinition = engine ? engine.getDefinition() : definition;
+    const admittedResponseActionsDocument = useMemo(() => (activeDefinition && isValidDefinitionResponseActionsDocument(responseActionsDocument, activeDefinition))
+        ? responseActionsDocument
+        : null, [activeDefinition, responseActionsDocument]);
     const { root: layoutPlan, workspace } = useMemo(() => {
         if (!engine)
-            return { root: null };
+            return { root: null, workspace: undefined };
         const def = engine.getDefinition();
-        const items = def.items || [];
-        const pageMode = mergedFormPresentation?.pageMode;
-        const planCtx = preparePlanContext({
-            items,
-            formPresentation: mergedFormPresentation,
+        const autoPlaceControls = onSubmit
+            ? 'always'
+            : responseActionInvoker
+                ? 'when-unauthored'
+                : 'never';
+        const autoPlacedActionRefs = autoPlaceControls !== 'never'
+            ? autoPlacedDefinitionActions(admittedResponseActionsDocument, def).map((action) => action.id)
+            : [];
+        return planDefinitionLayout({
+            definition: def,
             componentDocument,
+            themeDocument: effectiveThemeDocument,
+            activeBreakpoint,
             componentGraph: componentGraph ?? undefined,
             hostEvidence: hostEvidence ?? undefined,
-            theme: effectiveThemeDocument,
-            activeBreakpoint,
-            findItem: (key) => findItemByKey(items, key),
+            autoPlacedActionRefs,
+            autoPlaceControls,
+            showValidationSummary: effectiveShowValidationSummary,
         });
-        const paged = pageMode === 'wizard' || pageMode === 'tabs' || pageMode === 'workspace'
-            ? planPageMode(def, planCtx, pageMode)
-            : undefined;
-        let root;
-        if (paged) {
-            root = paged.root;
-        }
-        else if (componentDocument?.tree) {
-            root = planComponentTree(componentDocument.tree, planCtx);
-        }
-        else {
-            // planDefinitionFallback returns an array — wrap in a root Stack node
-            const nodes = planDefinitionFallback(items, planCtx);
-            root = {
-                id: 'root',
-                component: 'Stack',
-                category: 'layout',
-                props: {},
-                cssClasses: [],
-                children: nodes,
-            };
-        }
-        // A submit callback opts in; an invoker fills only an unauthored control layout.
-        // Place each usable response-scoped Action in document order. Exact
-        // actionRef deduplication preserves explicitly authored controls, and
-        // authored labels keep visible copy in the Action or its Locale reference.
-        if (onSubmit || responseActionInvoker && !planContains(root, 'ActionButton')) {
-            for (const action of autoPlacedDefinitionActions(responseActionsDocument, def)) {
-                ensureActionButton(root, planCtx.nextId, { pageMode: root.pageMode, actionRef: action.id });
-            }
-        }
-        if (effectiveShowValidationSummary)
-            ensureValidationSummary(root, planCtx.nextId);
-        return { root, workspace: paged?.workspace };
-    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, responseActionInvoker, effectiveShowValidationSummary, responseActionsDocument, mergedFormPresentation]);
+    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, responseActionInvoker, effectiveShowValidationSummary, admittedResponseActionsDocument]);
     // §10: surface a finding when the host wires onSubmit but no submit Action
     // is published — otherwise auto-inject silently no-ops.
     useEffect(() => {
         if (!onSubmit || !onActionFinding)
             return;
-        if (findResponseActionByIntent(responseActionsDocument, 'submit'))
+        if (findResponseActionByIntent(admittedResponseActionsDocument, 'submit'))
             return;
         onActionFinding(missingSubmitActionFinding());
-    }, [onSubmit, onActionFinding, responseActionsDocument]);
+    }, [onSubmit, onActionFinding, admittedResponseActionsDocument]);
     // Touched tracking — stable across re-renders
     const touchedFieldsRef = useRef(new Set());
     const touchedVersionSignal = useMemo(() => signal(0), []);
     const latestSubmitSignal = useMemo(() => signal(null), []);
     const recordSubmit = useCallback((result) => { latestSubmitSignal.value = result; }, [latestSubmitSignal]);
+    const explanationState = useExplanationState(engine, latestSubmitSignal);
+    const fieldJumpHandlerRef = useRef(null);
+    const registerFieldJump = useCallback((handler) => {
+        fieldJumpHandlerRef.current = handler;
+    }, []);
+    const jumpToField = useCallback((path, options) => {
+        return fieldJumpHandlerRef.current ? fieldJumpHandlerRef.current(path, options) : false;
+    }, []);
     const touchField = useCallback((path) => {
         if (!touchedFieldsRef.current.has(path)) {
             touchedFieldsRef.current.add(path);
@@ -334,7 +207,7 @@ export function FormspecProvider(props) {
     const isTouched = useCallback((path) => {
         return touchedFieldsRef.current.has(path);
     }, []);
-    const resolveActionRef = useCallback((actionRef, nodeId) => resolveResponseAction(responseActionsDocument, actionRef, nodeId), [responseActionsDocument]);
+    const resolveActionRef = useCallback((actionRef, nodeId) => resolveResponseAction(admittedResponseActionsDocument, actionRef, nodeId), [admittedResponseActionsDocument]);
     // Auto-emit theme tokens as CSS custom properties onto the provider's OWN
     // element — never the document root. See `themeScopeRef` below for why.
     useEffect(() => {
@@ -361,12 +234,14 @@ export function FormspecProvider(props) {
             return () => engine.dispose();
         }
     }, [engine, externalEngine]);
-    const { activeSection, onActiveSectionChange, sectionNavigationActive, hrefForSection, onSectionTitleChange, updateDocumentTitle } = props;
+    const { activeSection, focusField, onActiveSectionChange, sectionNavigationActive, hrefForSection, acknowledgementLink, onSectionTitleChange, updateDocumentTitle, } = props;
     const controlledSection = Object.prototype.hasOwnProperty.call(props, 'activeSection');
     const workspaceNavigation = useMemo(() => ({
         ...(controlledSection && { activeSection }),
-        onActiveSectionChange, sectionNavigationActive, hrefForSection, onSectionTitleChange, updateDocumentTitle,
-    }), [controlledSection, activeSection, onActiveSectionChange, sectionNavigationActive, hrefForSection, onSectionTitleChange, updateDocumentTitle]);
+        ...(focusField !== undefined && { focusField }),
+        onActiveSectionChange, sectionNavigationActive, hrefForSection, acknowledgementLink, onSectionTitleChange, updateDocumentTitle,
+    }), [controlledSection, activeSection, focusField, onActiveSectionChange, sectionNavigationActive, hrefForSection,
+        acknowledgementLink, onSectionTitleChange, updateDocumentTitle]);
     const value = useMemo(() => ({
         engine,
         layoutPlan,
@@ -378,12 +253,13 @@ export function FormspecProvider(props) {
         componentDocument,
         componentGraph,
         hostEvidence,
-        responseActionsDocument,
+        responseActionsDocument: admittedResponseActionsDocument,
         semanticControlScope,
         onSubmit,
         onHostEvent,
         onActionFinding,
         onActionResult,
+        onControlActionResult,
         responseActionInvoker,
         evaluateActionPrecondition,
         evaluateActionEffectExpression,
@@ -397,6 +273,7 @@ export function FormspecProvider(props) {
         touchedVersion: touchedVersionSignal,
         isTouched,
         latestSubmit: latestSubmitSignal,
+        explanationState,
         recordSubmit,
         registryEntries: registryMap,
         resolveFieldHelp,
@@ -404,8 +281,178 @@ export function FormspecProvider(props) {
         fieldHelpLabel,
         formPresentation: mergedFormPresentation,
         setShowValidationSummaryAttr,
-    }), [engine, layoutPlan, workspace, workspaceNavigation, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation, setShowValidationSummaryAttr]);
-    return (_jsx(FormspecContext.Provider, { value: value, children: _jsx(ActionFeedbackProvider, { engine: engine, responseId: semanticControlScope?.responseId, renderInstanceId: semanticControlScope?.renderInstanceId, draftSaveFeedback: props.draftSaveFeedback, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }) }));
+        registerFieldJump,
+        jumpToField,
+    }), [engine, layoutPlan, workspace, workspaceNavigation, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, admittedResponseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, onControlActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, explanationState, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation, setShowValidationSummaryAttr, registerFieldJump, jumpToField]);
+    return (_jsx(FormspecContext.Provider, { value: value, children: _jsxs(ActionFeedbackProvider, { engine: engine, responseId: semanticControlScope?.responseId, renderInstanceId: semanticControlScope?.renderInstanceId, draftSaveFeedback: props.draftSaveFeedback, children: [_jsx(FormspecAutosaveEffect, { draftSaveFeedback: props.draftSaveFeedback }), _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children })] }) }));
+}
+function FormspecAutosaveEffect({ draftSaveFeedback }) {
+    const { engine, responseActionsDocument, semanticControlScope, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, } = useFormspecContext();
+    const feedbackStore = useActionFeedbackStore();
+    const latestRef = useRef({
+        semanticControlScope,
+        onHostEvent,
+        onActionFinding,
+        onActionResult,
+        responseActionInvoker,
+        evaluateActionPrecondition,
+        evaluateActionEffectExpression,
+        dispatchActionEffect,
+        resolveActionIdempotencyKey,
+        feedbackStore,
+        responseActionsDocument,
+    });
+    latestRef.current = {
+        semanticControlScope,
+        onHostEvent,
+        onActionFinding,
+        onActionResult,
+        responseActionInvoker,
+        evaluateActionPrecondition,
+        evaluateActionEffectExpression,
+        dispatchActionEffect,
+        resolveActionIdempotencyKey,
+        feedbackStore,
+        responseActionsDocument,
+    };
+    const controllerRef = useRef(null);
+    useEffect(() => {
+        if (draftSaveFeedback === 'external' || !engine) {
+            return;
+        }
+        const activeTickets = new Set();
+        let settledTicket;
+        const cancelActiveTickets = () => {
+            for (const pendingTicket of activeTickets) {
+                latestRef.current.feedbackStore?.cancel(pendingTicket);
+            }
+            activeTickets.clear();
+        };
+        const cancelSettledTicket = () => {
+            if (settledTicket) {
+                latestRef.current.feedbackStore?.cancel(settledTicket);
+                settledTicket = undefined;
+            }
+        };
+        const controller = createResponseActionAutosaveController({
+            engine,
+            document: latestRef.current.responseActionsDocument,
+            onFinding: (finding) => {
+                latestRef.current.onActionFinding?.(finding);
+            },
+            onDocumentChange: ({ equivalentAction }) => {
+                cancelActiveTickets();
+                if (!equivalentAction) {
+                    cancelSettledTicket();
+                }
+            },
+            invoke: async (action, context) => {
+                const invokedDoc = context.document;
+                const current = latestRef.current;
+                const outletId = context.isCurrent() ? current.feedbackStore?.primaryOutlet() : undefined;
+                const ticket = outletId
+                    ? current.feedbackStore?.start(outletId, action.intent, generationNeedAnchors(action))
+                    : undefined;
+                if (ticket) {
+                    settledTicket = undefined;
+                    activeTickets.add(ticket);
+                }
+                const captureAutosaveSnapshot = ({ profile, validationTuple, }) => engine.getResponseSnapshot({
+                    profile: validationTuple?.persistence === 'complete-response' ? 'on-submit' : 'off',
+                    ...(current.semanticControlScope ? { id: current.semanticControlScope.responseId } : {}),
+                }, profile);
+                const ports = {
+                    submit: captureAutosaveSnapshot,
+                    dispatchHostEvent: (eventName, detail, invokedAction) => {
+                        current.onHostEvent?.(eventName, detail, invokedAction);
+                    },
+                    ...(current.evaluateActionPrecondition
+                        ? { evaluatePrecondition: current.evaluateActionPrecondition }
+                        : {}),
+                    ...(current.evaluateActionEffectExpression
+                        ? { evaluateEffectExpression: current.evaluateActionEffectExpression }
+                        : {}),
+                    ...(current.dispatchActionEffect
+                        ? { dispatchEffect: current.dispatchActionEffect }
+                        : {}),
+                    ...(current.resolveActionIdempotencyKey
+                        ? { resolveIdempotencyKey: current.resolveActionIdempotencyKey }
+                        : {}),
+                };
+                const finish = (result) => {
+                    if (ticket) {
+                        activeTickets.delete(ticket);
+                    }
+                    if (context.isCurrent()) {
+                        current.feedbackStore?.settle(ticket, result.status);
+                        if (ticket) {
+                            settledTicket = ticket;
+                        }
+                    }
+                    current.onActionResult?.(result);
+                    if (result.finding) {
+                        current.onActionFinding?.(result.finding);
+                    }
+                    return result;
+                };
+                try {
+                    if (current.responseActionInvoker && invokedDoc) {
+                        const syncPorts = {
+                            submit: captureAutosaveSnapshot,
+                            dispatchHostEvent: (eventName, detail, invokedAction) => {
+                                current.onHostEvent?.(eventName, detail, invokedAction);
+                            },
+                            ...(current.evaluateActionPrecondition
+                                ? { evaluatePrecondition: current.evaluateActionPrecondition }
+                                : {}),
+                            ...(current.evaluateActionEffectExpression
+                                ? { evaluateEffectExpression: current.evaluateActionEffectExpression }
+                                : {}),
+                            ...(current.dispatchActionEffect
+                                ? { dispatchEffect: current.dispatchActionEffect }
+                                : {}),
+                            ...(current.resolveActionIdempotencyKey
+                                ? { resolveIdempotencyKey: current.resolveActionIdempotencyKey }
+                                : {}),
+                        };
+                        const raw = await current.responseActionInvoker({
+                            document: invokedDoc,
+                            actionRef: action.id,
+                            ports: syncPorts,
+                        });
+                        return finish('invocation' in raw ? raw.invocation : raw);
+                    }
+                    return finish(await invokeResponseActionAsync(invokedDoc, action.id, ports));
+                }
+                catch (error) {
+                    return finish({
+                        status: 'failed',
+                        resolution: resolveResponseAction(invokedDoc, action.id),
+                        validationTuple: null,
+                        detail: null,
+                        effectTrace: [],
+                        failureReason: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            },
+        });
+        controllerRef.current = controller;
+        return () => {
+            if (controllerRef.current === controller) {
+                controllerRef.current = null;
+            }
+            cancelActiveTickets();
+            cancelSettledTicket();
+            controller.dispose();
+        };
+    }, [engine, draftSaveFeedback]);
+    useEffect(() => {
+        if (draftSaveFeedback === 'external' || !engine) {
+            return;
+        }
+        controllerRef.current?.setDocument(responseActionsDocument);
+    }, [engine, draftSaveFeedback, responseActionsDocument]);
+    return null;
 }
 /** See `themeScopeRef` — the scope element must not generate a box. */
 const THEME_SCOPE_STYLE = { display: 'contents' };
@@ -416,26 +463,11 @@ export function useFormspecContext() {
         throw new Error('useFormspecContext must be used within a FormspecProvider');
     return ctx;
 }
-/** Detect the largest matching breakpoint from a breakpoints map (mobile-first).
- *  Breakpoint values may be plain integers `{ sm: 576 }` or objects `{ sm: { minWidth: 576 } }`.
- */
-function detectBreakpoint(breakpoints) {
-    if (typeof window === 'undefined')
+/** Detect the largest matching breakpoint from merged Theme + Component breakpoints (mobile-first). */
+function detectBreakpoint(themeBreakpoints, componentBreakpoints) {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
         return null;
-    let match = null;
-    const entries = Object.entries(breakpoints)
-        .map(([name, bp]) => {
-        const v = typeof bp === 'number' ? bp : (bp.minWidth ?? null);
-        return v != null ? [name, v] : null;
-    })
-        .filter((e) => e !== null)
-        .sort(([, a], [, b]) => a - b);
-    for (const [name, minWidth] of entries) {
-        if (window.matchMedia(`(min-width: ${minWidth}px)`).matches) {
-            match = name;
-        }
-    }
-    return match;
+    return matchBreakpoint(themeBreakpoints, componentBreakpoints, (minWidth) => window.matchMedia(`(min-width: ${minWidth}px)`).matches);
 }
 /**
  * Emit theme tokens as --formspec-* CSS custom properties.

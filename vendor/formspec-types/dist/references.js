@@ -1,74 +1,30 @@
+/**
+ * @filedesc References sidecar processing: target-Definition matching and per-field reference resolution.
+ *
+ * Pure References-spec behavior shared by every consumer — the Assist provider
+ * (`assist-spec.md` §5.2) and renderers showing human help alike — so it lives
+ * at the openly licensed bottom layer rather than inside any one consumer.
+ */
+import { satisfies } from 'semver';
 const REFERENCE_DEF_POINTER = /^#\/referenceDefs\/(.+)$/;
 function referenceDefKey(pointer) {
     return pointer.match(REFERENCE_DEF_POINTER)?.[1];
 }
-function compareVersions(left, right) {
-    const leftParts = left.split('.').map((part) => Number.parseInt(part, 10) || 0);
-    const rightParts = right.split('.').map((part) => Number.parseInt(part, 10) || 0);
-    const length = Math.max(leftParts.length, rightParts.length);
-    for (let index = 0; index < length; index += 1) {
-        const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-        if (diff !== 0)
-            return diff > 0 ? 1 : -1;
-    }
-    return 0;
-}
-function wildcardSatisfies(range, version) {
-    const versionParts = version.split('.');
-    return range.split('.').every((part, index) => part === 'x' || part === '*' || part === versionParts[index]);
-}
-function comparatorSatisfies(range, version) {
-    const match = range.match(/^(<=|>=|<|>|=)\s*(\d+(?:\.\d+){0,2})$/);
-    if (!match)
-        return false;
-    const comparison = compareVersions(version, match[2]);
-    switch (match[1]) {
-        case '<': return comparison < 0;
-        case '<=': return comparison <= 0;
-        case '>': return comparison > 0;
-        case '>=': return comparison >= 0;
-        default: return comparison === 0;
-    }
-}
-function simpleRangeSatisfies(range, version) {
-    if (range === '*' || range.length === 0 || range === version)
-        return true;
-    if (range.startsWith('^')) {
-        const base = range.slice(1);
-        return compareVersions(version, base) >= 0 && version.split('.')[0] === base.split('.')[0];
-    }
-    if (range.startsWith('~')) {
-        const base = range.slice(1);
-        const baseParts = base.split('.');
-        return compareVersions(version, base) >= 0
-            && version.split('.')[0] === baseParts[0]
-            && version.split('.')[1] === (baseParts[1] ?? '0');
-    }
-    if (range.includes(' '))
-        return range.split(/\s+/).every((part) => simpleRangeSatisfies(part, version));
-    if (/[x*]/i.test(range))
-        return wildcardSatisfies(range.toLowerCase(), version);
-    if (/^(<=|>=|<|>|=)/.test(range))
-        return comparatorSatisfies(range, version);
-    return false;
-}
 /**
  * Whether a sidecar's `targetDefinition` binds to `definition`: the URL is
  * equal and, when both a `compatibleVersions` range and a Definition version
- * are present, the version satisfies one `||` branch of the range.
+ * are present, the version satisfies the range under Node-semver
+ * `includePrerelease: true` semantics.
  */
 export function targetDefinitionMatches(target, definition) {
     if (!target || typeof target.url !== 'string' || target.url !== definition.url)
         return false;
     const { compatibleVersions } = target;
-    if (!compatibleVersions || !definition.version)
+    if (compatibleVersions === undefined || compatibleVersions === '' || !definition.version)
         return true;
-    const version = definition.version;
-    return compatibleVersions
-        .split('||')
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0)
-        .some((part) => simpleRangeSatisfies(part, version));
+    if (typeof compatibleVersions !== 'string' || typeof definition.version !== 'string')
+        return false;
+    return satisfies(definition.version, compatibleVersions, { includePrerelease: true });
 }
 /**
  * The `$ref` values in `document` that name no `referenceDefs` entry — a

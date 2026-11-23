@@ -3,7 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 /** @filedesc Default field dispatcher — layout chrome + per-component control routing. */
 import { useMemo } from 'react';
 import { useFormspecContext, findItemByKey } from '../../context';
-import { GroupControl } from './group-control';
+import { blockReadonlyChange, GroupControl } from './group-control';
 import { renderControl } from './render-control';
 import { needTraceAttrs, projectionMetadataAttrs } from '../../projection-metadata.js';
 import { useSemanticFieldControl } from '../../use-semantic-field-control.js';
@@ -22,7 +22,8 @@ export function DefaultField({ field, node }) {
     const isProtected = !field.visible && field.disabledDisplay === 'protected';
     const isReadonly = field.readonly || isProtected;
     useSemanticFieldControl(field, isReadonly);
-    const showError = !!(field.error && field.touched);
+    const hasShapeError = field.errors.some((e) => e.severity === 'error' && e.constraintKind === 'shape');
+    const showError = !!(field.error && (field.touched || hasShapeError));
     const themeClass = node.cssClasses?.join(' ') || '';
     const graphAttrs = projectionMetadataAttrs(node);
     const { engine, registryEntries, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, } = useFormspecContext();
@@ -91,26 +92,32 @@ export function DefaultField({ field, node }) {
         const onLabel = node.props?.onLabel;
         const offLabel = node.props?.offLabel;
         const hasToggleLabels = onLabel || offLabel;
-        const checkboxInput = (_jsx("input", { id: field.id, type: "checkbox", className: "formspec-input", role: "switch", checked: !!field.value, onChange: isReadonly ? undefined : (e) => field.setValue(e.target.checked), onBlur: () => field.touch(), disabled: isReadonly, "aria-invalid": showError, "aria-required": field.required || undefined, ...(describedBy ? { 'aria-describedby': describedBy } : {}) }));
+        const checkboxInput = (_jsx("input", { id: field.id, type: "checkbox", className: "formspec-input", role: "switch", checked: !!field.value, onChange: isReadonly ? undefined : (e) => field.setValue(e.target.checked), onBlur: () => field.touch(), disabled: isProtected, readOnly: isReadonly, tabIndex: isReadonly ? -1 : undefined, "aria-readonly": isReadonly || undefined, onClickCapture: isReadonly ? blockReadonlyChange : undefined, "aria-invalid": showError, "aria-required": field.required || undefined, ...(describedBy ? { 'aria-describedby': describedBy } : {}) }));
         return (_jsxs("div", { className: [
                 'formspec-field',
                 'formspec-field--inline',
                 'formspec-field--toggle',
+                showError ? 'formspec-field--invalid' : '',
                 isReadonly ? 'formspec-field--readonly' : '',
                 isProtected ? 'formspec-protected' : '',
                 themeClass,
             ].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, children: [_jsxs("label", { htmlFor: field.id, className: "formspec-label", ...labelNeedAttrs, children: [field.label, requiredNode] }), descriptionNode, hintNode, helpNode, _jsxs("div", { className: `formspec-toggle${field.value ? ' formspec-toggle--on' : ''}`.trim(), children: [hasToggleLabels && (_jsx("span", { className: "formspec-toggle-label formspec-toggle-off", "aria-hidden": "true", children: offLabel })), checkboxInput, hasToggleLabels && (_jsx("span", { className: "formspec-toggle-label formspec-toggle-on", "aria-hidden": "true", children: onLabel }))] }), errorNode] }));
     }
-    if (node.component === 'RadioGroup' || node.component === 'CheckboxGroup') {
+    const renderFieldControl = () => renderControl(field, node, describedBy, isProtected, extensionAttrs, resolvePlaceholder, itemAdornments(engine, field.path));
+    const fileUpload = node.component === 'FileUpload';
+    if (node.component === 'RadioGroup' || node.component === 'CheckboxGroup' || fileUpload) {
         const labelId = `${field.id}-label`;
         const labelHidden = node.labelPosition === 'hidden';
-        // A checkbox `group` has no aria-required (WAI-ARIA 1.2): the legend says "required" in place of the asterisk.
-        const legendRequiredNode = node.component === 'CheckboxGroup' && field.required && !isReadonly ? (_jsxs(_Fragment, { children: [_jsx("abbr", { className: "formspec-required usa-label--required", title: "required", "aria-hidden": "true", children: " *" }), _jsx("span", { className: "formspec-sr-only usa-sr-only", children: " required" })] })) : requiredNode;
-        return (_jsxs("fieldset", { className: [`formspec-fieldset`, isReadonly ? 'formspec-field--readonly' : '', isProtected ? 'formspec-protected' : '', themeClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, children: [_jsxs("legend", { id: labelId, className: labelHidden ? 'formspec-legend formspec-sr-only' : 'formspec-legend', ...labelNeedAttrs, children: [field.label, legendRequiredNode] }), descriptionNode, hintNode, helpNode, _jsx(GroupControl, { field: field, node: node, isReadonly: isReadonly, invalid: showError, labelId: labelId, describedBy: describedBy }), errorNode] }));
+        // A generic `group` has no aria-required (WAI-ARIA 1.2): the legend says "required" in place of the asterisk.
+        const legendRequiredNode = node.component !== 'RadioGroup' && field.required && !isReadonly ? (_jsxs(_Fragment, { children: [_jsx("abbr", { className: "formspec-required usa-label--required", title: "required", "aria-hidden": "true", children: " *" }), _jsx("span", { className: "formspec-sr-only usa-sr-only", children: " required" })] })) : requiredNode;
+        const group = (_jsxs("fieldset", { "aria-description": fileUpload && !node.accessibility?.role ? node.accessibility?.description : undefined, className: ['formspec-fieldset', fileUpload ? 'formspec-file-upload' : '', showError ? 'formspec-field--invalid' : '', isReadonly ? 'formspec-field--readonly' : '', isProtected ? 'formspec-protected' : '', themeClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, children: [_jsxs("legend", { id: labelId, className: labelHidden ? 'formspec-legend formspec-sr-only' : 'formspec-legend', ...labelNeedAttrs, children: [field.label, legendRequiredNode] }), descriptionNode, hintNode, helpNode, fileUpload ? renderFieldControl() : (_jsx(GroupControl, { field: field, node: node, isReadonly: isReadonly, invalid: showError, labelId: labelId, describedBy: describedBy })), errorNode] }));
+        if (fileUpload && node.accessibility?.role) {
+            return _jsx("div", { role: node.accessibility.role, "aria-labelledby": labelId, "aria-description": node.accessibility.description, children: group });
+        }
+        return group;
     }
     const controlSurfaceClass = node.component === 'Slider' ? 'formspec-slider'
         : node.component === 'Rating' ? 'formspec-rating'
-            : node.component === 'FileUpload' ? 'formspec-file-upload'
-                : '';
-    return (_jsxs("div", { className: [`formspec-field`, isReadonly ? 'formspec-field--readonly' : '', isProtected ? 'formspec-protected' : '', themeClass, controlSurfaceClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, ...(node.accessibility?.role ? { role: node.accessibility.role } : {}), ...(node.accessibility?.description ? { 'aria-description': node.accessibility.description } : {}), children: [_jsxs("label", { id: `${field.id}-label`, htmlFor: field.id, className: node.labelPosition === 'hidden' ? 'formspec-label formspec-sr-only' : 'formspec-label', ...labelNeedAttrs, children: [field.label, requiredNode] }), descriptionNode, hintNode, helpNode, renderControl(field, node, describedBy, isProtected, extensionAttrs, resolvePlaceholder, itemAdornments(engine, field.path)), errorNode] }));
+            : '';
+    return (_jsxs("div", { className: [`formspec-field`, showError ? 'formspec-field--invalid' : '', isReadonly ? 'formspec-field--readonly' : '', isProtected ? 'formspec-protected' : '', themeClass, controlSurfaceClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, ...(node.accessibility?.role ? { role: node.accessibility.role } : {}), ...(node.accessibility?.description ? { 'aria-description': node.accessibility.description } : {}), children: [_jsxs("label", { id: `${field.id}-label`, htmlFor: field.id, className: node.labelPosition === 'hidden' ? 'formspec-label formspec-sr-only' : 'formspec-label', ...labelNeedAttrs, children: [field.label, requiredNode] }), descriptionNode, hintNode, helpNode, renderFieldControl(), errorNode] }));
 }

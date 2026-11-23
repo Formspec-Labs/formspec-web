@@ -30,7 +30,7 @@ import type { WidgetRegistry } from './registry.js';
 import type { DataSourceCatalogHandle } from './data-source-loader.js';
 import type { MappingDocumentHandle } from './definition-form-initial-data.js';
 import type { ExperienceDocumentHandle } from './experience-unit.js';
-import { type SlotPlan, type SurfaceDefinitionComponentResolver } from './slot-plan.js';
+import { type RoutePlan, type SlotPlan, type SurfaceDefinitionComponentResolver } from './slot-plan.js';
 import type { HeadingLevel, SurfaceStaticAssetResolver } from './static-content.js';
 import type { SurfaceStringOverrides, SurfaceStrings } from './strings.js';
 import type { ThemeAuthority, ThemeGrant } from './theme-authority.js';
@@ -71,12 +71,21 @@ export interface SurfaceRoutePlanInput<TComponent> {
     /** Host admission boundary for authored static image sources. */
     staticAssetResolver?: SurfaceStaticAssetResolver | undefined;
     strings?: SurfaceStrings | SurfaceStringOverrides | undefined;
+    /** Optional explicit active breakpoint override for responsive Definition slot planning. */
+    activeBreakpoint?: string | null | undefined;
+    /** Pure viewport predicate `(minWidthPx) => boolean` for responsive Definition slot planning. */
+    matchesMinWidth?: ((minWidthPx: number) => boolean) | undefined;
+    /** Mounted Definition form engines keyed by slot path (`slotId` or `embedSlotId/childSlotId`) for live visibility evaluation. */
+    slotFormEngines?: ReadonlyMap<string, import('@formspec-org/engine').IFormEngine> | undefined;
+    /** Mounted Definition form reachable action refs keyed by slot path, measured from live DOM/computed styles. */
+    slotRenderedActionRefs?: ReadonlyMap<string, ReadonlySet<string>> | undefined;
 }
 export interface SurfaceRoutePlan<TComponent> {
     handle: SurfaceRouteHandle;
     surfaceRef?: string | undefined;
     params: Readonly<Record<string, string>>;
     slots: readonly SlotPlan<TComponent>[];
+    bands?: RoutePlan<TComponent>['bands'];
     grant: ThemeGrant;
     transitions: readonly PlannedTransition[];
     headingBaseLevel: HeadingLevel;

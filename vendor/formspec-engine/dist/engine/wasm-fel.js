@@ -10,6 +10,7 @@ export function wasmEvaluateDefinitionPayload(options) {
         registryDocuments: options.registryDocuments,
         subjectType: options.subjectType,
         subjectKeys: options.subjectKeys,
+        explanations: options.explanations,
     };
 }
 /** Append engine-owned validations (e.g. extension hooks) after WASM batch evaluation. */

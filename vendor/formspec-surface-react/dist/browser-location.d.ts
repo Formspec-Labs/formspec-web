@@ -13,6 +13,8 @@ export declare function useSurfaceBrowserAddress(mode: SurfaceBrowserMode): {
 };
 export declare function pushBrowserAddress(href: string, scroll: boolean): boolean;
 export declare function splitSurfaceLocation(location: string): SurfaceLocation;
+/** The location with one query parameter set and the others kept. */
+export declare function withSurfaceQuery(location: string, name: string, value: string): string;
 export declare function surfaceBrowserLocation(mode: SurfaceBrowserMode, basePath: string): {
     read(address: string): SurfaceLocation | undefined;
     href(path: string, query: URLSearchParams): string | undefined;

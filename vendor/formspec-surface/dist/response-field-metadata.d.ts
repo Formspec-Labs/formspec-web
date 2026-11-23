@@ -17,7 +17,7 @@ export interface ResponseFieldMetadataReader {
     }[] | undefined;
 }
 /**
- * Capture only Definition paths present in retained Response data, including
+ * Capture labels for recorded answers and warning explanations, including
  * indexed repeat rows. Copy metadata so subsequent reader changes cannot alter
  * this snapshot. Reader refusals propagate. No evaluation or Locale lookup occurs.
  */

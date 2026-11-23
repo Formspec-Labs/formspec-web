@@ -1,10 +1,3 @@
-/**
- * @filedesc References sidecar processing: target-Definition matching and per-field reference resolution.
- *
- * Pure References-spec behavior shared by every consumer — the Assist provider
- * (`assist-spec.md` §5.2) and renderers showing human help alike — so it lives
- * at the openly licensed bottom layer rather than inside any one consumer.
- */
 import type { Reference, ReferencesDocument } from './generated/references.js';
 /** Who a reference is resolved for (`references-spec.md` §2.1 `audience`). */
 export type ReferenceAudience = 'human' | 'agent' | 'both';
@@ -13,7 +6,8 @@ export type ReferenceBindings = Pick<ReferencesDocument, 'references' | 'referen
 /**
  * Whether a sidecar's `targetDefinition` binds to `definition`: the URL is
  * equal and, when both a `compatibleVersions` range and a Definition version
- * are present, the version satisfies one `||` branch of the range.
+ * are present, the version satisfies the range under Node-semver
+ * `includePrerelease: true` semantics.
  */
 export declare function targetDefinitionMatches(target: {
     url?: string;

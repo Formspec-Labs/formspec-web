@@ -1,32 +1,8 @@
 import type { AdvanceTransition } from './SurfaceApp.js';
 import type { NativeScreenerSlotProps, SurfaceScreenerCompletionPolicy } from './screener-completion.js';
-/**
- * @filedesc `SurfaceSlot` — one planned slot, rendered — and `SurfaceSlotFrame`,
- * the ONE place a slot's own title becomes a heading.
- *
- * The dispatch already happened: `@formspec-org/surface`'s `planRoute` turned a
- * `slotType` into a typed `SlotPlan`, exhaustively and without React in scope.
- * This file binds each plan variant to elements and nothing else, which is why
- * a second renderer (web component, server-side) needs a file this size rather
- * than a re-implementation of the taxonomy.
- *
- * ## Why the frame is a component and not two inline expressions
- *
- * `surface-shell-spec.md` §8.3 item 10: "Where a decision — whether to render a
- * slot's own title, which level a title takes — is made in more than one code
- * path, those paths MUST agree; divergent duplicates of the same rule are how a
- * fixed defect reappears one nesting level down." It did: the top-level path
- * suppressed a slot title only for `kind: heading`, and the embed path
- * suppressed it for **all** `static-content` kinds, throwing away the authored
- * title of every `text`, `image` and `divider` slot inside an embed — the exact
- * bug the top-level path had already been fixed to remove. The embed path also
- * rendered the title at the HOST slot's base rather than the child's, so an
- * embedded title sat at the same rank as its host while its content sat one
- * deeper. {@link SurfaceSlotFrame} is both paths now.
- */
 import { type DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from 'react';
-import { type FormEngineOptions } from '@formspec-org/engine';
+import { type ActionRefFinding, type FormEngineOptions, type IFormEngine } from '@formspec-org/engine';
 import type { ResponseAction, ResponseActionInvocationResult, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
 import { type FormDefinition, type ComponentDocument, type LocaleDocument, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourceSelectionEvidence, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceSemanticOutputScope, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
@@ -44,16 +20,21 @@ export type ResolvedDefinitionFormPlan = Extract<SlotPlan<SurfaceWidget>, {
         slotType: 'definition-form';
     }>['definition']>;
 };
-export type SurfaceSaveNotice = 'saved' | 'savedLocally' | 'saveFailed' | 'draftConflict' | 'draftLoaded';
+export type SurfaceSaveNotice = 'saved' | 'savedLocally' | 'saveFailed' | 'draftConflict' | 'draftLoaded' | 'submitted' | 'cleared';
 export interface SurfaceFormSession {
     appearance: 'light' | 'dark';
     previewScope: string | undefined;
+    entryPath?: string | undefined;
+    navigate?: ((href: string) => void | boolean | Promise<boolean | void>) | undefined;
     drafts?: DraftSession | undefined;
     draftRevision?: number | undefined;
     reportSave: (notice: SurfaceSaveNotice) => void;
     workspace?: {
         slot: string | undefined;
         activeSection: string | undefined;
+        focusField?: string | undefined;
+        /** A group acknowledgement code a draft review route puts focus on, from its `acknowledge` link. */
+        focusAcknowledgement?: string | undefined;
         hrefForSection: (slot: string, section: string) => string | undefined;
         onActiveSectionChange: (slot: string, section: string) => void;
         reportSectionTitle?: ((slot: string, title: string | undefined) => void) | undefined;
@@ -65,8 +46,10 @@ export interface SurfaceDefinitionFormRenderInput {
     route: SurfaceWidgetRouteContext;
     /** Resolved shell strings for the active locale. */
     strings: SurfaceStrings;
-    /** The filing-unit type and typed keys, with the ID derived by Core. */
-    responseSubject?: FormEngineOptions['responseSubject'];
+    /** The filing-unit type and typed keys, with the ID derived by Core in runtime WASM. */
+    responseSubject?: (NonNullable<FormEngineOptions['responseSubject']> & {
+        id: string;
+    }) | undefined;
     responseActionsDocument: ReactResponseActionsDocument | undefined;
     referencesDocuments: readonly ReferencesDocument[];
     ontologyDocuments: readonly OntologyDocument[];
@@ -84,7 +67,16 @@ export interface SurfaceDefinitionFormRenderInput {
     draftStrings?: SurfaceStrings | undefined;
     /** Report committed saves and failed writes to the single shell live region. */
     reportSave?: ((notice: SurfaceSaveNotice) => void) | undefined;
+    /** Route navigation helpers for filed summaries, prerequisite notices, and submit confirmations. */
+    navigate?: ((href: string) => void | boolean | Promise<boolean | void>) | undefined;
+    formatHref?: ((href: string) => string | undefined) | undefined;
+    overviewDestination?: string | undefined;
+    reviewDestination?: string | undefined;
+    /** The draft review route that accepts this form's group acknowledgements. */
+    draftReviewDestination?: string | undefined;
+    onDraftAvailabilityChange?: ((status: 'loading' | 'ready' | 'filed' | 'blocked' | undefined) => void) | undefined;
     activeSection?: string | undefined;
+    focusField?: string | undefined;
     sectionNavigationActive?: boolean | undefined;
     hrefForSection?: ((section: string) => string | undefined) | undefined;
     onActiveSectionChange?: ((section: string) => void) | undefined;
@@ -98,6 +90,8 @@ export interface SurfaceDefinitionFormRenderInput {
     semanticControlScope?: SemanticControlScope | undefined;
     /** Receives every terminal from the mounted Definition Action control. */
     onDefinitionActionResult?: ((result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
+    /** Receives Response Actions resolution/invocation findings from the mounted Definition form or draft writer. */
+    onActionFinding?: ((finding: ActionRefFinding) => void) | undefined;
     /**
      * Optional host executor for the selected Definition-scoped document. The
      * renderer still owns action resolution and submission; this port lets a
@@ -145,6 +139,7 @@ export interface SurfaceSlotProps {
     filingStatus?: FilingStatusViewContext | undefined;
     formSession?: SurfaceFormSession | undefined;
     activeSection?: string | undefined;
+    focusField?: string | undefined;
     sectionNavigationActive?: boolean | undefined;
     localeDocuments?: readonly LocaleDocument[] | undefined;
     activeLocale?: string | undefined;
@@ -191,6 +186,12 @@ export interface SurfaceSlotProps {
     runtimeGeneration?: string | undefined;
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
     onRuntimeDiagnosticsChange?: ((scope: string, diagnostics: readonly SurfaceDiagnostic[]) => void) | undefined;
+    embedSlotPrefix?: string | undefined;
+    onSlotFormEngineChange?: ((slotKey: string, engine: IFormEngine | undefined) => void) | undefined;
+    onSlotVisibilityChange?: ((slotKey: string, nextRefs: ReadonlySet<string> | undefined, baselineKey: string) => void) | undefined;
+    overviewDestination?: string | undefined;
+    reviewDestination?: string | undefined;
+    onSlotDraftAvailabilityChange?: ((slotId: string, status: 'loading' | 'ready' | 'filed' | 'blocked' | undefined) => void) | undefined;
     renderDefinitionForm?: SurfaceDefinitionFormRenderer | undefined;
     definitionActionInvoker?: DraftActionInvoker | undefined;
     resolveSemanticControlScope?: SurfaceSemanticControlScopeResolver | undefined;
@@ -227,6 +228,6 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * landmark — which is the honest shape for a slot the author did not name.
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, sectionNavigationActive, }: SurfaceSlotProps): ReactNode;
+export declare function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, embedSlotPrefix, onSlotFormEngineChange, onSlotVisibilityChange, overviewDestination, reviewDestination, onSlotDraftAvailabilityChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, focusField, sectionNavigationActive, }: SurfaceSlotProps): ReactNode;
 export declare function renderDefaultDefinitionForm(input: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

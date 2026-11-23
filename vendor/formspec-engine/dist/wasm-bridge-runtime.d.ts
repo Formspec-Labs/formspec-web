@@ -1,3 +1,4 @@
+import type { FormDefinition, FormResponse, ResponseSelectionDelivery } from '@formspec-org/types';
 /** Parsed JSON from `fel_analysis_to_json_value` (Rust) — pass through to {@link normalizeFelAnalysisError}. */
 export type WasmFelAnalysisResultJson = {
     valid: boolean;
@@ -203,16 +204,27 @@ export interface WasmCreateOptions {
     subjectKeys?: import('./interfaces.js').ResponseSubjectKeys;
 }
 export interface WasmCreation {
+    refused: boolean;
     data: import('./interfaces.js').JsonRecord;
     pending: string[];
-    diagnostics: string[];
+    diagnostics: Array<import('./diff.js').EvalDiagnostic & {
+        code: string;
+    }>;
 }
+/** Assemble the Response instance and explanation evidence before the candidate is signed. */
+export declare function wasmAssembleCandidate(definition: FormDefinition, response: FormResponse, resolution: Readonly<Record<string, ResponseSelectionDelivery>>, evaluation?: {
+    candidateExplanations?: import('./engine/warning-explanations.js').DraftExplanation[];
+} | null): FormResponse;
+/**
+ * Derive Core's filing-unit id (`Response.subject.id`) from a subject type and exact typed keys.
+ * Throws for untyped keys or an integer outside the I-JSON range.
+ */
+export declare function wasmResponseSubjectId(subjectType: string, keys: import('./interfaces.js').ResponseSubjectKeys): string;
 /** Apply creation-time values to a new Response or resolve its pending values. */
 export declare function wasmCreateResponse(definition: unknown, data: Record<string, unknown>, context?: WasmCreateOptions, extensions?: FelExtensionHost): WasmCreation;
 /** Create a new row at the end of the given repeat. */
 export declare function wasmCreateRepeatRow(definition: unknown, data: Record<string, unknown>, groupPath: string, context?: WasmCreateOptions, extensions?: FelExtensionHost): WasmCreation | null;
-/** Evaluate a Formspec definition against provided data. */
-export declare function wasmEvaluateDefinition(definition: unknown, data: Record<string, unknown>, context?: {
+type WasmEvaluationContext = {
     nowIso?: string;
     trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
     previousValidations?: Array<{
@@ -227,6 +239,7 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
     }>;
     previousNonRelevant?: string[];
     instances?: Record<string, unknown>;
+    explanations?: import('./engine/warning-explanations.js').DraftExplanation[];
     registryDocuments?: unknown[];
     /** The current Response's subject type. Null means a subject was supplied without a type. */
     subjectType?: string | null;
@@ -236,18 +249,18 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
     itemText?: {
         localeStrings?: Record<string, string>;
     };
-}, extensions?: FelExtensionHost): {
+};
+type WasmEvaluation = {
+    /** The Definition or inputs were refused before Recalculate. */
+    refused: boolean;
     /** Flat state keyed by path (`group.field`, `rows[0].name`), like `required` and `readonly`. */
     values: any;
     /** The Response projection of `values` after `nonRelevantBehavior`: groups are objects, repeats are arrays of row objects. */
     data: any;
     validations: any[];
-    diagnostics: Array<{
-        path: string;
-        expression: string;
-        shapeId?: string;
-        message: string;
-    }>;
+    explanationFindings?: import('./engine/warning-explanations.js').ExplanationFinding[];
+    candidateExplanations?: import('./engine/warning-explanations.js').DraftExplanation[];
+    diagnostics: import('./diff.js').EvalDiagnostic[];
     nonRelevant: string[];
     variables: any;
     required: Record<string, boolean>;
@@ -267,6 +280,10 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
         hints?: Record<string, string>;
     }>;
 };
+/** Evaluate a Formspec definition against provided data. */
+export declare function wasmEvaluateDefinition(definition: unknown, data: Record<string, unknown>, context?: WasmEvaluationContext, extensions?: FelExtensionHost): WasmEvaluation;
+/** Prepare stable Response data and its submit verdict. Throws if the data do not converge. */
+export declare function wasmEvaluateFiled(definition: unknown, data: Record<string, unknown>, context?: WasmEvaluationContext, extensions?: FelExtensionHost): WasmEvaluation;
 /**
  * Evaluate a standalone Screener Document against respondent inputs.
  * Returns a Determination Record (always non-null).
@@ -288,3 +305,4 @@ export declare function wasmComputeDependencyGroups(entriesJson: string): Array<
     entries: number[];
     reason: string;
 }>;
+export {};

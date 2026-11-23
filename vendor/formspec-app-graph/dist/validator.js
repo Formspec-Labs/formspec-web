@@ -13,6 +13,7 @@ import { missingResponseProjectionChecks } from './instance-projection.js';
 import { validateLocaleAssociations } from './locale-associations.js';
 import { validateNeedsCoverage } from './needs-coverage.js';
 import { runRenderedNeedTrace } from './rendered-need-trace.js';
+import { validateDraftStartTargets } from './draft-start-target.js';
 import { validateFilingStatusTargets } from './filing-status-targets.js';
 import { validateScreenerSurfaceTargets } from './screener-surface-targets.js';
 import { validateSurfaceDefinitionSlots } from './surface-definition-slots.js';
@@ -259,6 +260,7 @@ function runCrossArtifactValidators(validators, request, handles, schemaResults,
         validateNeedsCoverage,
         validateScreenerSurfaceTargets,
         validateFilingStatusTargets,
+        validateDraftStartTargets,
         validateSurfaceDefinitionSlots,
         validateSurfaceExperienceUnits,
         validateSurfaceResponseActionTriggers,
@@ -343,7 +345,7 @@ function schemaPhaseStatus(results) {
     }
     return phaseStatus('schema', 'completed');
 }
-export function validateAppGraph(request) {
+export function prepareAppGraphValidation(request) {
     const handles = artifactHandlesFor(request);
     const loadedArtifactCount = handles.filter((handle) => handle.status === 'loaded').length;
     const unresolved = handles.filter((handle) => handle.status !== 'loaded');
@@ -354,8 +356,6 @@ export function validateAppGraph(request) {
     const schemaNotRun = schemaAndEvidenceResults.some((result) => result.status !== 'completed');
     const schemaStatus = schemaPhaseStatus(schemaAndEvidenceResults);
     let crossArtifactStatus;
-    let crossDiagnostics = [];
-    let renderedNeedTrace;
     if (unresolved.length > 0) {
         crossArtifactStatus = phaseStatus('cross-artifact', 'skipped', 'unresolved-artifacts');
     }
@@ -367,27 +367,39 @@ export function validateAppGraph(request) {
     }
     else {
         crossArtifactStatus = phaseStatus('cross-artifact', 'completed');
-        crossDiagnostics = runCrossArtifactValidators(request.crossArtifactValidators, request, handles, schemaResults, evidenceResults);
-        if (request.renderedNeedTrace) {
-            const trace = runRenderedNeedTrace(crossArtifactContext(request, handles, schemaResults, evidenceResults), request.renderedNeedTrace);
-            crossDiagnostics.push(...trace.diagnostics);
-            renderedNeedTrace = trace.record;
-        }
     }
-    const diagnostics = normalizeDiagnostics([
-        ...importedDiagnostics(request, handles),
-        ...schemaResults.flatMap((result) => result.diagnostics),
-        ...evidenceResults.flatMap((result) => result.diagnostics),
-        ...crossDiagnostics,
-    ]);
-    return createAppGraphReport({
-        artifactCount: handles.length,
-        loadedArtifactCount,
-        diagnostics,
-        schemaResults,
-        evidenceResults,
-        phases: phaseStatuses(request, schemaStatus, crossArtifactStatus),
-        support: request.options?.support,
-        ...(renderedNeedTrace ? { renderedNeedTrace } : {}),
-    });
+    const canRunCrossArtifactChecks = crossArtifactStatus.status === 'completed';
+    return {
+        canRunCrossArtifactChecks,
+        finish(validators = request.crossArtifactValidators) {
+            const crossDiagnostics = canRunCrossArtifactChecks
+                ? runCrossArtifactValidators(validators, request, handles, schemaResults, evidenceResults)
+                : [];
+            let renderedNeedTrace;
+            if (canRunCrossArtifactChecks && request.renderedNeedTrace) {
+                const trace = runRenderedNeedTrace(crossArtifactContext(request, handles, schemaResults, evidenceResults), request.renderedNeedTrace);
+                crossDiagnostics.push(...trace.diagnostics);
+                renderedNeedTrace = trace.record;
+            }
+            const diagnostics = normalizeDiagnostics([
+                ...importedDiagnostics(request, handles),
+                ...schemaResults.flatMap((result) => result.diagnostics),
+                ...evidenceResults.flatMap((result) => result.diagnostics),
+                ...crossDiagnostics,
+            ]);
+            return createAppGraphReport({
+                artifactCount: handles.length,
+                loadedArtifactCount,
+                diagnostics,
+                schemaResults,
+                evidenceResults,
+                phases: phaseStatuses(request, schemaStatus, crossArtifactStatus),
+                support: request.options?.support,
+                ...(renderedNeedTrace ? { renderedNeedTrace } : {}),
+            });
+        },
+    };
+}
+export function validateAppGraph(request) {
+    return prepareAppGraphValidation(request).finish();
 }

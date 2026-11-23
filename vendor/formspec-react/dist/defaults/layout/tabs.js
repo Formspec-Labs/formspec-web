@@ -1,7 +1,7 @@
 'use client';
 import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Tabs layout component — WAI-ARIA tabbed panel navigation with keyboard support. */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useId } from 'react';
 import { needTraceAttrs, projectionMetadataAttrs, } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
 import { useFormspecContext } from '../../context';
@@ -23,7 +23,8 @@ export function Tabs({ node, children }) {
     const [activeTab, setActiveTabRaw] = useState(defaultTab);
     const tabCount = node.children.length;
     const buttonRefs = useRef([]);
-    const id = node.id || 'tabs';
+    const instanceSuffix = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+    const id = `${node.id || 'tabs'}-${instanceSuffix}`;
     const placement = node.props?.placement || 'top';
     const ariaLabel = node.props?.['aria-label']
         || node.fieldItem?.label
@@ -83,7 +84,7 @@ export function Tabs({ node, children }) {
         }) }));
     const cssClass = node.cssClasses?.join(' ') || 'formspec-tabs';
     const style = node.style;
-    return (_jsx("div", { className: cssClass, style: {
+    return (_jsx("div", { id: node.props.id, className: cssClass, style: {
             ...style,
             ...(placement === 'left' || placement === 'right' ? { display: 'flex', flexDirection: 'row' } : {}),
         }, "data-placement": placement !== 'top' ? placement : undefined, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: placement === 'bottom' || placement === 'right' ? (_jsxs(_Fragment, { children: [panels, tabBar] })) : (_jsxs(_Fragment, { children: [tabBar, panels] })) }));

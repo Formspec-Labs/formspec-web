@@ -264,21 +264,13 @@ export function buildFormspecResponseEnvelope(options) {
     return response;
 }
 /** Keep findings visible in the report produced for evaluated response data. */
-export function collectRelevantValidationResults(result) {
-    return result.validations.filter(validation => validation.shapeId || !result.nonRelevant.some(path => validation.path === path || validation.path.startsWith(`${path}.`) || validation.path.startsWith(`${path}[`))).map(toValidationResult);
+export function collectRelevantValidationResults(result, validations = result.validations) {
+    return validations.filter(validation => validation.shapeId || !result.nonRelevant.some(path => validation.path === path || validation.path.startsWith(`${path}.`) || validation.path.startsWith(`${path}[`))).map(toValidationResult);
 }
-/** Shape validations for a specific timing, from a WASM eval with the matching trigger. */
+/** Keep refusals alongside findings for the requested Shape timing. */
 export function collectTimedShapeValidationResults(evalResult, shapeTiming, timing) {
-    const results = [];
-    for (const validation of evalResult.validations) {
-        if (!validation.shapeId) {
-            continue;
-        }
-        if ((shapeTiming.get(validation.shapeId) ?? 'continuous') === timing) {
-            results.push(toValidationResult(validation));
-        }
-    }
-    return results;
+    return evalResult.validations.filter(validation => evalResult.refused ||
+        (validation.shapeId && (shapeTiming.get(validation.shapeId) ?? 'continuous') === timing)).map(toValidationResult);
 }
 /** Compute counts and wrap the evaluator's results in the spec report. */
 export function buildValidationReportEnvelope(results, timestamp, definitionUrl, definitionVersion) {

@@ -1,5 +1,6 @@
 /** @filedesc Read and write Surface addresses through browser session history. */
 import { useCallback, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { serializeRoutePath } from '@formspec-org/surface';
 function subscribe(listener) {
     window.addEventListener('popstate', listener);
     window.addEventListener('hashchange', listener);
@@ -62,18 +63,11 @@ export function splitSurfaceLocation(location) {
         ? { path: location, query: new URLSearchParams() }
         : { path: location.slice(0, queryAt), query: new URLSearchParams(location.slice(queryAt + 1)) };
 }
-function serializeBrowserPath(path) {
-    return path.split('/').map(segment => {
-        // A malformed escape is literal to matchRoute. Preserve its whole segment.
-        try {
-            decodeURIComponent(segment);
-        }
-        catch {
-            segment = segment.replaceAll('%', '%25');
-        }
-        // Browsers treat raw backslashes as slashes and swallow some controls.
-        return segment.replace(/[\\#\u0000-\u0020\u007f]/g, encodeURIComponent);
-    }).join('/');
+/** The location with one query parameter set and the others kept. */
+export function withSurfaceQuery(location, name, value) {
+    const { path, query } = splitSurfaceLocation(location);
+    query.set(name, value);
+    return `${path}?${query}`;
 }
 export function surfaceBrowserLocation(mode, basePath) {
     const base = basePath === '/' ? '' : basePath.replace(/\/+$/, '');
@@ -95,7 +89,7 @@ export function surfaceBrowserLocation(mode, basePath) {
             return { path: url.pathname.slice(base.length), query: url.searchParams };
         },
         href(path, query) {
-            const pathname = serializeBrowserPath(path.startsWith('/') ? path : `/${path}`);
+            const pathname = serializeRoutePath(path.startsWith('/') ? path : `/${path}`);
             // History URL parsing removes dot segments before a route can match them.
             if (mode === 'history' && /\/(?:\.|%2e){1,2}(?=\/|$)/i.test(pathname))
                 return undefined;

@@ -60,6 +60,10 @@ export interface ValidationSummaryRow {
      */
     jumpHref: string | null;
 }
+/** Strip one or more leading severity prefixes (`WARNING:`, `Error:`, `Info —`, etc.). */
+export declare function stripSeverityPrefix(message: string): string;
+/** Collapse doubled leading severity prefixes (`Warning: WARNING: ...` → `Warning: ...`). */
+export declare function dedupeSeverityPrefix(message: string): string;
 /** The path a finding names: its source when it has one, else its path. */
 export declare function validationResultPath(result: ValidationResult): string;
 /**
@@ -72,3 +76,8 @@ export declare function readValidationSummaryRows(comp: ValidationSummaryComp, s
     showFieldErrorsByDefault: boolean;
     path?: (result: ValidationResult) => string;
 }): ValidationSummaryRow[];
+/**
+ * @internal Word one row for a path (empty at form level) as its field shows it, linked when the field can
+ * take the jump. Finding rows and owed follow-up rows read the same.
+ */
+export declare function summaryRowWording(source: Pick<ValidationSummarySource, 'field' | 'jumpable' | 'chrome'>, path: string, message: string, jumpLinks: boolean): Pick<ValidationSummaryRow, 'label' | 'text' | 'jumpPath' | 'jumpHref'>;

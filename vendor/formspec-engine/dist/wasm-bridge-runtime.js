@@ -157,6 +157,17 @@ export function wasmItemLocationAtPath(items, path) {
     const result = parseWasmJson(resultJson);
     return result === null ? undefined : result;
 }
+/** Assemble the Response instance and explanation evidence before the candidate is signed. */
+export function wasmAssembleCandidate(definition, response, resolution, evaluation) {
+    return parseWasmJson(wasm().assembleCandidate(JSON.stringify(definition), JSON.stringify(response), JSON.stringify(evaluation ?? null), JSON.stringify(resolution)));
+}
+/**
+ * Derive Core's filing-unit id (`Response.subject.id`) from a subject type and exact typed keys.
+ * Throws for untyped keys or an integer outside the I-JSON range.
+ */
+export function wasmResponseSubjectId(subjectType, keys) {
+    return wasm().subjectIdJson(subjectType, JSON.stringify(keys));
+}
 /** Apply creation-time values to a new Response or resolve its pending values. */
 export function wasmCreateResponse(definition, data, context, extensions) {
     return parseWasmJson(wasm().createResponse(JSON.stringify(definition), JSON.stringify(data), JSON.stringify(context), extensions));
@@ -167,7 +178,14 @@ export function wasmCreateRepeatRow(definition, data, groupPath, context, extens
 }
 /** Evaluate a Formspec definition against provided data. */
 export function wasmEvaluateDefinition(definition, data, context, extensions) {
-    const resultJson = wasm().evaluateDefinition(JSON.stringify(definition), JSON.stringify(data), context ? JSON.stringify(context) : undefined, extensions);
+    return runWasmEvaluation(wasm().evaluateDefinition, definition, data, context, extensions);
+}
+/** Prepare stable Response data and its submit verdict. Throws if the data do not converge. */
+export function wasmEvaluateFiled(definition, data, context, extensions) {
+    return runWasmEvaluation(wasm().evaluateFiled, definition, data, context, extensions);
+}
+function runWasmEvaluation(evaluate, definition, data, context, extensions) {
+    const resultJson = evaluate(JSON.stringify(definition), JSON.stringify(data), context ? JSON.stringify(context) : undefined, extensions);
     return parseWasmJson(resultJson);
 }
 /**

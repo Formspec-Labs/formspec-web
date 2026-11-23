@@ -160,6 +160,13 @@ export function routeHref(handle, params = {}) {
             : undefined;
     return { href: fillRoutePath(handle.path, params), diagnostics, refusal };
 }
+/** Address a form slot and, optionally, one of its sections. */
+export function formHref(path, slot, section) {
+    const query = new URLSearchParams({ slot });
+    if (section !== undefined)
+        query.set('section', section);
+    return `${path}?${query}`;
+}
 /** The route a transition targets, resolved within the transition's own Surface. */
 export function routeInSurface(app, surfaceId, routeId) {
     const matches = app.routes.filter((handle) => handle.surfaceId === surfaceId && handle.routeId === routeId);

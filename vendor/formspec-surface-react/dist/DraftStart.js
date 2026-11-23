@@ -1,0 +1,59 @@
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+/** @filedesc Create on activation and navigate only after the store returns a complete subject. */
+import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { draftStartHref } from '@formspec-org/surface';
+import { deriveDraftSubject } from './draft-session.js';
+export function DraftStart({ plan, session, navigate, strings }) {
+    const visit = useRef({ busy: false });
+    const [status, setStatus] = useState('ready');
+    const [missingInstance, setMissingInstance] = useState();
+    const noticeId = useId();
+    useLayoutEffect(() => {
+        visit.current = { busy: false };
+        setStatus('ready');
+        return () => { visit.current = { busy: false }; };
+    }, [session]);
+    async function start() {
+        const current = visit.current;
+        if (current.busy || !session.port.start)
+            return;
+        current.busy = true;
+        setStatus('pending');
+        setMissingInstance(undefined);
+        try {
+            const result = await session.port.start({
+                scope: session.scope, definitionUrl: plan.definitionUrl, definitionVersion: plan.definitionVersion,
+                subject: plan.subject, attemptId: current.attemptId ??= crypto.randomUUID(),
+            });
+            if (visit.current !== current)
+                return;
+            const href = result.status === 'started' && draftStartHref(plan, result.subject);
+            const derived = result.status === 'started' && href ? await deriveDraftSubject(result.subject) : undefined;
+            if (visit.current !== current)
+                return;
+            if (result.status !== 'started' || !href || derived?.id !== result.subject.id) {
+                if (result.status === 'pin-unavailable')
+                    setMissingInstance(result.instance);
+                setStatus('failed');
+                return;
+            }
+            const navigated = await navigate(href);
+            if (visit.current === current)
+                setStatus(navigated === false ? 'failed' : 'ready');
+        }
+        catch {
+            if (visit.current === current)
+                setStatus('failed');
+        }
+        finally {
+            current.busy = false;
+        }
+    }
+    const def = session.definitions?.get(plan.definitionUrl);
+    const sel = missingInstance ? def?.instances?.[missingInstance]?.response : undefined;
+    const targetTitle = sel ? session.definitions?.get(sel.definition.url)?.title : undefined;
+    const requiresAccepted = Boolean(sel?.disposition?.endsWith(':accepted'));
+    return _jsxs("div", { className: "fs-surface-draft-start", children: [_jsx("button", { type: "button", className: "fs-surface-draft-start__button", disabled: status === 'pending', "aria-describedby": status === 'failed' ? noticeId : undefined, onClick: () => void start(), children: plan.label }), status === 'failed' && (missingInstance && targetTitle
+                ? _jsxs("p", { id: noticeId, className: "fs-surface-themenote", role: "status", children: [strings('draftUnavailable'), " ", requiresAccepted ? `Waiting for an accepted "${targetTitle}" before this form can be started.` : `Waiting for "${targetTitle}" to be filed before this form can be started.`] })
+                : _jsxs("p", { id: noticeId, className: "fs-surface-themenote", role: "status", children: [strings('draftUnavailable'), missingInstance && _jsxs(_Fragment, { children: [" ", _jsx("code", { children: missingInstance })] })] }))] });
+}

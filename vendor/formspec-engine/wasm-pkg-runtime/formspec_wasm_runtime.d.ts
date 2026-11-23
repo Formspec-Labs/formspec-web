@@ -60,6 +60,14 @@ export function analyzeFelWithFieldTypes(expression: string, field_types_json: s
 export function applyMigrationsToResponseData(definition_json: string, response_data_json: string, from_version: string, now_iso: string): string;
 
 /**
+ * Attach the evidence from available Response instance resolutions.
+ *
+ * # Errors
+ * Returns a JavaScript error if input cannot be decoded or delivery validation fails.
+ */
+export function assembleCandidate(definition_json: string, response_json: string, evaluation_json: string, resolution_json: string): string;
+
+/**
  * Throws when `name` may not be registered: a FEL built-in or reserved word (Core §3.12 rule 1).
  */
 export function checkFelExtensionName(name: string): void;
@@ -129,6 +137,15 @@ export function evalFelWithTrace(expression: string, fields_json: string): strin
 export function evaluateDefinition(definition_json: string, data_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
 
 /**
+ * Prepare stable Response data and its submit verdict with the supplied clock.
+ *
+ * # Errors
+ *
+ * Returns an error for invalid JSON, invalid context, or data that do not settle.
+ */
+export function evaluateFiled(definition_json: string, data_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
+
+/**
  * Evaluate a standalone Screener Document against respondent inputs.
  *
  * Returns a Determination Record JSON string (always non-null).
@@ -188,6 +205,18 @@ export function resolveOptionSetsOnDefinition(definition_json: string): string;
  */
 export function sanitizeFelIdentifier(s: string): string;
 
+/**
+ * Derive the canonical id of a typed Response subject.
+ *
+ * Respondent hosts key drafts by this id before an engine exists; the engine derives
+ * `Response.subject.id` through the same function.
+ *
+ * # Errors
+ *
+ * Returns an error for malformed or untyped keys JSON or an out-of-range integer key.
+ */
+export function subjectIdJson(subject_type: string, keys_json: string): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -196,6 +225,7 @@ export interface InitOutput {
     readonly analyzeFel: (a: number, b: number, c: number) => void;
     readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+    readonly assembleCandidate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
@@ -206,6 +236,7 @@ export interface InitOutput {
     readonly evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly evaluateFiled: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly felcontext_evaluate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly felcontext_evaluateTrace: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
@@ -222,6 +253,7 @@ export interface InitOutput {
     readonly normalizeIndexedPath: (a: number, b: number, c: number) => void;
     readonly resolveOptionSetsOnDefinition: (a: number, b: number, c: number) => void;
     readonly sanitizeFelIdentifier: (a: number, b: number, c: number) => void;
+    readonly subjectIdJson: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

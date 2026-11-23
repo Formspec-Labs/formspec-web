@@ -1,7 +1,10 @@
 /** @filedesc Response Actions resolution helpers for renderers and hosts. */
-import { cloneValue } from './json-values.js';
-import { VALIDATION_MAPPING_MASTER_TABLE } from '@formspec-org/types';
+import { cloneValue, deepEqual } from './json-values.js';
+import { preactReactiveRuntime } from './reactivity/preact-runtime.js';
+import { targetDefinitionMatches, VALIDATION_MAPPING_MASTER_TABLE } from '@formspec-org/types';
 import { ResponseActionsPreconditionCatalog } from './precondition-catalog.js';
+import { isPlainJsonArray, isPlainJsonObject, isValidPlainJsonValue } from './service-request-runtime.js';
+import { getDraftEditVersionSignal } from './engine/draft-edit-signal.js';
 /**
  * Singleton precondition catalog. Spec §4.1 publishes a closed catalog of
  * six bindings; the engine consults this catalog as the default validator
@@ -187,6 +190,825 @@ export function findResponseActionByIntent(document, intent) {
         return null;
     }
     return document.actions.find(action => action?.intent === intent) ?? null;
+}
+const RESPONSE_ACTION_ID_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/;
+const EXTENSION_ACTION_INTENT_PATTERN = /^x-(?!(?:save-draft|autosave|review|submit|request-evidence)$)[A-Za-z0-9_-]+$/;
+const DOCUMENT_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+const MODULE_ID_PATTERN = /^x-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$/;
+const MODULE_LOCK_HASH_PATTERN = /^[a-z0-9]+:[A-Za-z0-9+/=]+$/;
+const ACTOR_ID_PATTERN = /^urn:formspec:actor:.+/;
+const GENERATION_ANCHOR_PATTERN = /^(item|unit|task|action|concept|need):.+$/;
+const HANDLE_OR_ROUTE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+const PROVENANCE_NODE_PATH_PATTERN = /^\/.+/;
+const ASCII_ONLY_PATTERN = /^[\x00-\x7F]+$/;
+const RFC3986_URI_PATTERN = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
+const BROWSER_RESOURCE_REF_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+const OUTPUT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const JSON_POINTER_NON_ROOT_PATTERN = /^\/(?:[^~/]|~[01])+(?:\/(?:[^~/]|~[01])*)*$/;
+const PATH_TEMPLATE_PATTERN = /^\/(?!\/)/;
+const PATH_BINDING_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+const QUERY_BINDING_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+const HEADER_BINDING_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+const SELECTOR_PATH_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*$/;
+const DOCUMENT_ALLOWED_KEYS = new Set([
+    '$formspecResponseActions',
+    'modules',
+    'version',
+    'name',
+    'title',
+    'description',
+    'scope',
+    'targetDefinition',
+    'actions',
+    'x-formspec-runtime',
+]);
+const TARGET_DEFINITION_KEYS = new Set(['url', 'compatibleVersions']);
+const MODULE_REF_KEYS = new Set(['id', 'version', 'publisher', 'lockHash', 'extensions']);
+const AUTHOR_ACTOR_KEYS = new Set(['id', 'kind', 'actChannel', 'display', 'extensions']);
+const COMPONENT_NODE_IDENTITY_KEYS = new Set(['component', 'surface', 'route', 'nodePath', 'id', 'nodeId']);
+const COMPONENT_REF_KEYS = new Set(['handle', 'url', 'version']);
+const SURFACE_REF_KEYS = new Set(['url', 'version']);
+const CROSS_COMPONENT_REF_KEYS = new Set(['route', 'nodePath']);
+const ACTION_ALLOWED_KEYS = new Set([
+    'id',
+    'intent',
+    'actor',
+    'label',
+    'x-generation',
+    'preconditions',
+    'validation',
+    'effects',
+    'onFailure',
+    'onDeferred',
+]);
+const PRECONDITION_KEYS = new Set(['id', 'expression', 'severity']);
+const VALIDATION_OVERRIDE_KEYS = new Set(['profile', 'blocking', 'persistence']);
+const MAPPING_EFFECT_KEYS = new Set(['type', 'mappingRef', 'idempotencyKey', 'onError']);
+const LEDGER_EFFECT_KEYS = new Set(['type', 'eventKind', 'payloadRef', 'idempotencyKey', 'onError']);
+const HANDOFF_EFFECT_KEYS = new Set(['type', 'handoffProfileRef', 'recipientRef', 'idempotencyKey', 'onError']);
+const REQUEST_REF_EFFECT_KEYS = new Set(['type', 'requestRef', 'idempotencyKey', 'onError']);
+const HOST_EVENT_EFFECT_KEYS = new Set(['type', 'eventName', 'detailRef']);
+const BROWSER_RESOURCE_EFFECT_KEYS = new Set(['type', 'operation', 'resourceRef', 'target', 'onError']);
+const RUNTIME_CATALOG_KEYS = new Set(['version', 'requests']);
+const RUNTIME_REQUEST_KEYS = new Set([
+    'id',
+    'adapter',
+    'operation',
+    'request',
+    'successStatuses',
+    'outputs',
+    'x-generation',
+]);
+const HTTP_JSON_REQUEST_KEYS = new Set([
+    'method',
+    'pathTemplate',
+    'pathBindings',
+    'queryBindings',
+    'headerBindings',
+    'bodyDefaults',
+    'bodyBindings',
+]);
+const RUNTIME_VALUE_SELECTOR_KEYS = new Set(['from', 'path', 'value']);
+const RUNTIME_OUTPUT_KEYS = new Set(['path', 'exposure']);
+/**
+ * Whether `intent` conforms to `schemas/response-actions.schema.json` `#/$defs/ActionIntent`:
+ * either a closed standard Validation Mapping intent or an `x-` publisher extension that
+ * does not shadow a standard intent.
+ */
+export function isValidResponseActionIntent(intent) {
+    return typeof intent === 'string' && (isStandardActionIntent(intent)
+        || EXTENSION_ACTION_INTENT_PATTERN.test(intent));
+}
+function asRecord(value) {
+    if (!isPlainJsonObject(value))
+        return null;
+    if (Object.getOwnPropertySymbols(value).length > 0)
+        return null;
+    const out = Object.create(null);
+    for (const key of Object.getOwnPropertyNames(value)) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || !descriptor.enumerable) {
+            return null;
+        }
+        out[key] = descriptor.value;
+    }
+    return out;
+}
+function hasMinLength1(value) {
+    return typeof value === 'string' && value.length >= 1;
+}
+function hasNonEmptyString(value) {
+    return typeof value === 'string' && value.trim().length > 0;
+}
+function isValidRfc3986Uri(value) {
+    return typeof value === 'string'
+        && value.length >= 1
+        && ASCII_ONLY_PATTERN.test(value)
+        && (value.includes(':') || value.includes('/'))
+        && RFC3986_URI_PATTERN.test(value);
+}
+function hasOnlyAllowedKeys(record, allowed, allowXPrefix = false) {
+    for (const key of Object.keys(record)) {
+        if (allowed.has(key))
+            continue;
+        if (allowXPrefix && key.startsWith('x-'))
+            continue;
+        return false;
+    }
+    return true;
+}
+function isValidExtensions(value) {
+    const ext = asRecord(value);
+    if (!ext)
+        return false;
+    return Object.keys(ext).every((key) => key.startsWith('x-'));
+}
+function isValidModuleRef(value) {
+    const mod = asRecord(value);
+    if (!mod || !hasOnlyAllowedKeys(mod, MODULE_REF_KEYS))
+        return false;
+    return typeof mod.id === 'string'
+        && MODULE_ID_PATTERN.test(mod.id)
+        && hasMinLength1(mod.version)
+        && (mod.publisher === undefined || isValidRfc3986Uri(mod.publisher))
+        && (mod.lockHash === undefined || (typeof mod.lockHash === 'string' && MODULE_LOCK_HASH_PATTERN.test(mod.lockHash)))
+        && (mod.extensions === undefined || isValidExtensions(mod.extensions));
+}
+function isValidAuthorActor(value) {
+    const actor = asRecord(value);
+    if (!actor || !hasOnlyAllowedKeys(actor, AUTHOR_ACTOR_KEYS))
+        return false;
+    return typeof actor.id === 'string'
+        && ACTOR_ID_PATTERN.test(actor.id)
+        && (actor.kind === 'human' || actor.kind === 'ai-agent' || actor.kind === 'service')
+        && (actor.actChannel === 'human' || actor.actChannel === 'mcp' || actor.actChannel === 'agent' || actor.actChannel === 'service')
+        && (actor.display === undefined || typeof actor.display === 'string')
+        && (actor.extensions === undefined || isValidExtensions(actor.extensions));
+}
+function isValidProvenanceRef(value) {
+    const candidate = asRecord(value);
+    if (!candidate)
+        return false;
+    if (hasOnlyAllowedKeys(candidate, CROSS_COMPONENT_REF_KEYS)
+        && typeof candidate.route === 'string'
+        && typeof candidate.nodePath === 'string') {
+        return true;
+    }
+    if (!hasOnlyAllowedKeys(candidate, COMPONENT_NODE_IDENTITY_KEYS))
+        return false;
+    const comp = asRecord(candidate.component);
+    const surf = asRecord(candidate.surface);
+    return Boolean(comp
+        && hasOnlyAllowedKeys(comp, COMPONENT_REF_KEYS)
+        && typeof comp.handle === 'string'
+        && HANDLE_OR_ROUTE_ID_PATTERN.test(comp.handle)
+        && (comp.url === undefined || isValidRfc3986Uri(comp.url))
+        && (comp.version === undefined || hasMinLength1(comp.version))
+        && surf
+        && hasOnlyAllowedKeys(surf, SURFACE_REF_KEYS)
+        && isValidRfc3986Uri(surf.url)
+        && (surf.version === undefined || hasMinLength1(surf.version))
+        && typeof candidate.route === 'string'
+        && HANDLE_OR_ROUTE_ID_PATTERN.test(candidate.route)
+        && typeof candidate.nodePath === 'string'
+        && PROVENANCE_NODE_PATH_PATTERN.test(candidate.nodePath)
+        && (candidate.id === undefined || hasMinLength1(candidate.id))
+        && (candidate.nodeId === undefined || hasMinLength1(candidate.nodeId)));
+}
+function everyDenseElement(value, predicate) {
+    if (!isPlainJsonArray(value))
+        return false;
+    for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+            return false;
+        }
+        if (!predicate(descriptor.value, index))
+            return false;
+    }
+    return true;
+}
+function ownDataProperty(record, key) {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+        return { present: false, value: undefined };
+    }
+    return { present: true, value: descriptor.value };
+}
+function isValidGeneration(value) {
+    const gen = asRecord(value);
+    if (!gen)
+        return false;
+    return (gen.source === undefined || typeof gen.source === 'string')
+        && (gen.strategy === undefined || typeof gen.strategy === 'string')
+        && (gen.generatedAt === undefined || typeof gen.generatedAt === 'string')
+        && (gen.anchors === undefined
+            || everyDenseElement(gen.anchors, (anchor) => typeof anchor === 'string' && GENERATION_ANCHOR_PATTERN.test(anchor)))
+        && (gen.generatedBy === undefined || typeof gen.generatedBy === 'string' || isValidAuthorActor(gen.generatedBy))
+        && (gen.sourceModule === undefined || isValidModuleRef(gen.sourceModule))
+        && (gen.movedFrom === undefined || isValidProvenanceRef(gen.movedFrom))
+        && (gen.copiedFrom === undefined || isValidProvenanceRef(gen.copiedFrom))
+        && (gen.extensions === undefined || isValidExtensions(gen.extensions));
+}
+function isValidRuntimeValueSelector(value) {
+    const selector = asRecord(value);
+    if (!selector || !hasOnlyAllowedKeys(selector, RUNTIME_VALUE_SELECTOR_KEYS))
+        return false;
+    const from = selector.from;
+    if (from === 'literal') {
+        const valueProp = ownDataProperty(selector, 'value');
+        return valueProp.present
+            && valueProp.value !== undefined
+            && !Object.prototype.hasOwnProperty.call(selector, 'path')
+            && isValidPlainJsonValue(valueProp.value);
+    }
+    if (from === 'input' || from === 'route' || from === 'session' || from === 'result') {
+        return typeof selector.path === 'string'
+            && SELECTOR_PATH_PATTERN.test(selector.path)
+            && !Object.prototype.hasOwnProperty.call(selector, 'value');
+    }
+    return false;
+}
+function isValidSelectorMap(value, keyPattern) {
+    const record = asRecord(value);
+    if (!record)
+        return false;
+    for (const key of Object.keys(record)) {
+        const prop = ownDataProperty(record, key);
+        if (!prop.present || !keyPattern.test(key) || !isValidRuntimeValueSelector(prop.value)) {
+            return false;
+        }
+    }
+    return true;
+}
+function isValidHttpJsonRequest(value) {
+    const req = asRecord(value);
+    if (!req || !hasOnlyAllowedKeys(req, HTTP_JSON_REQUEST_KEYS))
+        return false;
+    const bodyDefaultsProp = ownDataProperty(req, 'bodyDefaults');
+    const bodyDefaultsValid = !Object.prototype.hasOwnProperty.call(req, 'bodyDefaults')
+        || (bodyDefaultsProp.present && (bodyDefaultsProp.value === undefined
+            || (isPlainJsonObject(bodyDefaultsProp.value) && isValidPlainJsonValue(bodyDefaultsProp.value))));
+    return (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE')
+        && typeof req.pathTemplate === 'string'
+        && PATH_TEMPLATE_PATTERN.test(req.pathTemplate)
+        && (req.pathBindings === undefined || isValidSelectorMap(req.pathBindings, PATH_BINDING_NAME_PATTERN))
+        && (req.queryBindings === undefined || isValidSelectorMap(req.queryBindings, QUERY_BINDING_NAME_PATTERN))
+        && (req.headerBindings === undefined || isValidSelectorMap(req.headerBindings, HEADER_BINDING_NAME_PATTERN))
+        && bodyDefaultsValid
+        && (req.bodyBindings === undefined || isValidSelectorMap(req.bodyBindings, JSON_POINTER_NON_ROOT_PATTERN));
+}
+function isValidRuntimeRequestOutput(value) {
+    const out = asRecord(value);
+    if (!out || !hasOnlyAllowedKeys(out, RUNTIME_OUTPUT_KEYS))
+        return false;
+    return typeof out.path === 'string'
+        && JSON_POINTER_NON_ROOT_PATTERN.test(out.path)
+        && (out.exposure === undefined
+            || out.exposure === 'internal'
+            || out.exposure === 'transition'
+            || out.exposure === 'session');
+}
+function isValidRuntimeRequestCatalog(value) {
+    const catalog = asRecord(value);
+    if (!catalog
+        || !hasOnlyAllowedKeys(catalog, RUNTIME_CATALOG_KEYS)
+        || catalog.version !== '1.0'
+        || !Array.isArray(catalog.requests)
+        || catalog.requests.length === 0) {
+        return false;
+    }
+    const requestIds = new Set();
+    if (!everyDenseElement(catalog.requests, (raw) => {
+        const entry = asRecord(raw);
+        if (!entry
+            || !hasOnlyAllowedKeys(entry, RUNTIME_REQUEST_KEYS)
+            || typeof entry.id !== 'string'
+            || !RESPONSE_ACTION_ID_PATTERN.test(entry.id)
+            || requestIds.has(entry.id)
+            || entry.adapter !== 'http-json'
+            || (entry.operation !== undefined && entry.operation !== 'prepare' && entry.operation !== 'sign')
+            || !isValidHttpJsonRequest(entry.request)
+            || (entry['x-generation'] !== undefined && !isValidGeneration(entry['x-generation']))) {
+            return false;
+        }
+        if (entry.successStatuses !== undefined) {
+            if (!Array.isArray(entry.successStatuses) || entry.successStatuses.length === 0)
+                return false;
+            const seenStatuses = new Set();
+            if (!everyDenseElement(entry.successStatuses, (status) => {
+                if (typeof status !== 'number' || !Number.isInteger(status) || status < 200 || status > 299 || seenStatuses.has(status)) {
+                    return false;
+                }
+                seenStatuses.add(status);
+                return true;
+            })) {
+                return false;
+            }
+        }
+        if (entry.outputs !== undefined) {
+            const outputs = asRecord(entry.outputs);
+            if (!outputs)
+                return false;
+            for (const name of Object.keys(outputs)) {
+                const prop = ownDataProperty(outputs, name);
+                if (!prop.present || !OUTPUT_NAME_PATTERN.test(name) || !isValidRuntimeRequestOutput(prop.value)) {
+                    return false;
+                }
+            }
+        }
+        requestIds.add(entry.id);
+        return true;
+    })) {
+        return false;
+    }
+    return true;
+}
+function isValidPrecondition(value) {
+    const precondition = asRecord(value);
+    if (!precondition || !hasOnlyAllowedKeys(precondition, PRECONDITION_KEYS))
+        return false;
+    return hasMinLength1(precondition.id)
+        && hasMinLength1(precondition.expression)
+        && (precondition.severity === 'block' || precondition.severity === 'defer');
+}
+function isValidOnError(value) {
+    return value === undefined || value === 'fail' || value === 'defer';
+}
+function hasValidResponseActionEffectShape(value) {
+    const effect = asRecord(value);
+    if (!effect || typeof effect.type !== 'string')
+        return false;
+    switch (effect.type) {
+        case 'mappingExecution':
+            return hasOnlyAllowedKeys(effect, MAPPING_EFFECT_KEYS)
+                && hasMinLength1(effect.mappingRef)
+                && hasMinLength1(effect.idempotencyKey)
+                && isValidOnError(effect.onError);
+        case 'ledgerAppend':
+            return hasOnlyAllowedKeys(effect, LEDGER_EFFECT_KEYS)
+                && hasMinLength1(effect.eventKind)
+                && effect.eventKind !== 'case.created'
+                && !effect.eventKind.startsWith('case.')
+                && !effect.eventKind.startsWith('action.')
+                && (effect.payloadRef === undefined || typeof effect.payloadRef === 'string')
+                && hasMinLength1(effect.idempotencyKey)
+                && isValidOnError(effect.onError);
+        case 'handoffAssembly':
+            return hasOnlyAllowedKeys(effect, HANDOFF_EFFECT_KEYS)
+                && hasMinLength1(effect.handoffProfileRef)
+                && hasMinLength1(effect.recipientRef)
+                && hasMinLength1(effect.idempotencyKey)
+                && isValidOnError(effect.onError);
+        case 'evidenceRequest':
+            return hasOnlyAllowedKeys(effect, REQUEST_REF_EFFECT_KEYS)
+                && hasMinLength1(effect.requestRef)
+                && hasMinLength1(effect.idempotencyKey)
+                && isValidOnError(effect.onError);
+        case 'serviceRequest':
+            return hasOnlyAllowedKeys(effect, REQUEST_REF_EFFECT_KEYS)
+                && typeof effect.requestRef === 'string'
+                && RESPONSE_ACTION_ID_PATTERN.test(effect.requestRef)
+                && hasMinLength1(effect.idempotencyKey)
+                && isValidOnError(effect.onError);
+        case 'hostEvent':
+            return hasOnlyAllowedKeys(effect, HOST_EVENT_EFFECT_KEYS)
+                && hasMinLength1(effect.eventName)
+                && (effect.detailRef === undefined || typeof effect.detailRef === 'string');
+        case 'browserResource':
+            return hasOnlyAllowedKeys(effect, BROWSER_RESOURCE_EFFECT_KEYS)
+                && (effect.operation === 'open' || effect.operation === 'download')
+                && typeof effect.resourceRef === 'string'
+                && BROWSER_RESOURCE_REF_PATTERN.test(effect.resourceRef)
+                && (effect.target === undefined || effect.target === 'self' || effect.target === 'new')
+                && isValidOnError(effect.onError);
+        default:
+            return false;
+    }
+}
+function hasValidResponseActionShape(value) {
+    const action = asRecord(value);
+    if (!action
+        || !hasOnlyAllowedKeys(action, ACTION_ALLOWED_KEYS)
+        || typeof action.id !== 'string'
+        || !RESPONSE_ACTION_ID_PATTERN.test(action.id)
+        || !isValidResponseActionIntent(action.intent)
+        || (action.actor !== undefined && typeof action.actor !== 'string')
+        || (action['x-generation'] !== undefined && !isValidGeneration(action['x-generation']))
+        || (action.preconditions !== undefined
+            && !everyDenseElement(action.preconditions, isValidPrecondition))
+        || (action.onFailure !== undefined && action.onFailure !== 'stop' && action.onFailure !== 'retry-once')
+        || (action.onDeferred !== undefined && action.onDeferred !== 'stop' && action.onDeferred !== 'await')
+        || !Array.isArray(action.effects)
+        || action.effects.length === 0
+        || !everyDenseElement(action.effects, hasValidResponseActionEffectShape)) {
+        return false;
+    }
+    let validationRecord = null;
+    const hasValidation = Object.prototype.hasOwnProperty.call(action, 'validation');
+    if (hasValidation && action.validation !== undefined) {
+        validationRecord = asRecord(action.validation);
+        if (!validationRecord || !hasOnlyAllowedKeys(validationRecord, VALIDATION_OVERRIDE_KEYS)) {
+            return false;
+        }
+    }
+    const label = action.label;
+    if (label !== undefined) {
+        const candidate = asRecord(label);
+        const keys = candidate ? Object.keys(candidate) : [];
+        if (keys.length !== 1)
+            return false;
+        const onlyKey = keys[0];
+        if ((onlyKey !== 'literal' && onlyKey !== 'ref') || !hasMinLength1(candidate[onlyKey])) {
+            return false;
+        }
+    }
+    try {
+        const sanitizedAction = hasValidation
+            ? Object.assign(Object.create(null), action, { validation: validationRecord ?? action.validation })
+            : action;
+        resolveResponseActionValidationTuple(sanitizedAction);
+    }
+    catch {
+        return false;
+    }
+    return true;
+}
+function hasActionLabel(action) {
+    const record = asRecord(action);
+    const label = record ? asRecord(record.label) : null;
+    return label ? hasNonEmptyString(label.literal) || hasNonEmptyString(label.ref) : false;
+}
+/**
+ * Fail-closed schema-faithful validator for a Definition-scoped Response Actions
+ * document (`schemas/response-actions.schema.json`). Shared by renderer
+ * auto-placement, Surface slot-supply planning, and automatic `autosave`
+ * selection so every consumer agrees on whether a document is valid.
+ */
+export function isValidDefinitionResponseActionsDocument(document, definition) {
+    const candidate = asRecord(document);
+    const target = asRecord(candidate?.targetDefinition);
+    if (!candidate
+        || !hasOnlyAllowedKeys(candidate, DOCUMENT_ALLOWED_KEYS, true)
+        || candidate.$formspecResponseActions !== '1.0'
+        || !hasMinLength1(candidate.version)
+        || (candidate.name !== undefined && (typeof candidate.name !== 'string' || !DOCUMENT_NAME_PATTERN.test(candidate.name)))
+        || (candidate.title !== undefined && typeof candidate.title !== 'string')
+        || (candidate.description !== undefined && typeof candidate.description !== 'string')
+        || (candidate.modules !== undefined && !everyDenseElement(candidate.modules, isValidModuleRef))
+        || (candidate.scope !== undefined && candidate.scope !== 'response')
+        || !target
+        || !hasOnlyAllowedKeys(target, TARGET_DEFINITION_KEYS)
+        || !isValidRfc3986Uri(target.url)
+        || typeof definition?.url !== 'string'
+        || (target.compatibleVersions !== undefined
+            && !hasMinLength1(target.compatibleVersions))
+        || !targetDefinitionMatches({
+            url: target.url,
+            ...(typeof target.compatibleVersions === 'string'
+                ? { compatibleVersions: target.compatibleVersions }
+                : {}),
+        }, {
+            url: definition.url,
+            ...(typeof definition.version === 'string' && definition.version.length > 0
+                ? { version: definition.version }
+                : {}),
+        })
+        || (candidate['x-formspec-runtime'] !== undefined && !isValidRuntimeRequestCatalog(candidate['x-formspec-runtime']))
+        || !Array.isArray(candidate.actions)
+        || candidate.actions.length === 0
+        || !everyDenseElement(candidate.actions, hasValidResponseActionShape)) {
+        return false;
+    }
+    const ids = new Set();
+    for (const action of candidate.actions) {
+        if (ids.has(action.id))
+            return false;
+        ids.add(action.id);
+    }
+    return true;
+}
+/**
+ * Whether a Response Action represents background/system-initiated behavior
+ * (`intent === 'autosave'` per Validation Mapping §2) rather than a manual
+ * respondent control. Renderers MUST NOT synthesize interactive ActionButtons
+ * for background actions even when they carry a label.
+ */
+export function isBackgroundResponseAction(action) {
+    return action?.intent === 'autosave';
+}
+/**
+ * Select manual response-scoped Actions that a Definition auto-renderer can
+ * place without inventing a control label. The document itself must be a
+ * matching, response-scoped document with unique, structurally usable actions;
+ * one bad action closes the whole auto-placement seam. Background intents
+ * (`autosave`) are excluded from synthesized manual buttons.
+ */
+export function autoPlacedDefinitionActions(document, definition) {
+    if (!isValidDefinitionResponseActionsDocument(document, definition)) {
+        return [];
+    }
+    return document.actions.filter(action => !isBackgroundResponseAction(action) && hasActionLabel(action));
+}
+/**
+ * Resolve the single unambiguous draft-checkpoint `autosave` Action for a
+ * Definition from a complete, schema-valid response-scoped Response Actions
+ * document. Because `actions[]` order is documentation-only, multiple eligible
+ * `autosave` Actions fail closed and return an `ambiguous-autosave-action`
+ * finding independent of array order.
+ */
+export function resolveAutosaveResponseAction(document, definition) {
+    const candidate = asRecord(document);
+    const target = asRecord(candidate?.targetDefinition);
+    const expectedUrl = definition && hasNonEmptyString(definition.url)
+        ? definition.url
+        : target?.url;
+    if (!hasNonEmptyString(expectedUrl)
+        || !isValidDefinitionResponseActionsDocument(document, {
+            url: expectedUrl,
+            ...(definition && typeof definition.version === 'string' && definition.version.length > 0
+                ? { version: definition.version }
+                : {}),
+        })) {
+        return { action: null };
+    }
+    const eligible = [];
+    for (const entry of document.actions) {
+        if (entry.intent !== 'autosave')
+            continue;
+        const resolution = resolveResponseAction(document, entry.id);
+        if (!resolution.resolved || !resolution.action)
+            continue;
+        try {
+            if (resolveResponseActionValidationTuple(resolution.action).persistence !== 'draft-checkpoint') {
+                continue;
+            }
+        }
+        catch {
+            continue;
+        }
+        eligible.push(resolution.action);
+    }
+    if (eligible.length === 0) {
+        return { action: null };
+    }
+    if (eligible.length > 1) {
+        const ambiguousActionIds = eligible.map((action) => action.id).sort();
+        return {
+            action: null,
+            ambiguousActionIds,
+            finding: {
+                code: 'COMP-REFERENTIAL-INTEGRITY',
+                severity: 'error',
+                kind: 'actionRef',
+                target: 'autosave',
+                reason: 'ambiguous-autosave-action',
+            },
+        };
+    }
+    return { action: eligible[0] };
+}
+/**
+ * Resolve the valid draft-checkpoint `autosave` Action for a Definition, if
+ * exactly one is published unambiguously in a valid matching response-scoped document.
+ */
+export function findAutosaveResponseAction(document, definition) {
+    return resolveAutosaveResponseAction(document, definition).action;
+}
+function captureEffectiveAutosavePolicy(document, action) {
+    if (!action)
+        return null;
+    const runtime = document?.['x-formspec-runtime'];
+    const requests = isPlainJsonObject(runtime) && Array.isArray(runtime.requests)
+        ? runtime.requests
+        : [];
+    const seen = new Set();
+    const referencedRequests = [];
+    for (const effect of action.effects ?? []) {
+        if (effect.type !== 'serviceRequest')
+            continue;
+        const ref = effect.requestRef;
+        if (typeof ref !== 'string' || seen.has(ref))
+            continue;
+        seen.add(ref);
+        const matches = requests
+            .filter((candidate) => isPlainJsonObject(candidate) && candidate.id === ref)
+            .map((candidate) => cloneValue(candidate));
+        referencedRequests.push([ref, matches]);
+    }
+    return {
+        action: cloneValue(action),
+        referencedRequests,
+    };
+}
+/**
+ * Create a per-engine `autosave` controller that preserves unsaved dirty edits
+ * across `responseActionsDocument` replacements (equivalent re-parsed objects,
+ * ambiguity corrections `2 -> 1`, and ambiguity cancellations `1 -> 2`).
+ */
+export function createResponseActionAutosaveController(options) {
+    const debounceMs = options.debounceMs ?? 400;
+    const draftEditVersionSignal = getDraftEditVersionSignal(options.engine);
+    let currentDocument = options.document;
+    let resolvedAutosave = null;
+    let resolvedPolicySnapshot = null;
+    let lastFinding;
+    // Conforming wrapper engines without the internal edit-version signal keep
+    // a single baseline snapshot across inactive periods (no per-edit polling).
+    let baselineSnapshot = draftEditVersionSignal ? undefined : options.engine.getDraftSnapshot();
+    let edit = 0;
+    let savedEdit = 0;
+    let timer;
+    let inFlight;
+    let pendingFlushAfterInFlight = false;
+    let active = true;
+    let generation = 0;
+    let unsubscribe;
+    function clearTimer() {
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            timer = undefined;
+        }
+    }
+    function detachSubscription() {
+        unsubscribe?.();
+        unsubscribe = undefined;
+    }
+    function schedule() {
+        if (!active || !resolvedAutosave || edit === savedEdit)
+            return;
+        pendingFlushAfterInFlight = false;
+        clearTimer();
+        timer = setTimeout(() => {
+            timer = undefined;
+            void run();
+        }, debounceMs);
+    }
+    function syncSubscription(shouldTrackFallback) {
+        if (!active)
+            return;
+        if (draftEditVersionSignal) {
+            if (unsubscribe)
+                return;
+            let lastVersion;
+            unsubscribe = preactReactiveRuntime.effect(() => {
+                const currentVersion = draftEditVersionSignal.value;
+                if (lastVersion === undefined) {
+                    lastVersion = currentVersion;
+                    return;
+                }
+                if (currentVersion !== lastVersion) {
+                    lastVersion = currentVersion;
+                    edit += 1;
+                    options.onEdit?.();
+                    schedule();
+                }
+            });
+            return;
+        }
+        if (!shouldTrackFallback) {
+            detachSubscription();
+            return;
+        }
+        const latest = options.engine.getDraftSnapshot();
+        if (!deepEqual(latest, baselineSnapshot)) {
+            baselineSnapshot = latest;
+            edit += 1;
+            options.onEdit?.();
+        }
+        if (unsubscribe)
+            return;
+        let initialized = false;
+        unsubscribe = preactReactiveRuntime.effect(() => {
+            options.engine.getEvaluatedFormState({ profile: 'off' });
+            if (!initialized) {
+                initialized = true;
+                return;
+            }
+            const current = options.engine.getDraftSnapshot();
+            if (!deepEqual(current, baselineSnapshot)) {
+                baselineSnapshot = current;
+                edit += 1;
+                options.onEdit?.();
+                schedule();
+            }
+        });
+    }
+    function run() {
+        if (!active || !resolvedAutosave || edit === savedEdit)
+            return Promise.resolve();
+        if (inFlight) {
+            pendingFlushAfterInFlight = true;
+            return inFlight;
+        }
+        const actionToRun = resolvedAutosave;
+        const documentToRun = currentDocument;
+        const runGeneration = generation;
+        const targetEdit = edit;
+        const currentRun = Promise.resolve()
+            .then(() => options.invoke(actionToRun, {
+            document: documentToRun,
+            isCurrent: () => active && generation === runGeneration,
+        }))
+            .then((outcome) => {
+            if (!active)
+                return;
+            const status = outcome && typeof outcome === 'object' && 'status' in outcome
+                ? outcome.status
+                : undefined;
+            if (status !== 'failed' && status !== 'blocked' && status !== 'unresolved') {
+                savedEdit = Math.max(savedEdit, targetEdit);
+            }
+        })
+            .catch(() => {
+            // Caller owns error reporting; never leak an unhandled timer rejection.
+        })
+            .finally(() => {
+            inFlight = undefined;
+            if (active
+                && resolvedAutosave !== null
+                && pendingFlushAfterInFlight
+                && timer === undefined
+                && edit !== savedEdit) {
+                pendingFlushAfterInFlight = false;
+                void run();
+            }
+        });
+        inFlight = currentRun;
+        return currentRun;
+    }
+    function reconcileDocument(nextDocument, initial) {
+        if (!active)
+            return;
+        const previousPolicy = resolvedPolicySnapshot;
+        const previousAction = previousPolicy?.action ?? null;
+        const previousFinding = lastFinding;
+        currentDocument = nextDocument;
+        const resolution = resolveAutosaveResponseAction(currentDocument, options.engine.getDefinition?.());
+        const nextAction = resolution.action;
+        const nextPolicy = captureEffectiveAutosavePolicy(currentDocument, nextAction);
+        const equivalentAction = previousPolicy !== null
+            && nextPolicy !== null
+            && deepEqual(previousPolicy, nextPolicy);
+        const unchangedPolicy = !initial && (equivalentAction
+            || (previousPolicy === null
+                && nextPolicy === null
+                && deepEqual(previousFinding, resolution.finding)));
+        resolvedAutosave = nextAction;
+        resolvedPolicySnapshot = nextPolicy;
+        lastFinding = resolution.finding ? cloneValue(resolution.finding) : undefined;
+        if (unchangedPolicy) {
+            return;
+        }
+        if (!initial) {
+            generation += 1;
+            options.onDocumentChange?.({
+                previousAction,
+                nextAction,
+                equivalentAction,
+            });
+        }
+        if (resolution.finding) {
+            options.onFinding?.(resolution.finding);
+        }
+        syncSubscription(resolvedAutosave !== null);
+        if (!resolvedAutosave) {
+            clearTimer();
+            pendingFlushAfterInFlight = false;
+            return;
+        }
+        if (edit !== savedEdit) {
+            if (inFlight) {
+                pendingFlushAfterInFlight = true;
+            }
+            else if (timer === undefined) {
+                schedule();
+            }
+        }
+    }
+    reconcileDocument(options.document, true);
+    return {
+        setDocument(nextDocument) {
+            reconcileDocument(nextDocument, false);
+        },
+        dispose() {
+            active = false;
+            generation += 1;
+            pendingFlushAfterInFlight = false;
+            clearTimer();
+            detachSubscription();
+        },
+    };
+}
+/**
+ * Subscribe to `FormEngine` draft changes after mount and invoke the declared
+ * `autosave` Response Action with debounce (`400ms` default) and single-flight
+ * coalescing. Returns a cleanup function that cancels pending timers and
+ * detaches the reactive subscription.
+ */
+export function subscribeResponseActionAutosave(options) {
+    const controller = createResponseActionAutosaveController(options);
+    return () => controller.dispose();
 }
 /**
  * Structured error thrown when an explicit `action.validation` override
