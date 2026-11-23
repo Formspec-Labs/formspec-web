@@ -37,6 +37,7 @@ import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 import { testScopeKey } from '../fixtures/scope.ts';
+import { declarePassportSigningOperations } from '../fixtures/passport-signing-operations.ts';
 
 const observed = vi.hoisted(() => ({ forms: [] as unknown[], real: false }));
 vi.mock('../../src/app/RespondentRuntime.tsx', async importOriginal => {
@@ -47,7 +48,7 @@ vi.mock('../../src/app/RespondentRuntime.tsx', async importOriginal => {
   } };
 });
 const root = resolve(process.cwd(), 'tests/fixtures/native-signing-r5');
-const bundle = JSON.parse(readFileSync(resolve(root, 'native-bundle.json'), 'utf8')) as BundleExport;
+const bundle = declarePassportSigningOperations(JSON.parse(readFileSync(resolve(root, 'native-bundle.json'), 'utf8')) as BundleExport);
 const component = JSON.parse(readFileSync(resolve(root, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
 const lifecycleRoot = resolve('public/demo-packages/d1-passport');
 const lifecycleBundle = JSON.parse(readFileSync(resolve(lifecycleRoot, 'v0.1.8/native-bundle.json'), 'utf8')) as BundleExport;

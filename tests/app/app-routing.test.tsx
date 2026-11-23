@@ -30,11 +30,7 @@ describe('App route selection (FW-0039 slice 1)', () => {
         <App config={departmentAppProfile} />
       </CompositionProvider>,
     );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('heading', { name: testDefinition.title, level: 1 }),
-      ).not.toBeNull();
-    });
+    await screen.findByRole('heading', { name: testDefinition.title, level: 1 }, { timeout: 4_000 });
   });
 
   it('routes /status?caseLedgerId=urn:wos:... to the status runtime', async () => {

@@ -32,10 +32,13 @@ import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
 import { otherScopeKey, testScopeKey } from '../fixtures/scope.ts';
 import * as appGraphModule from '@formspec-org/app-graph';
 import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters/schema';
+import { declarePassportSigningOperations } from '../fixtures/passport-signing-operations.ts';
 
 /** Lowercase hex SHA-256 of a text, as package manifests pin their files. */
 const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-const nativeBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8');
+const nativeBytes = JSON.stringify(declarePassportSigningOperations(JSON.parse(
+  readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8'),
+) as BundleExport));
 const componentBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/passport-renewal.component.json'), 'utf8');
 const initialDefinitionUrl = 'https://server.example.test/runtime/forms/actual-form';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -190,14 +193,16 @@ async function moduleBindingFixture(selectedModule = false) {
 
 async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', restorationTest?: { hostState?: boolean; initialData?: boolean }) {
   const test = await fixture(subject);
-  const bytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/photo-complete-successor-v1.bundle.json'), 'utf8');
-  const bundle = JSON.parse(bytes) as BundleExport;
+  const bundle = declarePassportSigningOperations(JSON.parse(
+    readFileSync(resolve(process.cwd(), 'tests/fixtures/photo-complete-successor-v1.bundle.json'), 'utf8'),
+  ) as BundleExport);
+  const bytes = JSON.stringify(bundle);
   const resolved = dereferenceBundleExport(bundle);
   const definition = resolved.definitions.get('urn:formspec:demo:d1:passport-renewal')!;
   const locales = Object.values(bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
   test.texts['native.json'] = bytes; test.files.nativeBundle.sha256 = await rawDigest(bytes);
   test.texts['definition.json'] = JSON.stringify(definition); test.files.definition.sha256 = await rawDigest(test.texts['definition.json']);
-  // Actual inline Components remain in the frozen complete graph.
+  // Keep the authored inline Components.
   Reflect.deleteProperty(test.files, 'component');
   test.files.locales = await Promise.all(locales.map(async (document, index) => {
     const path = `locale-${index}.json`; test.texts[path] = JSON.stringify(document);
@@ -460,7 +465,7 @@ describe('explicit native package composition', () => {
     expect(dispose).toHaveBeenCalledOnce(); expect(hydrate).not.toHaveBeenCalled();
   });
 
-  it('loads the exact Studio two-ceremony package with explicit intake selection', async () => {
+  it('loads the two-ceremony Studio fixture with declared signing operations and explicit intake selection', async () => {
     const test = await completeStudioFixture(true);
     const boot = await createDefaultComposition(test.config, test.options).nativePackageRespondent!.load();
     expect(boot.host.bundle.surfaces).toHaveLength(5);
@@ -685,7 +690,7 @@ describe('explicit native package composition', () => {
     expect(test.requests).toEqual([]);
   });
 
-  it('qualifies the actual r5 package before returning one owned HTTP cohort and caches boot', async () => {
+  it('qualifies the r5 fixture with declared signing operations before returning one owned HTTP cohort and caches boot', async () => {
     const test = await fixture();
     // Observe the real production producer; keep its maintained props compiler intact.
     const producer = vi.spyOn(appGraphModule, 'produceAppGraphValidationReport');
