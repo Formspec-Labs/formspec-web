@@ -105,9 +105,10 @@ test.describe('signed respondent production root', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Your receipt' }),
     ).toBeVisible();
-    await expect(page.getByText(responseId)).toBeVisible();
-    await expect(page.getByText('accepted')).toBeVisible();
-    const sentAt = page.getByText('Sent', { exact: true }).locator('..').locator('dd');
+    const receipt = page.getByLabel('Submission receipt');
+    await expect(receipt.getByText(responseId, { exact: true })).toBeVisible();
+    await expect(receipt.getByText('accepted', { exact: true })).toBeVisible();
+    const sentAt = receipt.getByText('Sent', { exact: true }).locator('..').locator('dd');
     const expectedSentAt = await page.evaluate(value => new Date(value).toLocaleString(), ACCEPTED_AT);
     await expect(sentAt).toHaveText(expectedSentAt);
     await expect(page.getByLabel('App verification')).toBeVisible();
@@ -160,14 +161,14 @@ test.describe('signed respondent production root', () => {
     );
     await page.goForward();
     await expect(page).toHaveURL(new URL(receiptPath, page.url()).href);
-    await expect(page.getByText(responseId)).toBeVisible();
+    await expect(receipt.getByText(responseId, { exact: true })).toBeVisible();
 
     await page.reload();
     await expect(
       page.getByRole('heading', { level: 1, name: 'Your receipt' }),
     ).toBeVisible();
-    await expect(page.getByText(responseId)).toBeVisible();
-    await expect(page.getByText('accepted')).toBeVisible();
+    await expect(receipt.getByText(responseId, { exact: true })).toBeVisible();
+    await expect(receipt.getByText('accepted', { exact: true })).toBeVisible();
     await expect(sentAt).toHaveText(expectedSentAt);
     await expect(page.getByLabel('App verification')).toBeVisible();
     await expect(page).toHaveTitle(BUNDLE_TITLE);

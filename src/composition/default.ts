@@ -3,9 +3,6 @@ import type { NativeHostEventCapability } from '../shared/native-host-events.ts'
 import type { NativeInitialDataSourceFactory } from '../shared/native-package-signing-host.ts';
 import type { NativeScreenerCompositionPins, NativeTaskCompositionPins } from './native-package.ts';
 import type { SurfaceScreenerCompletionPolicy } from '@formspec-org/surface-react';
-import { OidcBrowserAuthSession } from '../adapters/identity/oidc-browser-session.ts';
-import type { BrowserAuthSession } from '../ports/browser-auth-session.ts';
-import type { OidcClientConfig } from '../config/types.ts';
 import { respondentSurfaceDeploymentIsConfigured } from '../config/respondent-surface.ts';
 import { readNativePackageSigningConfig } from '../config/native-package-signing.ts';
 import { createNativePackageComposition } from './native-package.ts';
@@ -37,7 +34,6 @@ import {
   SafeAddressPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
-import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { unavailableNotificationDelivery } from '../adapters/unavailable/notification-delivery.ts';
 import type { NotificationDelivery } from '../ports/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
@@ -58,12 +54,14 @@ import {
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
-import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
-import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
+import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { createUnavailableComposition } from './unavailable.ts';
+import { createOidcIdentityBinding, type IdentityBinding } from './oidc.ts';
 import type { Composition } from './types.ts';
 import type { SurfaceRouteState } from '../ports/surface-router.ts';
+
+export type { IdentityBinding } from './oidc.ts';
 
 /**
  * Reference HTTP composition. Form routes require an explicit server and
@@ -397,12 +395,6 @@ function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {
   }
 }
 
-export interface IdentityBinding {
-  provider: IdentityProvider;
-  accessToken?: AccessTokenProvider;
-  browserAuthSession?: BrowserAuthSession;
-}
-
 function identityProviderFor(
   config: FormspecWebConfig,
   _notificationDelivery: NotificationDelivery,
@@ -432,18 +424,6 @@ function identityProviderFor(
 
 
   throw new Error(`Selected identity provider is not configured: ${config.ports.identityProvider}`);
-}
-
-/** Concrete OIDC selection belongs to the composition root. */
-export function createOidcIdentityBinding(config: OidcClientConfig): IdentityBinding {
-  const browserAuthSession = new OidcBrowserAuthSession(config);
-  const provider = new OidcAdapter({ ...config, browserSession: browserAuthSession });
-  return { provider, browserAuthSession, accessToken: () => browserAuthSession.accessToken() };
-}
-
-/** Callback startup uses the same maintained lifecycle adapter as the form host. */
-export function createConfiguredBrowserAuthSession(config: OidcClientConfig): BrowserAuthSession {
-  return new OidcBrowserAuthSession(config);
 }
 
 function requiredInitialDefinitionUrl(value: string | undefined): string {

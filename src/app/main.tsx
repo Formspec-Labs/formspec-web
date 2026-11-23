@@ -1,20 +1,18 @@
 import { completeConfiguredAuthCallback } from './auth-callback.ts';
-import { createConfiguredBrowserAuthSession, createOidcIdentityBinding, type IdentityBinding } from '../composition/index.ts';
-import { lazy, StrictMode, Suspense, useEffect } from 'react';
+import { createConfiguredBrowserAuthSession, createOidcIdentityBinding, type IdentityBinding } from '../composition/oidc.ts';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import rootConfig from '../../formspec.config.ts';
 import { readRuntimeConfig, resolveActiveConfig } from '../config/runtime.ts';
 import { applyBrandTheme } from '../theme/theme.ts';
 import '@formspec-org/layout/formspec-default.css';
 import '../theme/upstream/adapters/tailwind-formspec-core.css';
-import { App } from './App.tsx';
 import './app.css';
-import { CompositionProvider } from './CompositionProvider.tsx';
-import { formRouteErrorCopy, type FormRouteError } from './form-route.ts';
-import { useRoutedComposition } from './routed-composition.ts';
+import { ConfigurationBootError } from './ConfigurationBootError.tsx';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { respondentSurfaceDeploymentIsConfigured } from '../config/respondent-surface.ts';
 
+const LegacyRoutedApp = lazy(() => import('./LegacyRoutedApp.tsx'));
 const SignedRespondentRoot = lazy(async () => {
   const module = await import('../verifying-surface/respondent/SignedRespondentRoot.tsx');
   return { default: module.SignedRespondentRoot };
@@ -91,19 +89,11 @@ function RoutedApp({ config, identityBindingFactory }: { config: FormspecWebConf
       </Suspense>
     );
   }
-  return <LegacyRoutedApp config={config} identityBindingFactory={identityBindingFactory} />;
-}
-
-function LegacyRoutedApp({ config, identityBindingFactory }: { config: FormspecWebConfig; identityBindingFactory?: () => IdentityBinding }) {
-  const routeState = useRoutedComposition(config, identityBindingFactory);
-  if (routeState.status === 'configuration-error') return <ConfigurationBootError />;
-  if (routeState.status === 'form-route-error') {
-    return <FormRouteBootError error={routeState.error} />;
-  }
+  // Keep the static shell visible while the selected form route loads.
   return (
-    <CompositionProvider value={routeState.composition}>
-      <App config={config} href={routeState.href} />
-    </CompositionProvider>
+    <Suspense fallback={null}>
+      <LegacyRoutedApp config={config} identityBindingFactory={identityBindingFactory} />
+    </Suspense>
   );
 }
 
@@ -114,34 +104,4 @@ function SignedSurfaceBootPending() {
       <p>This site is loading the checks needed before it can show the app.</p>
     </main>
   );
-}
-
-function FormRouteBootError({ error }: { error: FormRouteError }) {
-  useEffect(() => { document.getElementById('formspec-static-shell')?.remove(); }, []);
-  return (
-    <main className="shell" aria-busy={false}>
-      <div className="shell__inner">
-        <section
-          className="respondent-flow formspec-container"
-          aria-labelledby="respondent-title"
-        >
-          <div className="shell__status shell__status--error" role="alert">
-            <h1 id="respondent-title">This form cannot be loaded.</h1>
-            <p>{formRouteErrorCopy(error)}</p>
-            <p className="support-code">Support reference: {error.code}</p>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function ConfigurationBootError() {
-  useEffect(() => { document.getElementById('formspec-static-shell')?.remove(); }, []);
-  return <main className="shell">
-    <div className="shell__inner" role="alert">
-      <h1>This site is not ready.</h1>
-      <p>Contact the organization that provided this form.</p>
-    </div>
-  </main>;
 }

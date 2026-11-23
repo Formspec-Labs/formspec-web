@@ -1,4 +1,5 @@
-export { createDefaultComposition, buildRealIdentityProvider, createOidcIdentityBinding, createConfiguredBrowserAuthSession, type IdentityBinding, type DefaultCompositionOptions } from './default.ts';
+export { createOidcIdentityBinding, createConfiguredBrowserAuthSession, type IdentityBinding } from './oidc.ts';
+export { createDefaultComposition, buildRealIdentityProvider, type DefaultCompositionOptions } from './default.ts';
 export {
   createRouteNarrowedComposition,
   type RouteNarrowing,

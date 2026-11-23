@@ -14,7 +14,7 @@ import { InvalidFormRouteError, parseRootFormRoute } from './form-route.ts';
  * Picks the right composition factory based on the current route (FW-0068,
  * parameterized in FW-0070).
  *
- * Called from `main.tsx` at boot, before constructing the composition. Reuses
+ * Called when the legacy route loads, before constructing the composition. Reuses
  * the pure `parseStatusRoute` / `parseObligationsRoute` / `parseDocumentsRoute`
  * parsers so the boot-time parse and the runtime parse in `App.tsx` cannot
  * disagree. Each narrowed route dispatches to `createRouteNarrowedComposition`
