@@ -41,7 +41,7 @@ const initialDefinitionUrl = 'https://server.example.test/runtime/forms/actual-f
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function fixture(subject = 'anon:fixture', lifecycle = false) {
-  const selectedNativeBytes = lifecycle ? readFileSync(resolve('public/demo-packages/d1-passport/v0.1.7/native-bundle.json'), 'utf8') : nativeBytes;
+  const selectedNativeBytes = lifecycle ? readFileSync(resolve('public/demo-packages/d1-passport/v0.1.8/native-bundle.json'), 'utf8') : nativeBytes;
   const selectedComponentBytes = lifecycle ? readFileSync(resolve('public/demo-packages/d1-passport/v0.1.7/passport-renewal.component.json'), 'utf8') : componentBytes;
   const capabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'actual-publication' };
   vi.stubGlobal('crypto', webcrypto);

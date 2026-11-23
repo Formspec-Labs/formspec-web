@@ -1012,6 +1012,7 @@
         "requests": [
           {
             "id": "sign-draft",
+            "operation": "sign",
             "adapter": "http-json",
             "request": {
               "method": "POST",
@@ -1099,6 +1100,7 @@
           },
           {
             "id": "prepare-signing",
+            "operation": "prepare",
             "adapter": "http-json",
             "request": {
               "method": "PATCH",

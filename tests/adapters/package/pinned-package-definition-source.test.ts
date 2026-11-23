@@ -39,16 +39,25 @@ describe('PinnedPackageDefinitionSource', () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it('loads the exact authored application-lifecycle public package through canonical admission', async () => {
+  it.each([
+    ['0.1.7', false],
+    ['0.1.8', true],
+  ])('checks the signing operation in lifecycle package %s', async (version, valid) => {
     vi.stubGlobal('crypto', webcrypto);
-    const root = resolve('public/demo-packages/d1-passport/v0.1.7');
-    const bundle = JSON.parse(readFileSync(resolve(root, 'native-bundle.json'), 'utf8'));
-    vi.stubGlobal('fetch', async (url: URL) => new Response(readFileSync(resolve(root, url.pathname.split('/').at(-1)!), 'utf8')));
-    const source = new PinnedPackageDefinitionSource('/demo-packages/d1-passport/v0.1.7/package.json', {
+    const root = `/demo-packages/d1-passport/v${version}`;
+    const bundle = JSON.parse(readFileSync(resolve(`public${root}/native-bundle.json`), 'utf8'));
+    vi.stubGlobal('fetch', async (url: URL) => new Response(readFileSync(resolve(`public${url.pathname}`), 'utf8')));
+    const source = new PinnedPackageDefinitionSource(`${root}/package.json`, {
       moduleAdmission: { allowedModules: bundle.manifest.modules }, moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() } });
+    if (!valid) {
+      await expect(source.getDefinition()).rejects.toThrow(/\bE612\b/);
+      return;
+    }
     expect(await source.getDefinition()).toMatchObject({ url: 'urn:formspec:demo:d1:passport-renewal', version: '0.1.7' });
     expect(await source.getNativeBundleExport()).toEqual(bundle);
-    expect((await source.getResponseActionsDocument())?.actions.some(action => action.intent === 'x-start-application')).toBe(true);
+    const actions = await source.getResponseActionsDocument();
+    expect(actions?.actions.some(action => action.intent === 'x-start-application')).toBe(true);
+    expect(actions).toEqual(bundle.documents[bundle.manifest.responseActionDocuments[0].url]);
   });
   it('preserves authored data and shares the verified load across consumers', async () => {
     vi.stubGlobal('crypto', webcrypto);

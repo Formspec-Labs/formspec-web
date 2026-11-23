@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { createHash, webcrypto } from 'node:crypto';
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, act, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { dereferenceBundleExport, flattenRegistryEntries, type BundleExport } from '@formspec-org/surface';
 import { createFormEngine, hashSigningContent } from '@formspec-org/engine/render';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
@@ -49,9 +49,9 @@ vi.mock('../../src/app/RespondentRuntime.tsx', async importOriginal => {
 const root = resolve(process.cwd(), 'tests/fixtures/native-signing-r5');
 const bundle = JSON.parse(readFileSync(resolve(root, 'native-bundle.json'), 'utf8')) as BundleExport;
 const component = JSON.parse(readFileSync(resolve(root, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
-const lifecycleRoot = resolve('public/demo-packages/d1-passport/v0.1.7');
-const lifecycleBundle = JSON.parse(readFileSync(resolve(lifecycleRoot, 'native-bundle.json'), 'utf8')) as BundleExport;
-const lifecycleComponent = JSON.parse(readFileSync(resolve(lifecycleRoot, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
+const lifecycleRoot = resolve('public/demo-packages/d1-passport');
+const lifecycleBundle = JSON.parse(readFileSync(resolve(lifecycleRoot, 'v0.1.8/native-bundle.json'), 'utf8')) as BundleExport;
+const lifecycleComponent = JSON.parse(readFileSync(resolve(lifecycleRoot, 'v0.1.7/passport-renewal.component.json'), 'utf8')) as ComponentDocument;
 const componentResolver = (document: ComponentDocument) => vi.fn<ComponentRouteResolver>(() => ({ status: 'ready', diagnostics: [],
   component: { artifactKind: 'component', slot: 'component', status: 'loaded', document } }));
 beforeAll(() => initFormspecEngine());
@@ -497,7 +497,8 @@ describe('maintained native package Surface host', () => {
     expect(restarted.container.querySelector('.fs-surface-app')).toBeNull(); expect(createEngine).not.toHaveBeenCalled();
     expect(transport.requests).toHaveLength(1); expect(values.size).toBe(0);
     expect(screen.queryByText('This browser no longer has saved access to this draft.')).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' }));
+    const heading = screen.getByRole('heading', { name: 'Passport renewal' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     restarted.unmount(); freshHost.dispose(); window.history.replaceState(null, '', '/');
   });
   it.each(['non-slash', 'missing', 'parameter', 'collision', 'no-definition', 'embedded-required', 'embedded-definition', 'nested-embedded-definition', 'sibling-definition', 'missing-sibling-definition'] as const)('qualifies the authored %s entry through maintained route plans', async variant => {
