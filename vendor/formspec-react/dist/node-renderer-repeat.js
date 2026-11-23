@@ -1,7 +1,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Repeat-group and accordion-repeat layout rendering for FormspecNode. */
-import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useCallback, useState, useEffect, useLayoutEffect } from 'react';
 import { chromeText } from './use-chrome-text';
 import { computed, signal } from '@preact/signals-core';
 import { useFormspecContext } from './context.js';
@@ -330,6 +330,7 @@ export function RepeatAccordion({ node, renderChild }) {
     // Rebuild row nodes only when rows change: fresh node objects on every toggle would re-derive each row's localized props.
     const rows = useMemo(() => Array.from({ length: count }, (_, i) => node.children.map((child) => rewriteBindPaths(child, bindKey, i))), [node.children, bindKey, count]);
     const previousCountRef = useRef(count);
+    const addedRowToFocus = useRef(null);
     const containerRef = useRef(null);
     const addBtnRef = useRef(null);
     const [announcement, setAnnouncement] = useState('');
@@ -364,6 +365,23 @@ export function RepeatAccordion({ node, renderChild }) {
         userAddingRef.current = false;
         previousCountRef.current = count;
     }, [allowMultiple, bindKey, count, engine, lockSeeded, lockedCount, upstreamSeededCount]);
+    useLayoutEffect(() => {
+        const index = addedRowToFocus.current;
+        if (index === null || index >= count || !relevant)
+            return;
+        const isOpen = allowMultiple ? openIndices.has(index) : openIndex === index;
+        if (!isOpen)
+            return;
+        // Closed details cannot focus their children. Wait until the added row has committed open.
+        const row = containerRef.current?.querySelectorAll(':scope > .formspec-accordion--repeat > .formspec-accordion-item')[index];
+        if (!row)
+            return;
+        addedRowToFocus.current = null;
+        findEditableFocusTarget(row.querySelector(':scope > .formspec-accordion-content'))?.focus();
+        if (!row.contains(row.ownerDocument.activeElement)) {
+            row.querySelector(':scope > summary')?.focus();
+        }
+    }, [allowMultiple, count, openIndex, openIndices, relevant]);
     const handleToggle = useCallback((idx, open) => {
         if (allowMultiple) {
             setOpenIndices(prev => {
@@ -382,15 +400,15 @@ export function RepeatAccordion({ node, renderChild }) {
         if (!canAdd)
             return;
         userAddingRef.current = true;
-        engine.addRepeatInstance(bindKey);
-        const newCount = count + 1;
+        const index = engine.addRepeatInstance(bindKey);
+        if (index === undefined) {
+            userAddingRef.current = false;
+            return;
+        }
+        addedRowToFocus.current = index;
+        const newCount = index + 1;
         setAnnouncement(`${shortLabel} ${newCount} added. ${newCount} total.`);
-        setTimeout(() => {
-            const items = containerRef.current?.querySelectorAll('.formspec-accordion-item');
-            const last = items?.[items.length - 1];
-            findEditableFocusTarget(last?.querySelector('.formspec-accordion-content') ?? last ?? null)?.focus();
-        }, 0);
-    }, [bindKey, canAdd, count, engine, shortLabel]);
+    }, [bindKey, canAdd, engine, shortLabel]);
     const handleRemove = useCallback((idx) => {
         engine.removeRepeatInstance(bindKey, idx);
         const newCount = count - 1;
