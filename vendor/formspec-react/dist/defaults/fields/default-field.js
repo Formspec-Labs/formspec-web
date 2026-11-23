@@ -1,7 +1,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Default field dispatcher — layout chrome + per-component control routing. */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormspecContext, findItemByKey } from '../../context';
 import { blockReadonlyChange, GroupControl } from './group-control';
 import { renderControl } from './render-control';
@@ -13,10 +13,17 @@ function itemAdornments(engine, path) {
     const item = findItemByKey(engine.getDefinition().items ?? [], path);
     return { prefix: item?.prefix, suffix: item?.suffix };
 }
-/** Native date controls can omit the required state from the browser accessibility tree. */
+/** Chromium on macOS does not announce the native required state on its date steppers. */
 function RequiredDateLabel() {
-    const required = useChromeText()('screener.required');
-    return _jsxs(_Fragment, { children: [_jsx("abbr", { className: "formspec-required usa-label--required", title: required, "aria-hidden": "true", children: " *" }), _jsxs("span", { className: "formspec-sr-only usa-sr-only", children: [" ", required] })] });
+    const chrome = useChromeText();
+    const [needsSpokenMarker, setNeedsSpokenMarker] = useState(false);
+    useEffect(() => {
+        const agent = window.navigator.userAgent;
+        if (agent.includes('Macintosh') && agent.includes('Chrome/'))
+            setNeedsSpokenMarker(true);
+    }, []);
+    const required = needsSpokenMarker ? chrome('screener.required') : 'required';
+    return _jsxs(_Fragment, { children: [_jsx("abbr", { className: "formspec-required usa-label--required", title: required, "aria-hidden": needsSpokenMarker || undefined, children: " *" }), needsSpokenMarker && _jsxs("span", { className: "formspec-sr-only usa-sr-only", children: [" ", required] })] });
 }
 /**
  * Default field renderer — works for any field type.

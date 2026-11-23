@@ -2,7 +2,7 @@
   "version": 1,
   "platform": "linux/arm64",
   "sources": {
-    "formspec": "b53fc1272d8ec5b21f0088710ebe574fb7013ec9",
+    "formspec": "84adcabc820268694a81d95984d3307f563f9461",
     "fel-core": "55d2f539c8514bc596bda0091e124a4d8b5fb177",
     "integrity-stack": "ff7a945e1b8962c79c289f84c5e50b54f18b47ab"
   },
