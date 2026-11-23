@@ -332,7 +332,7 @@ describe('composition root smoke', () => {
     expect(target.style.getPropertyValue('--formspec-color-primary-foreground')).toBe('#ffffff');
     expect(target.style.getPropertyValue('--formspec-color-text')).toBe('#1f2933');
     expect(target.style.getPropertyValue('--formspec-color-text-secondary')).toBe('#5d6b66');
-    expect(target.style.getPropertyValue('--formspec-color-warning-border')).toBe('#946112');
+    expect(target.style.getPropertyValue('--formspec-color-warning-border')).toBe('#7A5200');
   });
 });
 

@@ -36,21 +36,22 @@ function mount(intent: 'save-draft' | 'autosave' | 'submit', status: ResponseAct
 }
 
 describe('maintained Response Action Save feedback', () => {
-  it.each(['failed', 'unresolved'] as const)('uses the canonical Save message for %s and retains the original diagnostic result', async status => {
-    const test = mount('save-draft', status);
-    fireEvent.click(screen.getByRole('button', { name: 'Run action' }));
-    await screen.findByText(english);
-    expect(test.onResult).toHaveBeenCalledExactlyOnceWith(test.result);
-    expect(test.onResult.mock.calls[0][0]).toBe(test.result);
-    expect(test.mounted.container.textContent).not.toContain(test.result.failureReason);
-    act(() => test.engine.setLocale('es-US'));
-    await screen.findByText(spanish); expect(screen.queryByText(english)).toBeNull();
-    act(() => test.engine.setLocale('en'));
-    await screen.findByText(english); expect(test.invoker).toHaveBeenCalledOnce();
-  });
+  it.each([['save-draft', 'failed'], ['save-draft', 'unresolved'], ['autosave', 'failed'], ['autosave', 'unresolved']] as const)(
+    'uses the canonical Save message for %s/%s and retains the original diagnostic result', async (intent, status) => {
+      const test = mount(intent, status);
+      fireEvent.click(screen.getByRole('button', { name: 'Run action' }));
+      await screen.findByText(english);
+      expect(test.onResult).toHaveBeenCalledExactlyOnceWith(test.result);
+      expect(test.onResult.mock.calls[0][0]).toBe(test.result);
+      expect(test.mounted.container.textContent).not.toContain(test.result.failureReason);
+      act(() => test.engine.setLocale('es-US'));
+      await screen.findByText(spanish); expect(screen.queryByText(english)).toBeNull();
+      act(() => test.engine.setLocale('en'));
+      await screen.findByText(english); expect(test.invoker).toHaveBeenCalledOnce();
+    });
 
   it.each([['save-draft', 'deferred', 'Deferred.'], ['save-draft', 'blocked', 'Blocked.'], ['save-draft', 'completed', 'Completed.'],
-    ['autosave', 'failed', 'Failed.'], ['submit', 'failed', 'Failed.']] as const)(
+    ['autosave', 'completed', 'Completed.'], ['submit', 'failed', 'Failed.']] as const)(
     'excludes %s/%s from unconfirmed Save copy', async (intent, status, expected) => {
       const test = mount(intent, status);
       fireEvent.click(screen.getByRole('button', { name: 'Run action' }));

@@ -20,7 +20,7 @@ it.each(['completed', 'failed'] as const)('evaluates the retained authored photo
   const original = Object.values(bundle.documents).find(value => value.actions?.some(action => action.id === 'inspect-photo')) as ResponseActionsDocument;
   const action = structuredClone(original.actions.find(value => value.id === 'inspect-photo')!);
   expect(action.effects).toEqual([{ type: 'hostEvent', eventName: 'formspec-attachment-inspection-request', detailRef: '$photo' }]);
-  const definition = { $formspec: '1.0' as const, url: original.targetDefinition!.url, version: '1', title: 'Photo action',
+  const definition = { $formspec: '1.0' as const, url: original.targetDefinition!.url, version: '0.3.2', title: 'Photo action',
     items: [{ key: 'photo', type: 'field' as const, dataType: 'string' as const, label: 'Photo reference', initialValue: 'retained-photo' }] };
   const document: ResponseActionsDocument = { ...original, scope: 'response', actions: [{ ...action, label: { literal: 'Check retained photo' } }] };
   const handle = vi.fn(async ({ detail, refreshSavedFacts }) => { expect(detail).toBe('retained-photo'); await refreshSavedFacts(); });

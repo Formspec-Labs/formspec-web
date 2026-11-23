@@ -439,7 +439,8 @@ describe('native package boot and scoped recovery', () => {
     expect(test.host.selectLocale).toHaveBeenCalledWith('es-US');
     fireEvent.click(screen.getByRole('button', { name: 'Borrar el acceso guardado' }));
     const heading = await screen.findByRole('heading', { name: 'Acceso guardado borrado' });
-    expect(document.activeElement).toBe(heading); expect(test.host.clearDraftAccess).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(test.host.clearDraftAccess).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('native-route')).toBeNull();
     expect(screen.getByRole('link', { name: 'Renovación de pasaporte' }).getAttribute('href')).toBe('/');
   });

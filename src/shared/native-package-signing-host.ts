@@ -560,6 +560,15 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (generation !== deliveryGeneration || review !== capturedReview || reviewState !== capturedState) throw new Error('native-review-refresh-retired');
     };
     check(); nativeReadiness = 'pending'; emit();
+    let retired = false;
+    const retireFailedRefresh = () => {
+      if (retired || sequence !== qualificationSequence || authority !== authorityGeneration || visit !== visitEpoch
+        || disposed || nativeReadiness === 'ready') return;
+      retired = true;
+      nativeCandidate = undefined; nativeReadiness = 'pending'; fence(); emit();
+    };
+    // Remove old review access before the caller observes an expired renewal.
+    signal.addEventListener('abort', retireFailedRefresh, { once: true });
     const timer = setTimeout(() => stage.abort(new Error('native-facts-deadline')), NATIVE_SOURCE_OPERATION_MILLISECONDS);
     const promise = (async () => {
       try {
@@ -581,12 +590,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         // remain exact. Source proof provenance renews under separate guards.
         emit();
       } catch (error) {
-        if (sequence === qualificationSequence && authority === authorityGeneration && visit === visitEpoch
-          && !disposed && nativeReadiness !== 'ready') {
-          nativeCandidate = undefined; nativeReadiness = 'pending'; fence(); emit();
-        }
+        retireFailedRefresh();
         throw error;
-      } finally { clearTimeout(timer); }
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', retireFailedRefresh);
+      }
     })();
     reviewedRefresh = { identity, promise };
     try { await promise; } finally { if (reviewedRefresh?.promise === promise) reviewedRefresh = undefined; }
