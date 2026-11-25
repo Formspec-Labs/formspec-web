@@ -2,11 +2,13 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_felcontext_free: (a: number, b: number) => void;
+export const analyzeExpressionInDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
 export const analyzeFel: (a: number, b: number, c: number) => void;
 export const analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
 export const applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const assembleCandidate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const assembleDefinition: (a: number, b: number, c: number, d: number, e: number) => void;
+export const canonicalizeResponseData: (a: number, b: number, c: number, d: number, e: number) => void;
 export const checkFelExtensionName: (a: number, b: number, c: number) => void;
 export const checkResponseProjection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
@@ -34,6 +36,7 @@ export const felcontext_new: (a: number, b: number, c: number) => void;
 export const findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const formspecWasmSplitAbiVersion: (a: number) => void;
 export const generateChangelog: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+export const getDefinitionInstanceReads: (a: number, b: number, c: number) => void;
 export const getFelDependencies: (a: number, b: number, c: number) => void;
 export const interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const interpolateTemplate: (a: number, b: number, c: number, d: number) => void;

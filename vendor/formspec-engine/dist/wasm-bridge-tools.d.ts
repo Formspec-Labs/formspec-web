@@ -1,7 +1,10 @@
 /** @filedesc Tools WASM — lazy init and wrappers for `formspec_wasm_tools` (lint, mapping, assembly, FEL authoring helpers). */
 import type { ResponseSelectionRecord, SelectResponses } from '@formspec-org/types';
+import { type FELDependencies } from './wasm-bridge-runtime.js';
 import type { FELConditionGroupLiftResult } from './interfaces.js';
 export type WasmToolsModule = typeof import('../wasm-pkg-tools/formspec_wasm_tools.js');
+/** Return each instance's sorted paths across FEL and creation-time declarations. */
+export declare function getDefinitionInstanceReads(definition: unknown): Record<string, string[]>;
 /** Whether the tools WASM module has been initialized and is ready for use. */
 export declare function isWasmToolsReady(): boolean;
 /**
@@ -45,15 +48,7 @@ export declare function wasmTokenizeFel(expression: string): Array<{
     end: number;
 }>;
 /** Extract full dependency info from a FEL expression. */
-export declare function wasmExtractDependencies(expression: string): {
-    fields: string[];
-    contextRefs: string[];
-    instanceRefs: string[];
-    mipDeps: string[];
-    hasSelfRef: boolean;
-    hasWildcard: boolean;
-    usesPrevNext: boolean;
-};
+export declare function wasmExtractDependencies(expression: string): FELDependencies;
 /** Detect the document type of a Formspec JSON document. */
 export declare function wasmDetectDocumentType(doc: unknown): string | null;
 /** Convert a JSON Pointer into a JSONPath string. */
@@ -129,6 +124,22 @@ export interface WasmLintDocumentOptions {
     /** The consuming form and how it receives data, or null for a widget. */
     projectionConsumer?: ProjectionConsumer | null;
 }
+/** Analyze an expression with the same Definition declarations used by document lint. */
+export declare function analyzeExpressionInDefinition(definition: unknown, expression: string, registryDocuments: readonly unknown[], target?: string, mapping?: boolean): {
+    errors: import("./interfaces.js").FELAnalysisError[];
+    valid: boolean;
+    warnings: string[];
+    references: string[];
+    variables: string[];
+    functions: string[];
+    findings: Array<{
+        name: string;
+        code: string;
+        severity: "error" | "warning";
+        message: string;
+        variableHint: boolean;
+    }>;
+};
 export interface InstanceProjectionDiagnostic {
     code: string;
     jsonPointer: string;

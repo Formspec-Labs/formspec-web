@@ -1,6 +1,6 @@
 import type { EvaluatedFormState, FormDefinition, Explanation, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
-import type { SetValueOptions, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import type { SetValueOptions, SubmitEvaluationSnapshot, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
 import { type LocaleDocument } from '../locale.js';
@@ -30,8 +30,11 @@ export declare class FormEngine implements IFormEngine {
     readonly instanceVersion: EngineSignal<number>;
     readonly structureVersion: EngineSignal<number>;
     readonly localeSignal: ReadonlyEngineSignal<number>;
+    readonly evaluationVersion: ReadonlyEngineSignal<number>;
+    readonly explanationRefreshVersion: ReadonlyEngineSignal<number>;
     private readonly _rx;
     private readonly _evaluationVersion;
+    private readonly _hasWarningExplanations;
     private readonly _draftEditVersion;
     private _draftEditDirty;
     private readonly _bindConfigs;
@@ -80,6 +83,8 @@ export declare class FormEngine implements IFormEngine {
     private _formViewModel;
     private readonly _labelContextSignal;
     private readonly _data;
+    /** Undeclared properties captured from loaded Response data, keyed by Response `data` scope path. */
+    private readonly _undeclaredData;
     private _previousEvalResult;
     private _fullResult;
     private _refusedInput;
@@ -119,6 +124,7 @@ export declare class FormEngine implements IFormEngine {
     loadDraftSnapshot(snapshot: FormDraftSnapshot, explanations?: Explanation[]): void;
     getExplanationEntries(): DraftExplanation[];
     getExplanationState(): ExplanationState;
+    hasWarningExplanations(): boolean;
     private reviewWarnings;
     private refreshExplanationState;
     setExplanation(shapeId: string, path: string, answer: {
@@ -135,6 +141,8 @@ export declare class FormEngine implements IFormEngine {
     }): void;
     private assertDraftSnapshot;
     private loadItemsData;
+    /** Translate a Definition model path (which includes scalar field ancestors) to a Response `data` scope path. */
+    private dataPathOfModelPath;
     private creationContext;
     private createResponseData;
     private appendRepeatRow;
@@ -168,8 +176,14 @@ export declare class FormEngine implements IFormEngine {
     getDerivationTree(path: string): FelTraceStep[];
     getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
+    private collectEvaluatedFields;
     /** Read the current field flags and the requested validation profile, which defaults to live. */
     getEvaluatedFormState(options?: ValidationReportOptions): EvaluatedFormState;
+    /**
+     * Evaluate the Submit profile once at one clock and return both the Submit `EvaluatedFormState`
+     * and the matching `ExplanationState`, without mutating signals (safe inside reactive computeds).
+     */
+    getSubmitEvaluation(): SubmitEvaluationSnapshot;
     getResponse(meta?: Parameters<FormEngine['getResponseSnapshot']>[0]): FormResponse;
     /** Capture response data and its requested validation report with one clock. */
     getResponseSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0], validationProfile?: ValidationProfile): {

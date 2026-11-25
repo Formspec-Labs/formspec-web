@@ -18,7 +18,7 @@ import { focusFieldIn } from './use-focus-field';
  * focus does: disclosures opened, hidden tab or wizard step revealed.
  */
 export function ValidationSummary({ comp, results: resultsProp, source: sourceProp = 'submit', severityFilter = ['error', 'warning'], autoFocus = true, className, }) {
-    const { engine, touchedVersion, latestSubmit } = useFormspecContext();
+    const { engine, touchedVersion, latestSubmit, explanationState: explanationStateSignal } = useFormspecContext();
     const chrome = useChromeText();
     const workspaceJump = useContext(WorkspaceFieldJump);
     const Heading = `h${useHeadingLevel()}`;
@@ -28,6 +28,8 @@ export function ValidationSummary({ comp, results: resultsProp, source: sourcePr
     const submitted = useSignal(latestSubmit);
     useSignal(engine.structureVersion);
     const explanationState = useSignal(useMemo(() => computed(() => {
+        if (explanationStateSignal)
+            return explanationStateSignal.value;
         if (typeof engine.getExplanationState !== 'function')
             return null;
         const liveHasWarn = Object.values(engine.shapeResults ?? {}).some(s => s.value.some(r => r.severity === 'warning'));
@@ -35,7 +37,7 @@ export function ValidationSummary({ comp, results: resultsProp, source: sourcePr
         if (!liveHasWarn && !submitHasWarn)
             return null;
         return engine.getExplanationState();
-    }), [engine, submitted]));
+    }), [engine, submitted, explanationStateSignal]));
     const { rows, explainedSet } = useMemo(() => {
         const effective = comp ?? {
             source: sourceProp,

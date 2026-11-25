@@ -218,6 +218,8 @@ export interface FormspecProviderProps extends WorkspaceNavigationProps {
     showValidationSummary?: boolean;
     /** The embedding draft writer announces Save Draft and autosave outcomes. */
     draftSaveFeedback?: 'external' | undefined;
+    /** The embedding host (e.g., Surface shell) owns and announces Submit action outcomes. */
+    submitFeedback?: 'external' | undefined;
     /** Callback invoked for every declared hostEvent effect. */
     onHostEvent?: (eventName: string, detail: unknown, action: ResponseAction) => void;
     /** Callback for ActionButton actionRef resolution findings. */

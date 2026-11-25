@@ -136,7 +136,10 @@ export function wasmApplyMigrationsToResponseData(definitionJson, responseDataJs
 export function wasmCoerceFieldValue(itemJson, bindJson, definitionJson, valueJson) {
     return wasm().coerceFieldValue(itemJson, bindJson, definitionJson, valueJson);
 }
-/** Extract field path dependencies from a FEL expression. Returns an array of path strings. */
+/** Canonicalize Response `data` against a Definition's declared fields and authored Binds. */
+export function wasmCanonicalizeResponseData(definition, data) {
+    return parseWasmJson(wasm().canonicalizeResponseData(JSON.stringify(definition), JSON.stringify(data)));
+}
 export function wasmGetFelDependencies(expression) {
     const resultJson = wasm().getFelDependencies(expression);
     return parseWasmJson(resultJson);
@@ -186,7 +189,9 @@ export function wasmEvaluateFiled(definition, data, context, extensions) {
 }
 function runWasmEvaluation(evaluate, definition, data, context, extensions) {
     const resultJson = evaluate(JSON.stringify(definition), JSON.stringify(data), context ? JSON.stringify(context) : undefined, extensions);
-    return parseWasmJson(resultJson);
+    const parsed = parseWasmJson(resultJson);
+    parsed.undeclaredDataPaths ?? (parsed.undeclaredDataPaths = []);
+    return parsed;
 }
 /**
  * Evaluate a standalone Screener Document against respondent inputs.
@@ -216,6 +221,19 @@ export function wasmIsValidFelIdentifier(s) {
 /** Sanitize a string into a valid FEL identifier. */
 export function wasmSanitizeFelIdentifier(s) {
     return wasm().sanitizeFelIdentifier(s);
+}
+/** Execute a MappingRule[] array against source in runtime WASM. */
+export function wasmExecuteMappingRuntime(rules, source, direction) {
+    const resultJson = wasm().executeMappingRules(JSON.stringify(rules), JSON.stringify(source), direction);
+    return parseWasmJson(resultJson);
+}
+/**
+ * Execute a Mapping Document in runtime WASM (without loading tools WASM).
+ * Documents with an external `sourceSchema` require tools WASM for JSON Schema validation.
+ */
+export function wasmExecuteMappingDocRuntime(doc, source, direction) {
+    const resultJson = wasm().executeMappingDocument(JSON.stringify(doc), JSON.stringify(source), direction);
+    return parseWasmJson(resultJson);
 }
 /** Compute dependency groups from recorded changeset entries (JSON round-trip to Rust). */
 export function wasmComputeDependencyGroups(entriesJson) {

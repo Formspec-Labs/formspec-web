@@ -1,6 +1,6 @@
 {
   "sourceRevisions": {
-    "work-spec": "1313a61ce412c430625c706bc849e18238b9045d"
+    "work-spec": "4c19993530c0c1cec6efb73c960db74bc095f2e3"
   },
   "scope": "Exact maintained applicant schema and complete declared API reference closure. Backend owner separately qualifies runtime authority and response behavior.",
   "files": {

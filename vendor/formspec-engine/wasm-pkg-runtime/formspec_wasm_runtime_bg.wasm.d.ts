@@ -6,6 +6,7 @@ export const analyzeFel: (a: number, b: number, c: number) => void;
 export const analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
 export const applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const assembleCandidate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+export const canonicalizeResponseData: (a: number, b: number, c: number, d: number, e: number) => void;
 export const checkFelExtensionName: (a: number, b: number, c: number) => void;
 export const coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const computeDependencyGroups: (a: number, b: number, c: number) => void;
@@ -18,6 +19,8 @@ export const evalFelWithTrace: (a: number, b: number, c: number, d: number, e: n
 export const evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
 export const evaluateFiled: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
 export const evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+export const executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+export const executeMappingRules: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const felcontext_evaluate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
 export const felcontext_evaluateTrace: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
 export const felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;

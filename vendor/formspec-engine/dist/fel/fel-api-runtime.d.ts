@@ -1,8 +1,8 @@
 /** @filedesc Path helpers and runtime-WASM FEL surface (`wasm-bridge-runtime` only; ADR 0050). */
 import type { FELAnalysis } from '../interfaces.js';
 export type { FELAnalysis } from '../interfaces.js';
-import { wasmComputeDependencyGroups, wasmEvalFelWithTrace, wasmEvalFelWithContextTrace, wasmEvaluateDefinition, wasmEvaluateFiled, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier } from '../wasm-bridge-runtime.js';
-export type { FelTraceStep, FelTraceResult } from '../wasm-bridge-runtime.js';
+import { wasmComputeDependencyGroups, wasmEvalFelWithTrace, wasmEvalFelWithContextTrace, wasmEvaluateDefinition, wasmEvaluateFiled, wasmGetFelDependencies, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier } from '../wasm-bridge-runtime.js';
+export type { FELDependencies, FelTraceStep, FelTraceResult } from '../wasm-bridge-runtime.js';
 import { lineColumnAtCharOffset, normalizeFelAnalysisError, type WasmFelAnalysisErrorWire } from './normalize-fel-analysis-error.js';
 export { lineColumnAtCharOffset, normalizeFelAnalysisError, type WasmFelAnalysisErrorWire };
 export declare const normalizeIndexedPath: typeof wasmNormalizeIndexedPath;
@@ -27,7 +27,7 @@ export declare function normalizePathSegment(segment: string): string;
 export declare function splitNormalizedPath(path: string): string[];
 /** Find the mutable parent/index/item triple for a dotted tree path. */
 export declare function itemLocationAtPath<T extends TreeItemLike<T>>(items: T[], path: string): ItemLocation<T> | undefined;
-export declare function getFELDependencies(expression: string): string[];
+export declare const getFELDependencies: typeof wasmGetFelDependencies;
 /**
  * Evaluate a FEL expression and return a structured trace of evaluation steps.
  * See `FelTraceStep` for the step variants; wire format matches Rust `fel_core::TraceStep`.

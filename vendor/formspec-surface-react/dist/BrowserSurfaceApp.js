@@ -249,5 +249,6 @@ export function BrowserSurfaceApp(input) {
                         ? ''
                         : locale.strings(save.notice)
                 : '',
+            saveNoticeLive: !(save && save.scope === previewScope && save.generation === props.sessionGeneration && save.notice === 'submitted'),
         }, sessionGeneration: JSON.stringify([previewScope, props.sessionGeneration]) });
 }

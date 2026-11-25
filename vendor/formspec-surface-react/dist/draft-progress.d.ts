@@ -8,9 +8,9 @@ export interface SubmitEvaluation {
     explanations: ExplanationStateLike;
 }
 /**
- * Both reads see the same answers and explanation entries, but they are separate Submit evaluations
- * unless the engine's explanation state is already cached for this edit, so the second may read a later
- * clock. A Definition whose warnings ask for no answer has an empty state, so it costs no evaluation.
+ * Reads the Submit-profile evaluated state and matching explanation state from a single Submit
+ * evaluation (`engine.getSubmitEvaluation()`), avoiding a second Submit evaluation and clock skew.
+ * Falls back to separate reads only for minimal test doubles without `getSubmitEvaluation`.
  */
-export declare function readSubmitEvaluation(engine: Pick<IFormEngine, 'getDefinition' | 'getEvaluatedFormState' | 'getExplanationState'>): SubmitEvaluation;
+export declare function readSubmitEvaluation(engine: Pick<IFormEngine, 'getEvaluatedFormState' | 'getExplanationState' | 'getSubmitEvaluation'>): SubmitEvaluation;
 export declare function summarizeDraftProgress(sections: readonly PageSequenceEntry[], { evaluated, explanations }: SubmitEvaluation): FormProgressSummary;

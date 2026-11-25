@@ -84,3 +84,33 @@ export function warningReview(resultFacts, entries) {
     const pendingStamps = candidateEntries.some(entry => !isStamped(entry));
     return cloneValue({ findings, groups, instances, entries, candidateEntries, pendingStamps });
 }
+/**
+ * Matches Rust `revalidate` (`crates/formspec-eval/src/revalidate/mod.rs`): true iff at least one
+ * warning Shape with an id has effective explanation mode `'confirm' | 'explain' | 'acknowledge'`.
+ */
+export function definitionHasWarningExplanations(definition) {
+    return (definition.shapes ?? []).some((shape) => {
+        if (shape.severity !== 'warning' || !shape.id)
+            return false;
+        const mode = shape.explanation ?? definition.warningExplanation;
+        return mode === 'confirm' || mode === 'explain' || mode === 'acknowledge';
+    });
+}
+export function emptyWarningReview(entries) {
+    return cloneValue({
+        findings: [],
+        groups: [],
+        instances: [],
+        entries,
+        candidateEntries: [],
+        pendingStamps: false,
+    });
+}
+export const EMPTY_WARNING_REVIEW = Object.freeze({
+    findings: Object.freeze([]),
+    groups: Object.freeze([]),
+    instances: Object.freeze([]),
+    entries: Object.freeze([]),
+    candidateEntries: Object.freeze([]),
+    pendingStamps: false,
+});

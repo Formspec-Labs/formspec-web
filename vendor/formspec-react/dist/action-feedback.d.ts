@@ -26,7 +26,7 @@ type OwnedFeedback = {
     feedback: ActionFeedback;
 } | undefined;
 /** No response, payload, findings, translated copy or saved flag enters this store. */
-export declare function createActionFeedbackStore(engine: IFormEngine, draftSaveFeedback?: 'external'): {
+export declare function createActionFeedbackStore(engine: IFormEngine, draftSaveFeedback?: 'external', submitFeedback?: 'external'): {
     state: import("@preact/signals-core").Signal<OwnedFeedback>;
     connect(): () => void;
     register(outlet: string): () => void;
@@ -39,11 +39,12 @@ export declare function createActionFeedbackStore(engine: IFormEngine, draftSave
     cancel(ticket: Ticket | undefined): void;
 };
 type FeedbackStore = ReturnType<typeof createActionFeedbackStore>;
-export declare function ActionFeedbackProvider({ engine, responseId, renderInstanceId, draftSaveFeedback, children }: {
+export declare function ActionFeedbackProvider({ engine, responseId, renderInstanceId, draftSaveFeedback, submitFeedback, children }: {
     engine: IFormEngine;
     responseId?: string;
     renderInstanceId?: string;
     draftSaveFeedback?: 'external' | undefined;
+    submitFeedback?: 'external' | undefined;
     children: ReactNode;
 }): import("react/jsx-runtime").JSX.Element;
 export declare function useActionFeedbackOutlet(): {

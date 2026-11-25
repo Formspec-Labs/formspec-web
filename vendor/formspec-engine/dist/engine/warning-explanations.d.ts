@@ -1,5 +1,5 @@
 /** @filedesc Draft warning answers and review groups built from the Rust Submit findings. */
-import type { Explanation, GroupedAcknowledgement, InstanceExplanation } from '@formspec-org/types';
+import type { Explanation, FormDefinition, GroupedAcknowledgement, InstanceExplanation } from '@formspec-org/types';
 import type { EvalResult } from '../diff.js';
 type Pending<T> = Omit<T, 'author' | 'recorded'> & {
     author?: never;
@@ -57,4 +57,11 @@ export declare function warningReview(resultFacts: EvalResult, entries: DraftExp
     pendingStamps: boolean;
 };
 export type ExplanationState = ReturnType<typeof warningReview>;
+/**
+ * Matches Rust `revalidate` (`crates/formspec-eval/src/revalidate/mod.rs`): true iff at least one
+ * warning Shape with an id has effective explanation mode `'confirm' | 'explain' | 'acknowledge'`.
+ */
+export declare function definitionHasWarningExplanations(definition: Pick<FormDefinition, 'shapes' | 'warningExplanation'>): boolean;
+export declare function emptyWarningReview(entries: DraftExplanation[]): ExplanationState;
+export declare const EMPTY_WARNING_REVIEW: ExplanationState;
 export {};

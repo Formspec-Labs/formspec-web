@@ -68,6 +68,11 @@ export function applyMigrationsToResponseData(definition_json: string, response_
 export function assembleCandidate(definition_json: string, response_json: string, evaluation_json: string, resolution_json: string): string;
 
 /**
+ * Canonicalize Response `data` against a Definition's declared fields and authored Binds.
+ */
+export function canonicalizeResponseData(definition_json: string, data_json: string): string;
+
+/**
  * Throws when `name` may not be registered: a FEL built-in or reserved word (Core §3.12 rule 1).
  */
 export function checkFelExtensionName(name: string): void;
@@ -159,12 +164,23 @@ export function evaluateFiled(definition_json: string, data_json: string, contex
 export function evaluateScreenerDocument(screener_json: string, answers_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;
 
 /**
+ * Execute a full Mapping Document (rules + defaults + autoMap) against `source`.
+ * JS name `executeMappingDocument`.
+ */
+export function executeMappingDocument(doc_json: string, source_json: string, direction: string): string;
+
+/**
+ * Execute a `MappingRule[]` array against `source`. JS name `executeMappingRules`.
+ */
+export function executeMappingRules(rules_json: string, source_json: string, direction: string): string;
+
+/**
  * Returns the split-module ABI version string (must match across runtime/tools builds).
  */
 export function formspecWasmSplitAbiVersion(): string;
 
 /**
- * Extract field dependencies from a FEL expression.
+ * Extract static dependencies from a FEL expression.
  */
 export function getFelDependencies(expression: string): string;
 
@@ -226,6 +242,7 @@ export interface InitOutput {
     readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly assembleCandidate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+    readonly canonicalizeResponseData: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
@@ -238,6 +255,8 @@ export interface InitOutput {
     readonly evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateFiled: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly executeMappingRules: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly felcontext_evaluate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly felcontext_evaluateTrace: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;

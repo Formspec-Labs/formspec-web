@@ -182,8 +182,22 @@ export declare function wasmResolveOptionSetsOnDefinition(definitionJson: string
 export declare function wasmApplyMigrationsToResponseData(definitionJson: string, responseDataJson: string, fromVersion: string, nowIso: string): string;
 /** Coerce an inbound field value (whitespace, numeric strings, money, precision). */
 export declare function wasmCoerceFieldValue(itemJson: string, bindJson: string, definitionJson: string, valueJson: string): string;
-/** Extract field path dependencies from a FEL expression. Returns an array of path strings. */
-export declare function wasmGetFelDependencies(expression: string): string[];
+/** Canonicalize Response `data` against a Definition's declared fields and authored Binds. */
+export declare function wasmCanonicalizeResponseData<T = import('./interfaces.js').JsonRecord>(definition: unknown, data: T): T;
+/** Static FEL reads from Rust, with paths relative to each named instance. */
+export interface FELDependencies {
+    fields: string[];
+    contextRefs: string[];
+    /** Known instance names and their sorted paths, with an empty path for a whole-instance read. */
+    instanceReads: Record<string, string[]>;
+    /** Paths relative to the current field, with an empty path for the field itself. */
+    selfReads: string[];
+    mipDeps: string[];
+    hasSelfRef: boolean;
+    hasWildcard: boolean;
+    usesPrevNext: boolean;
+}
+export declare function wasmGetFelDependencies(expression: string): FELDependencies;
 /** Normalize a dotted path by stripping repeat indices. */
 export declare function wasmNormalizeIndexedPath(path: string): string;
 /** Resolve an item in a nested item tree by dotted path. */
@@ -247,6 +261,8 @@ type WasmEvaluation = {
     values: any;
     /** The Response projection of `values` after `nonRelevantBehavior`: groups are objects, repeats are arrays of row objects. */
     data: any;
+    /** Sorted Response `data` instance paths present in the input that no Definition Item declares. */
+    undeclaredDataPaths: string[];
     validations: any[];
     explanationFindings?: import('./engine/warning-explanations.js').ExplanationFinding[];
     candidateExplanations?: import('./engine/warning-explanations.js').DraftExplanation[];
@@ -290,6 +306,23 @@ export declare function wasmAnalyzeFelWithFieldTypes(expression: string, fieldTy
 export declare function wasmIsValidFelIdentifier(s: string): boolean;
 /** Sanitize a string into a valid FEL identifier. */
 export declare function wasmSanitizeFelIdentifier(s: string): string;
+/** Execute a MappingRule[] array against source in runtime WASM. */
+export declare function wasmExecuteMappingRuntime(rules: unknown[], source: unknown, direction: 'forward' | 'reverse'): {
+    direction: string;
+    output: any;
+    rulesApplied: number;
+    diagnostics: any[];
+};
+/**
+ * Execute a Mapping Document in runtime WASM (without loading tools WASM).
+ * Documents with an external `sourceSchema` require tools WASM for JSON Schema validation.
+ */
+export declare function wasmExecuteMappingDocRuntime(doc: unknown, source: unknown, direction: 'forward' | 'reverse'): {
+    direction: string;
+    output: any;
+    rulesApplied: number;
+    diagnostics: any[];
+};
 /** Compute dependency groups from recorded changeset entries (JSON round-trip to Rust). */
 export declare function wasmComputeDependencyGroups(entriesJson: string): Array<{
     entries: number[];

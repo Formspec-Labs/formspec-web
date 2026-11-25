@@ -44,6 +44,11 @@ export class FelContext {
     constructor(schema_json: string);
 }
 
+/**
+ * Analyze a draft FEL expression in its Definition or Mapping editor context.
+ */
+export function analyzeExpressionInDefinition(document_json: string, expression: string, registry_documents_json: string, target: string | null | undefined, mapping: boolean): string;
+
 export function analyzeFel(expression: string): string;
 
 /**
@@ -68,6 +73,11 @@ export function applyMigrationsToResponseData(definition_json: string, response_
 export function assembleCandidate(definition_json: string, response_json: string, evaluation_json: string, resolution_json: string): string;
 
 export function assembleDefinition(definition_json: string, fragments_json: string): string;
+
+/**
+ * Canonicalize Response `data` against a Definition's declared fields and authored Binds.
+ */
+export function canonicalizeResponseData(definition_json: string, data_json: string): string;
 
 /**
  * Throws when `name` may not be registered: a FEL built-in or reserved word (Core §3.12 rule 1).
@@ -218,7 +228,16 @@ export function formspecWasmSplitAbiVersion(): string;
 export function generateChangelog(old_def_json: string, new_def_json: string, definition_url: string): string;
 
 /**
- * Extract field dependencies from a FEL expression.
+ * Collect instance reads from every authored expression and creation declaration.
+ *
+ * # Errors
+ *
+ * Returns the authored location of an invalid expression or an input JSON error.
+ */
+export function getDefinitionInstanceReads(definition_json: string): string;
+
+/**
+ * Extract static dependencies from a FEL expression.
  */
 export function getFelDependencies(expression: string): string;
 
@@ -344,11 +363,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_felcontext_free: (a: number, b: number) => void;
+    readonly analyzeExpressionInDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly analyzeFel: (a: number, b: number, c: number) => void;
     readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly assembleCandidate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly assembleDefinition: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly canonicalizeResponseData: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
     readonly checkResponseProjection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
@@ -376,6 +397,7 @@ export interface InitOutput {
     readonly findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly formspecWasmSplitAbiVersion: (a: number) => void;
     readonly generateChangelog: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly getDefinitionInstanceReads: (a: number, b: number, c: number) => void;
     readonly getFelDependencies: (a: number, b: number, c: number) => void;
     readonly interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly interpolateTemplate: (a: number, b: number, c: number, d: number) => void;

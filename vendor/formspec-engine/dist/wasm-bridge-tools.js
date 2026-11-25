@@ -1,4 +1,5 @@
 /** @filedesc Tools WASM — lazy init and wrappers for `formspec_wasm_tools` (lint, mapping, assembly, FEL authoring helpers). */
+import { normalizeFelAnalysisError } from './fel/normalize-fel-analysis-error.js';
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { nodeFsModuleName, resolveWasmAssetPathForNode, } from './wasm-bridge-shared.js';
 import { getWasmModule, isWasmReady } from './wasm-bridge-runtime.js';
@@ -7,6 +8,10 @@ let _initToolsPromise = null;
 let _wasmTools = null;
 /** Count of `import()` executions for tools glue (excludes early-return paths). For tests only. */
 let _toolsWasmDynamicImportCount = 0;
+/** Return each instance's sorted paths across FEL and creation-time declarations. */
+export function getDefinitionInstanceReads(definition) {
+    return JSON.parse(wasmTools().getDefinitionInstanceReads(JSON.stringify(definition)));
+}
 /** Whether the tools WASM module has been initialized and is ready for use. */
 export function isWasmToolsReady() {
     return _wasmToolsReady;
@@ -216,6 +221,11 @@ export function wasmExecuteMappingDoc(doc, source, direction) {
     assertWasmToolsReadySync();
     const resultJson = wasmTools().executeMappingDocument(JSON.stringify(doc), JSON.stringify(source), direction);
     return JSON.parse(resultJson);
+}
+/** Analyze an expression with the same Definition declarations used by document lint. */
+export function analyzeExpressionInDefinition(definition, expression, registryDocuments, target, mapping = false) {
+    const result = JSON.parse(wasmTools().analyzeExpressionInDefinition(JSON.stringify(definition), expression, JSON.stringify(registryDocuments), target, mapping));
+    return { ...result, errors: result.errors.map(error => normalizeFelAnalysisError(expression, error)) };
 }
 /** Check an instance or catalog source against every eligible upstream Definition. */
 export function checkInstanceProjection(source, projectionConsumer, upstreamDefinitions) {

@@ -367,12 +367,14 @@ export function renderDefaultDefinitionForm(input) {
     return _jsx(DefaultDefinitionFormSlot, { input: input });
 }
 /**
- * Runs only for a binding that names a Mapping, so only a mapped prefill loads tools WASM
- * (Mapping execution lives there until fs-tco0). A failed load rejects, and the loader reports
- * the slot unavailable instead of dropping the prefill.
+ * Standard prefill Mappings execute in runtime WASM (fs-tco0) without requesting the tools WASM.
+ * Only a Mapping declaring an external `sourceSchema` loads tools WASM on demand for JSON Schema validation.
+ * A failed load rejects, and the loader reports the slot unavailable instead of dropping the prefill.
  */
 async function executeDefinitionFormMapping({ mapping, value, }) {
-    await initFormspecEngineTools();
+    if (mapping.sourceSchema) {
+        await initFormspecEngineTools();
+    }
     const result = createMappingEngine(mapping).reverse(value);
     if (result.diagnostics.length > 0) {
         const codes = result.diagnostics.map((diagnostic) => diagnostic.errorCode);
@@ -1024,7 +1026,7 @@ function DefaultSurfaceDefinitionForm(input) {
         : undefined;
     return (_jsxs("div", { ref: formRootRef, style: { display: 'contents' }, children: [_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, ...('activeSection' in input && { activeSection }), ...(focusField !== undefined && { focusField }), onActiveSectionChange: onActiveSectionChange, sectionNavigationActive: sectionNavigationActive, hrefForSection: hrefForSection, acknowledgementLink: acknowledgementLink, onSectionTitleChange: onSectionTitleChange, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, ...(onActionFinding ? { onActionFinding } : {}), responseActionInvoker: draftWriter
                     ? input => draftWriter.invoke(input, { invoker: responseActionInvoker, current: () => formVisit.current === visit })
-                    : responseActionInvoker ?? null, draftSaveFeedback: draftWriter ? 'external' : undefined, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
+                    : responseActionInvoker ?? null, draftSaveFeedback: draftWriter ? 'external' : undefined, submitFeedback: onActionCompleted || onDefinitionActionResult ? 'external' : undefined, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
                     ? {
                         // `onSubmit` requests the renderer's declared submit control. It is
                         // a no-op because durable effects have not reached a terminal yet.

@@ -242,6 +242,8 @@ interface BrowserPresentation extends SurfaceFormSession {
     editionPicker: ReactNode;
     appearancePicker: ReactNode;
     saveNotice: string;
+    /** False when another Surface region (such as the Submit outcome banner) already owns the live announcement. */
+    saveNoticeLive?: boolean;
     navigate: (href: string) => boolean | Promise<boolean>;
 }
 /** Shared rendering for controlled hosts and the maintained browser binding. */

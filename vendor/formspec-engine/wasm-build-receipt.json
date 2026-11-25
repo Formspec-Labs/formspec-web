@@ -2,36 +2,36 @@
   "version": 1,
   "platform": "linux/arm64",
   "sources": {
-    "formspec": "af6b3d9b7dfdad002b86da533ecb6a158e1b60e1",
-    "fel-core": "55d2f539c8514bc596bda0091e124a4d8b5fb177",
+    "formspec": "c5c4513ce622dc443af228a5d798868824129445",
+    "fel-core": "5205749db390a82c07a446c02970cfef3759396b",
     "integrity-stack": "e4a46bf6b76c4b94bb64577871f31cb50270913a"
   },
   "dockerfileSha256": "ce629d94061455308da78e3cc6fac9547ed372422864539a6d4e155d8b5b0915",
   "artifacts": [
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/README.md",
-      "sha256": "fc02b2a144bfa90197602b9ad2bd2f353917b6a25cf0e8ec47b137bce130ec50",
-      "bytes": 4818
+      "sha256": "21f5345495aaa5ca5c574c9258715d3d1d8e29c9c80828c7e6d4e59f1c9e8797",
+      "bytes": 4972
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/formspec_wasm_runtime.d.ts",
-      "sha256": "9d9b655804ca298006f17ba29f62b6ed9f7ea0bef1a36d5e8d5191688f8d596d",
-      "bytes": 13831
+      "sha256": "7600ab8a0b6a9e88f424d1eabb107bbaf8bd5c7de55463a1e376d1dd487d9bb9",
+      "bytes": 14807
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/formspec_wasm_runtime.js",
-      "sha256": "0dbb01f84b4e464b44f8f48fb368e5edfc16e81de0b712392855227f080cac27",
-      "bytes": 56587
+      "sha256": "0c6454d6e7a8edef5c8d66210c57e1b215c82efa227b7275d3130075c08c8d4a",
+      "bytes": 61109
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/formspec_wasm_runtime_bg.wasm",
-      "sha256": "5a2768bde70a10e5cbc19adbb075a23a15ee4a0964cf6a6e13b459de68498e7b",
-      "bytes": 2205098
+      "sha256": "c730fa499f9fa52a25bbe68cb8333c9353389362a49f212d90e8ba004d5de3ec",
+      "bytes": 2279487
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/formspec_wasm_runtime_bg.wasm.d.ts",
-      "sha256": "50b2667b3b2129f37f41876dad5f8f2aa0b39c1a07f8b392ef1d5d4aea83ab73",
-      "bytes": 3908
+      "sha256": "141b45cc4e5f259bbd8500fc25904447506d7e51651bd9fd68cd700b62aef43a",
+      "bytes": 4257
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/package.json",
@@ -40,28 +40,28 @@
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/README.md",
-      "sha256": "fc02b2a144bfa90197602b9ad2bd2f353917b6a25cf0e8ec47b137bce130ec50",
-      "bytes": 4818
+      "sha256": "21f5345495aaa5ca5c574c9258715d3d1d8e29c9c80828c7e6d4e59f1c9e8797",
+      "bytes": 4972
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools.d.ts",
-      "sha256": "f1461b5a8eaa414572c806693be5141a93d5036fb45c7df023cd5c1243eb971d",
-      "bytes": 20695
+      "sha256": "71e0654d16a30cc5f882995382c29126b6549a913a25e836ebeda14861a6f85a",
+      "bytes": 21783
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools.js",
-      "sha256": "29215b05a55b8d40b68c287b3e304f5322b04575c7c0f89a687751511adf9188",
-      "bytes": 88999
+      "sha256": "882279c78d47009339a9f561e5664ea67bb9456ef4894625ceb2eee3773656d6",
+      "bytes": 93558
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools_bg.wasm",
-      "sha256": "6a0fabe2074dcebd17d3880ab64fd325da8dfdb5376d8ee3ff33b16b51ccec3a",
-      "bytes": 4665089
+      "sha256": "3369d23e89ee92c2febfa77b853ef1a8623cbb043c56db0cb7e6e4b03b97edb4",
+      "bytes": 4743919
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools_bg.wasm.d.ts",
-      "sha256": "b918dcc4e6e1cde5de30527fcead2450ba59eccf2d849611ac540f90e88ea4dc",
-      "bytes": 6391
+      "sha256": "ae7294f9153ac989233410df00346b3e533516238fc39dfb0189f11b57c732f1",
+      "bytes": 6743
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/package.json",

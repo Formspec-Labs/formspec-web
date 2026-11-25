@@ -46,9 +46,7 @@ export function itemLocationAtPath(items, path) {
         return undefined;
     return { parent: currentItems, index, item: currentItems[index] };
 }
-export function getFELDependencies(expression) {
-    return wasmGetFelDependencies(expression);
-}
+export const getFELDependencies = wasmGetFelDependencies;
 /**
  * Evaluate a FEL expression and return a structured trace of evaluation steps.
  * See `FelTraceStep` for the step variants; wire format matches Rust `fel_core::TraceStep`.

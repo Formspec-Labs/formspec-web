@@ -12,7 +12,7 @@ import { createFieldViewModel, resolveItemHelpText, resolveItemLabel, } from '..
 import { createFormViewModel } from '../form-view-model.js';
 import { wasmAssembleCandidate, wasmCreateFelContext, wasmCreateRepeatRow, wasmCreateResponse, wasmEvaluateDefinition, wasmEvaluateFiled, wasmResponseSubjectId, } from '../wasm-bridge-runtime.js';
 import { resolveOptionSetsOnDefinition, } from './definition-setup.js';
-import { isStamped, matchesEntry, sameAnswer, stripExplanationStamp, warningReview, } from './warning-explanations.js';
+import { definitionHasWarningExplanations, EMPTY_WARNING_REVIEW, emptyWarningReview, isStamped, matchesEntry, sameAnswer, stripExplanationStamp, warningReview, } from './warning-explanations.js';
 import { captureDraftData } from './draft-snapshot.js';
 import { registerDraftEditVersionSignal } from './draft-edit-signal.js';
 import { validateInstanceDataAgainstSchema } from './instance-schema.js';
@@ -75,6 +75,8 @@ export class FormEngine {
         /** Hint / description signals for Items with no field view model, keyed `<property>:<instance path>`. */
         this._itemHelpTextSignals = new Map();
         this._data = Object.create(null);
+        /** Undeclared properties captured from loaded Response data, keyed by Response `data` scope path. */
+        this._undeclaredData = new Map();
         this._previousEvalResult = null;
         this._fullResult = null;
         this._issuerResolutionEpoch = 0;
@@ -106,13 +108,22 @@ export class FormEngine {
         this.instanceVersion = this._rx.signal(0);
         this.structureVersion = this._rx.signal(0);
         this._evaluationVersion = this._rx.signal(0);
+        this.evaluationVersion = this._evaluationVersion;
         this._draftEditVersion = this._rx.signal(0);
         registerDraftEditVersionSignal(this, this._draftEditVersion);
         this._explanationRefreshVersion = this._rx.signal(0);
+        this.explanationRefreshVersion = this._explanationRefreshVersion;
         this._labelContextSignal = this._rx.signal(null);
+        this.definition = cloneValue(definition);
+        this._hasWarningExplanations = definitionHasWarningExplanations(this.definition);
         this._explanationState = this._rx.computed(() => {
-            const evaluationVersion = this._evaluationVersion.value;
             const explanations = this._explanations.value;
+            if (!this._hasWarningExplanations) {
+                return explanations.length === 0
+                    ? EMPTY_WARNING_REVIEW
+                    : freezeSourceMetadata(emptyWarningReview(explanations));
+            }
+            const evaluationVersion = this._evaluationVersion.value;
             const refreshVersion = this._explanationRefreshVersion.value;
             const pending = this._pendingExplanationState;
             this._pendingExplanationState = null;
@@ -124,7 +135,6 @@ export class FormEngine {
                 : null;
             return freezeSourceMetadata(reused ?? this.reviewWarnings());
         });
-        this.definition = cloneValue(definition);
         if ([options.responseData, options.savedResponseData, options.draftSnapshot].filter(value => value !== undefined).length > 1) {
             throw new Error('Supply one of responseData, savedResponseData, or draftSnapshot');
         }
@@ -315,7 +325,7 @@ export class FormEngine {
             for (const pending of created.pending)
                 this._pendingCreationPaths.add(pending);
             this.appendRepeatRow(path, item);
-            this.loadItemsData(item.children ?? [], created.data, `${path}[${index}]`);
+            this.loadItemsData(item.children ?? [], created.data, `${path}[${index}]`, false, `${this.dataPathOfModelPath(path)}[${index}]`);
             this._evaluate();
         });
         return index;
@@ -364,7 +374,7 @@ export class FormEngine {
     }
     editingData() {
         return captureDraftData(this.definition.items, path => this._data[path], path => this._pendingCreationPaths.has(path) || this._failedSeedPaths.has(path)
-            ? undefined : this.repeats[path].value);
+            ? undefined : this.repeats[path].value, scopePath => this._undeclaredData.get(scopePath)?.entries() ?? []);
     }
     getDraftSnapshot() {
         const data = this.editingData();
@@ -390,7 +400,14 @@ export class FormEngine {
     getExplanationState() {
         return this._explanationState.value;
     }
+    hasWarningExplanations() {
+        return this._hasWarningExplanations;
+    }
     reviewWarnings() {
+        if (!this._hasWarningExplanations) {
+            const entries = this._explanations.value;
+            return entries.length === 0 ? EMPTY_WARNING_REVIEW : emptyWarningReview(entries);
+        }
         return warningReview(this.evaluateResultForTrigger('submit'), this._explanations.value);
     }
     refreshExplanationState(state) {
@@ -507,40 +524,175 @@ export class FormEngine {
         if (!isJsonRecord(snapshot.data))
             throw new TypeError('Draft data must be a JSON object');
     }
-    loadItemsData(items, data, prefix, replace = false) {
-        for (const item of items) {
-            const present = Object.prototype.hasOwnProperty.call(data, item.key);
-            const path = prefix ? `${prefix}.${item.key}` : item.key;
-            const value = present ? data[item.key] : undefined;
-            if (item.type === 'field') {
-                if ((present || replace) && !this.isCalculated(path)) {
-                    this.storeFieldValue(path, value);
-                    if (replace)
-                        this.writeSources[path].value = null;
+    loadItemsData(items, data, prefix, replace = false, dataScope = '') {
+        if (replace && dataScope === '') {
+            this._undeclaredData.clear();
+        }
+        const fields = [];
+        const fieldByKey = new Map();
+        const groups = [];
+        const groupByKey = new Map();
+        const collectScope = (list, modelPrefix) => {
+            for (const item of list) {
+                if (item.type === 'display')
+                    continue;
+                const modelPath = modelPrefix ? `${modelPrefix}.${item.key}` : item.key;
+                if (item.type === 'field') {
+                    const entry = { item, modelPath };
+                    fields.push(entry);
+                    fieldByKey.set(item.key, entry);
+                    collectScope(item.children ?? [], modelPath);
                 }
-                this.loadItemsData(item.children ?? [], data, path, replace);
+                else if (item.type === 'group') {
+                    const dataPath = dataScope ? `${dataScope}.${item.key}` : item.key;
+                    const entry = { item, modelPath, dataPath };
+                    groups.push(entry);
+                    groupByKey.set(item.key, entry);
+                }
             }
-            else if (item.type === 'group' && (present || replace)) {
-                if (item.repeatable) {
-                    const rows = Array.isArray(value) ? value : [];
-                    if (this.repeats[path].value > rows.length) {
-                        this.clearRepeatSubtree(path, rows.length);
-                        this.repeats[path].value = rows.length;
-                        this._draftEditDirty = true;
-                        this.structureVersion.value += 1;
+        };
+        collectScope(items, prefix);
+        const hasDependentItem = (list, key) => list.some(item => (item.type !== 'display' && item.key === key)
+            || (item.type === 'field' && hasDependentItem(item.children ?? [], key)));
+        const fieldValues = new Map();
+        const groupObjects = new Map();
+        const groupRows = new Map();
+        const undeclared = new Map();
+        const placeEntry = (rawKey, rawVal) => {
+            const directField = fieldByKey.get(rawKey);
+            if (directField) {
+                fieldValues.set(directField.modelPath, rawVal);
+                return;
+            }
+            const directGroup = groupByKey.get(rawKey);
+            if (directGroup) {
+                if (directGroup.item.repeatable) {
+                    const rows = groupRows.get(rawKey) ?? [];
+                    if (Array.isArray(rawVal)) {
+                        for (let i = 0; i < rawVal.length; i += 1) {
+                            while (rows.length <= i)
+                                rows.push({});
+                            const row = rawVal[i];
+                            if (isJsonRecord(row))
+                                Object.assign(rows[i], row);
+                        }
                     }
-                    while (this.repeats[path].value < rows.length) {
-                        this.appendRepeatRow(path, item);
-                    }
-                    rows.forEach((row, index) => {
-                        this.loadItemsData(item.children ?? [], isJsonRecord(row) ? row : {}, `${path}[${index}]`, replace);
-                    });
+                    groupRows.set(rawKey, rows);
                 }
                 else {
-                    this.loadItemsData(item.children ?? [], isJsonRecord(value) ? value : {}, path, replace);
+                    const obj = groupObjects.get(rawKey) ?? {};
+                    if (isJsonRecord(rawVal))
+                        Object.assign(obj, rawVal);
+                    groupObjects.set(rawKey, obj);
+                }
+                return;
+            }
+            const dot = rawKey.indexOf('.');
+            const segment = dot === -1 ? rawKey : rawKey.slice(0, dot);
+            const rest = dot === -1 ? undefined : rawKey.slice(dot + 1);
+            const indexed = /^([^[\]]+)\[(\d+)\]$/.exec(segment);
+            const name = indexed ? indexed[1] : segment;
+            const index = indexed ? Number(indexed[2]) : undefined;
+            const flatGroup = groupByKey.get(name);
+            if (flatGroup) {
+                if (flatGroup.item.repeatable && index !== undefined) {
+                    const rows = groupRows.get(name) ?? [];
+                    while (rows.length <= index)
+                        rows.push({});
+                    if (rest !== undefined) {
+                        rows[index][rest] = rawVal;
+                    }
+                    else if (isJsonRecord(rawVal)) {
+                        Object.assign(rows[index], rawVal);
+                    }
+                    groupRows.set(name, rows);
+                    return;
+                }
+                if (!flatGroup.item.repeatable && index === undefined && rest !== undefined) {
+                    const obj = groupObjects.get(name) ?? {};
+                    obj[rest] = rawVal;
+                    groupObjects.set(name, obj);
+                    return;
                 }
             }
+            const flatField = fieldByKey.get(name);
+            if (flatField && index === undefined && rest !== undefined) {
+                const nextSeg = rest.includes('.') ? rest.slice(0, rest.indexOf('.')) : rest;
+                const nextName = nextSeg.replace(/\[\d+\]$/, '');
+                if (hasDependentItem(flatField.item.children ?? [], nextName)) {
+                    placeEntry(rest, rawVal);
+                    return;
+                }
+            }
+            undeclared.set(rawKey, cloneValue(rawVal));
+        };
+        for (const [key, value] of Object.entries(data)) {
+            placeEntry(key, value);
         }
+        if (undeclared.size > 0) {
+            let bucket = this._undeclaredData.get(dataScope);
+            if (!bucket) {
+                bucket = new Map();
+                this._undeclaredData.set(dataScope, bucket);
+            }
+            for (const [key, value] of undeclared) {
+                bucket.set(key, value);
+            }
+        }
+        for (const { modelPath } of fields) {
+            const present = fieldValues.has(modelPath);
+            if ((present || replace) && !this.isCalculated(modelPath)) {
+                this.storeFieldValue(modelPath, present ? fieldValues.get(modelPath) : undefined);
+                if (replace)
+                    this.writeSources[modelPath].value = null;
+            }
+        }
+        for (const { item, modelPath, dataPath } of groups) {
+            if (item.repeatable) {
+                const present = groupRows.has(item.key);
+                if (!present && !replace)
+                    continue;
+                const rows = groupRows.get(item.key) ?? [];
+                if (this.repeats[modelPath].value > rows.length) {
+                    this.clearRepeatSubtree(modelPath, rows.length);
+                    this.repeats[modelPath].value = rows.length;
+                    this._draftEditDirty = true;
+                    this.structureVersion.value += 1;
+                }
+                while (this.repeats[modelPath].value < rows.length) {
+                    this.appendRepeatRow(modelPath, item);
+                }
+                rows.forEach((row, index) => {
+                    this.loadItemsData(item.children ?? [], row, `${modelPath}[${index}]`, replace, `${dataPath}[${index}]`);
+                });
+            }
+            else {
+                const present = groupObjects.has(item.key);
+                if (!present && !replace)
+                    continue;
+                this.loadItemsData(item.children ?? [], groupObjects.get(item.key) ?? {}, modelPath, replace, dataPath);
+            }
+        }
+    }
+    /** Translate a Definition model path (which includes scalar field ancestors) to a Response `data` scope path. */
+    dataPathOfModelPath(modelPath) {
+        if (!modelPath)
+            return '';
+        const parts = modelPath.split('.');
+        let currentModel = '';
+        const dataParts = [];
+        for (const part of parts) {
+            const indexed = /^([^[\]]+)(\[\d+\])$/.exec(part);
+            const key = indexed ? indexed[1] : part;
+            const suffix = indexed ? indexed[2] : '';
+            const baseModel = currentModel ? `${currentModel}.${key}` : key;
+            const item = this._groupItems.get(toBasePath(baseModel));
+            currentModel = currentModel ? `${currentModel}.${part}` : part;
+            if (item?.type === 'group') {
+                dataParts.push(`${key}${suffix}`);
+            }
+        }
+        return dataParts.join('.');
     }
     creationContext(pendingPaths) {
         return {
@@ -596,7 +748,27 @@ export class FormEngine {
             }), repeatPath => this.repeats[repeatPath]?.value ?? 0));
         }
         this._rx.batch(() => {
+            const repeatDataPath = this.dataPathOfModelPath(path);
+            const dataPrefix = `${repeatDataPath}[`;
+            const shiftedUndeclared = [];
+            for (const [scope, bucket] of this._undeclaredData.entries()) {
+                if (!scope.startsWith(dataPrefix))
+                    continue;
+                const end = scope.indexOf(']', dataPrefix.length);
+                if (end === -1)
+                    continue;
+                const row = Number(scope.slice(dataPrefix.length, end));
+                if (row === removedIndex)
+                    continue;
+                const nextScope = row > removedIndex
+                    ? `${dataPrefix}${row - 1}${scope.slice(end)}`
+                    : scope;
+                shiftedUndeclared.push([nextScope, new Map(bucket)]);
+            }
             this.clearRepeatSubtree(path);
+            for (const [nextScope, bucket] of shiftedUndeclared) {
+                this._undeclaredData.set(nextScope, bucket);
+            }
             this.repeats[path].value = rows.length;
             for (const [index, row] of rows.entries()) {
                 const rowPath = `${path}[${index}]`;
@@ -847,18 +1019,38 @@ export class FormEngine {
     getFieldPaths() {
         return Object.keys(this._fieldViewModels).sort();
     }
-    /** Read the current field flags and the requested validation profile, which defaults to live. */
-    getEvaluatedFormState(options = {}) {
-        // A repeat can add or remove the only field signals between evaluations.
-        this._evaluationVersion.value;
-        const fields = Object.keys(this._fieldViewModels).map(path => ({
+    collectEvaluatedFields() {
+        return Object.keys(this._fieldViewModels).map(path => ({
             path,
             relevant: this.isPathRelevant(path),
             readonly: this.readonlySignals[path]?.value ?? false,
             required: this.requiredSignals[path]?.value ?? false,
             empty: isEmptyValue(this.signals[path]?.value),
         }));
-        return { fields, report: this.getValidationReport(options) };
+    }
+    /** Read the current field flags and the requested validation profile, which defaults to live. */
+    getEvaluatedFormState(options = {}) {
+        // A repeat can add or remove the only field signals between evaluations.
+        this._evaluationVersion.value;
+        return { fields: this.collectEvaluatedFields(), report: this.getValidationReport(options) };
+    }
+    /**
+     * Evaluate the Submit profile once at one clock and return both the Submit `EvaluatedFormState`
+     * and the matching `ExplanationState`, without mutating signals (safe inside reactive computeds).
+     */
+    getSubmitEvaluation() {
+        this._evaluationVersion.value;
+        const timestamp = this.nowISO();
+        const result = this.evaluateResultForTrigger('submit', timestamp);
+        const report = buildValidationReportEnvelope(this.collectResponseValidationResults(result, 'submit'), timestamp, this.definition.url, this.definition.version);
+        const evaluated = {
+            fields: this.collectEvaluatedFields(),
+            report,
+        };
+        const explanations = this._hasWarningExplanations
+            ? freezeSourceMetadata(warningReview(result, this._explanations.value))
+            : this._explanationState.value;
+        return { evaluated, explanations };
     }
     getResponse(meta) {
         return this.getResponseSnapshot(meta).response;
@@ -983,12 +1175,11 @@ export class FormEngine {
                 if (saved.length)
                     response.explanations = cloneValue(saved);
             }
-            if (submitEvalResult
-                && report?.results.some(r => r.code === 'EXPLANATION_STALE' || r.code === 'EXPLANATION_REQUIRED')) {
-                // Publish the fresh Submit evaluation to warning controls so clock-only expiry/expansion
-                // immediately reopens accepted groups without a second evaluation.
-                this.refreshExplanationState(warningReview(submitEvalResult, draftEntries));
-            }
+        }
+        if (submitEvalResult && this._hasWarningExplanations && !pendingExplanationStamps) {
+            // Seed the fresh Submit evaluation into warning controls so Submit never triggers a second
+            // Submit evaluation and clock-only expiry/expansion immediately reopens accepted groups.
+            this.refreshExplanationState(warningReview(submitEvalResult, draftEntries));
         }
         return { snapshot: { response, validationReport: report }, pendingExplanationStamps };
     }
@@ -1685,7 +1876,7 @@ export class FormEngine {
     collectExpressionDependencies(expression, currentPath, seenVariables) {
         const dependencies = new Set();
         try {
-            for (const dependency of getFELDependencies(expression)
+            for (const dependency of getFELDependencies(expression).fields
                 .map(FormEngine.normalizeDependencyPath)
                 .filter((dependency) => dependency.length > 0)) {
                 dependencies.add(dependency);
@@ -1926,6 +2117,19 @@ export class FormEngine {
         for (const key of this._itemHelpTextSignals.keys()) {
             if (includesPath(key.slice(key.indexOf(':') + 1))) {
                 this._itemHelpTextSignals.delete(key);
+            }
+        }
+        const repeatDataPath = this.dataPathOfModelPath(rootRepeatPath);
+        const dataPrefix = `${repeatDataPath}[`;
+        for (const scope of [...this._undeclaredData.keys()]) {
+            if (scope.startsWith(dataPrefix)) {
+                const end = scope.indexOf(']', dataPrefix.length);
+                if (end !== -1) {
+                    const row = Number(scope.slice(dataPrefix.length, end));
+                    if (firstIndex === 0 || row >= firstIndex) {
+                        this._undeclaredData.delete(scope);
+                    }
+                }
             }
         }
         clearRepeatIndexedSubtree({
