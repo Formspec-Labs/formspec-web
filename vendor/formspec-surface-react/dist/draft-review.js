@@ -71,7 +71,7 @@ export async function loadDraftReviewInputs(plan, { session, site, signal, local
         signal.throwIfAborted();
         const hasResponseInstances = Object.values(definition.instances ?? {}).some(inst => Boolean(inst.response));
         const responseInstanceResolutions = hasResponseInstances && session.resolveReads
-            ? await session.resolveReads(definition, key, pins, signal)
+            ? await session.resolveReads(definition, key, pins, signal, isFiledRecord ? undefined : revision)
             : undefined;
         signal.throwIfAborted();
         const engine = createFormEngine(definition, {

@@ -1,10 +1,10 @@
 /** @filedesc WASM definition-eval payload, EvalResult merge, and validation merge. */
+// --- wasmEvaluateDefinition payload -------------------------------------------------------------
 /** Options object consumed by the WASM definition evaluator (JSON-serialized internally). */
 export function wasmEvaluateDefinitionPayload(options) {
     return {
         nowIso: options.nowIso,
         ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
-        previousValidations: options.previousResult?.validations,
         previousNonRelevant: options.previousResult?.nonRelevant,
         instances: options.instances,
         registryDocuments: options.registryDocuments,

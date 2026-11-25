@@ -6,13 +6,14 @@ export type { DraftFencedAction } from '@formspec-org/surface';
 import type { ResponseActionInvokerInput, ResponseActionInvokerResult, ResponseActionsDocument, SubmitResult } from '@formspec-org/react';
 import type { EffectRequest, FormResponse } from '@formspec-org/types';
 import type { SurfaceSaveNotice } from './SurfaceSlot.js';
+import { type DraftDefinitionResponsePort } from './definition-response-reads.js';
 export type DraftNoticeReporter = (notice: SurfaceSaveNotice, options?: {
     focusConflict?: boolean;
 }) => void;
 export interface DraftWriterOptions {
     engine: IFormEngine;
     key: DraftKey;
-    port: DraftPort;
+    port: DraftPort & Partial<DraftDefinitionResponsePort>;
     initializedRevision?: string | undefined;
     draft?: DraftRecord | undefined;
     creationPins?: DraftRecord['pins'];

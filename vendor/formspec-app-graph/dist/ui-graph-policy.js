@@ -1,5 +1,6 @@
 /** @filedesc Built-in UI Graph Policy validation for loaded app-graph evidence. */
 import { appGraphSourceFromModuleSource, diagnosticSourceForHandle, } from './report.js';
+import { embedRouteRefFromSlot, walkEmbeddedRoutes } from './surface-widgets.js';
 import { satisfies, valid, validRange } from 'semver';
 const HOST_LANDMARK_ROLES = new Set(['main', 'navigation', 'complementary']);
 const UI_GRAPH_THEME_WIDGET_SITE = 'ui-graph-policy.theme.assignments.widgetRef';
@@ -99,15 +100,6 @@ function moduleWidgetFromSlot(slot) {
     if (typeof moduleId !== 'string' || typeof widgetName !== 'string')
         return undefined;
     return { moduleId, widgetName };
-}
-function embedRouteRefFromSlot(slot) {
-    if (slot.slotType !== 'embed-route')
-        return undefined;
-    const binding = slot.binding;
-    if (!binding || typeof binding !== 'object')
-        return undefined;
-    const routeRef = binding.routeRef;
-    return typeof routeRef === 'string' ? routeRef : undefined;
 }
 function policyEvidences(context) {
     return (context.hostEvidence?.uiGraphPolicies ?? []).flatMap((evidence, index) => {
@@ -457,25 +449,20 @@ export const TENANT_THEMING_REFUSING_ROUTE_CLASSES = new Set(Object.entries(ROUT
  */
 function widgetBindingsRenderedBy(root, routesById) {
     const bindings = [];
-    const visited = new Set([root.id]);
-    const frontier = [
-        { route: root, embedChain: [root.id] },
-    ];
-    for (let cursor = 0; cursor < frontier.length; cursor += 1) {
-        const { route, embedChain } = frontier[cursor];
-        for (const routeSlot of route.slots) {
-            if (routeSlot.moduleWidget) {
-                bindings.push({ route, routeSlot, embedChain });
-                continue;
-            }
-            const embedded = routeSlot.embedRouteRef === undefined
-                ? undefined
-                : routesById.get(routeSlot.embedRouteRef);
-            if (!embedded || visited.has(embedded.id))
-                continue;
-            visited.add(embedded.id);
-            frontier.push({ route: embedded, embedChain: [...embedChain, embedded.id] });
+    const reachable = walkEmbeddedRoutes([root], route => route.slots.flatMap(slot => {
+        const embedded = slot.embedRouteRef === undefined ? undefined : routesById.get(slot.embedRouteRef);
+        return embedded ? [embedded] : [];
+    }));
+    for (const route of reachable.keys()) {
+        const widgetSlots = route.slots.filter(slot => slot.moduleWidget);
+        if (widgetSlots.length === 0)
+            continue;
+        const embedChain = [];
+        for (let origin = route; origin; origin = reachable.get(origin)) {
+            embedChain.push(origin.id);
         }
+        embedChain.reverse();
+        bindings.push(...widgetSlots.map(routeSlot => ({ route, routeSlot, embedChain })));
     }
     return bindings;
 }

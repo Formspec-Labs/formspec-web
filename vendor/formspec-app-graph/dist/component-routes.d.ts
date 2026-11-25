@@ -23,6 +23,7 @@ interface ComponentClaim {
     membership: ComponentMembership;
     target: RouteTarget;
 }
+export declare function routeTargets(document: unknown): RouteTarget[];
 export declare function isExactVersion(value: string | undefined): value is string;
 /** Shared claim collection; callers must establish schema admission first. */
 export declare function collectComponentRouteClaims(context: AppGraphContext): {

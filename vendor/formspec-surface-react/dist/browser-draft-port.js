@@ -15,6 +15,14 @@ export async function previewResponseRecordTools() {
         isValidAuthored: isValidResponseAuthored,
     };
 }
+function selectsOpeningFiling(selection) {
+    return selection.status === 'completed' && selection.cardinality === 'latest' && selection.pin === 'at-open';
+}
+function isFilingReference(value) {
+    return typeof value?.responseId === 'string' && value.responseId.length > 0 &&
+        typeof value.definitionVersion === 'string' && value.definitionVersion.length > 0 &&
+        typeof value.responseHash === 'string' && /^sha256:[0-9a-f]{64}$/.test(value.responseHash);
+}
 function storageKey(key) {
     return [key.scope, key.definitionUrl, key.subject ? 'subject' : 'respondent', key.subject?.id ?? ''];
 }
@@ -195,7 +203,9 @@ function inferredUpstreamSubject(subject) {
     };
 }
 function createFilingStore(options, transaction, subscribe, committed, storageAvailable = () => true) {
-    const { scope, definitions, catalogs = [] } = options;
+    const { scope, definitions, catalogs = [], openingResponseDependencies } = options;
+    const openingRules = (definitionUrl) => openingResponseDependencies?.get(definitionUrl);
+    const hasOpeningRules = (definitionUrl) => Boolean(openingRules(definitionUrl)?.size);
     let preparedFromInput = options.preparedFixtures;
     const fixtureSnapshot = preparedFromInput ? undefined : options.fixtures && {
         ...(options.fixtures.filings ? { filings: options.fixtures.filings.map(({ responseJson }) => ({ responseJson })) } : {}),
@@ -389,10 +399,10 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
             const resolutions = {};
             const pins = Object.create(null);
             if (requests.length > 0) {
-                const outcomes = await selectWithFixtures(base, requests, {
-                    snapshot: observed,
-                    stagedDrafts: staged.map(entry => ({ id: entry.id, value: entry.editable })),
-                });
+                const selectionOptions = { snapshot: observed, stagedDrafts: staged.map(entry => ({ id: entry.id, value: entry.editable })) };
+                const { outcomes, missingPrerequisite } = await selectScopedDefinition(base, definition, fixture.key, selectionOptions);
+                if (missingPrerequisite)
+                    throw new Error(`Seeded draft for "${definition.url}" requires unavailable at-open instance "${missingPrerequisite}".`);
                 for (const { key: instance, selection } of requests) {
                     const outcome = outcomes.get(instance);
                     if (selection.pin === 'at-open' && (outcome?.status !== 'available' || !outcome.pinned)) {
@@ -758,7 +768,7 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
     }
     const authorized = async (key, relation, selection) => key.scope === scope && (options.authorize === undefined || await options.authorize(key, relation, selection));
     async function selectWithFixturesInternal(base, requests, selectOptions = {}) {
-        const { signal, stagedDrafts, snapshot, trackCandidates } = selectOptions;
+        const { signal, stagedDrafts, snapshot, trackCandidates, opening } = selectOptions;
         const unavailable = { status: 'unavailable' };
         signal?.throwIfAborted();
         try {
@@ -929,9 +939,10 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                     const decision = decisions.get(responsePairKey({ responseId, responseHash }));
                     if (decision?.status === 'decided')
                         dispositions.push({ responseId, responseHash, value: decision.disposition });
+                    const candidate = { key, responseId, responseHash, input };
                     if (decision?.status === 'unavailable')
-                        unresolved.push(input);
-                    return { key, responseId, responseHash, input };
+                        unresolved.push(candidate);
+                    return candidate;
                 });
                 return [url, { completed, dispositions, unresolved }];
             }));
@@ -952,7 +963,22 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                 return allowed;
             };
             const winningCandidates = new Map();
-            const results = await Promise.all(admitted.map(async (entry, index) => {
+            const dependencies = new Map();
+            const requiredSources = new Set();
+            if (opening) {
+                requests.forEach((request, index) => {
+                    const rule = opening.rules.get(request.key);
+                    if (!rule)
+                        return;
+                    const sourceIndex = opening.rules.has(rule.sourceInstance) ? -1 : requests.findIndex(source => source.kind === 'definition' && source.key === rule.sourceInstance && selectsOpeningFiling(source.selection));
+                    dependencies.set(index, { rule, sourceIndex });
+                    if (sourceIndex !== -1)
+                        requiredSources.add(sourceIndex);
+                });
+            }
+            const verifiedSources = new Map();
+            async function selectRequest(index, restricted, retained) {
+                const entry = admitted[index];
                 const key = requests[index].key;
                 if (!entry)
                     return [key, unavailable];
@@ -985,22 +1011,40 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                 if (!current)
                     return [key, unavailable];
                 try {
-                    const candidates = [...current, ...(filed?.completed ?? [])];
+                    const pair = restricted ? responsePairKey(restricted) : undefined;
+                    const candidates = pair === undefined
+                        ? [...current, ...(filed?.completed ?? [])]
+                        : (filed?.completed ?? []).filter(candidate => responsePairKey(candidate) === pair);
+                    if (restricted && candidates.length !== 1)
+                        return [key, unavailable];
                     if (selection.disposition && filed?.unresolved.length) {
                         const { pin: _pin, ...unpinned } = context;
                         const { disposition: _disposition, ...unfiltered } = selection;
-                        const possible = tools.selectResponses(filed.unresolved, { ...unfiltered, pin: 'none', whenNone: 'empty' }, { ...unpinned, projection: [] });
+                        const possible = tools.selectResponses(filed.unresolved.filter(candidate => pair === undefined || responsePairKey(candidate) === pair)
+                            .map(candidate => candidate.input), { ...unfiltered, pin: 'none', whenNone: 'empty' }, { ...unpinned, projection: [] });
                         if (possible.status !== 'available' || !possible.none)
                             return [key, unavailable];
                     }
+                    const { pin: _pin, ...liveContext } = context;
                     const outcome = tools.selectResponses(candidates.map(candidate => candidate.input), selection, {
-                        ...context,
+                        ...(retained ? liveContext : context),
                         ...(selection.disposition && { dispositions: filed?.dispositions ?? [] }),
-                        ...(trackCandidates && { includeInputPositions: true }),
+                        ...((trackCandidates || requiredSources.has(index)) && { includeInputPositions: true }),
                     });
                     if (outcome.status !== 'available')
                         return [key, outcome];
+                    if (restricted) {
+                        const [record, extra] = outcome.records;
+                        if (!record || extra || record.definitionVersion !== restricted.definitionVersion || responsePairKey(record) !== pair) {
+                            return [key, unavailable];
+                        }
+                    }
                     const { inputPositions, ...publicOutcome } = outcome;
+                    if (retained) {
+                        const { status: _status, newer: _newer, ...delivery } = publicOutcome;
+                        if (!deepEqual(delivery, retained))
+                            return [key, unavailable];
+                    }
                     const selectedCandidates = inputPositions
                         ? inputPositions.flatMap(pos => (candidates[pos] ? [candidates[pos]] : []))
                         : (() => {
@@ -1012,6 +1056,15 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                     const allowed = await Promise.all(selectedCandidates.map(record => canRead(record.key)));
                     if (allowed.includes(false))
                         return [key, unavailable];
+                    if (requiredSources.has(index) && inputPositions?.length === 1 && publicOutcome.records.length === 1) {
+                        const [record] = publicOutcome.records;
+                        const [original] = selectedCandidates;
+                        if (record?.responseHash && original?.input.kind === 'filing' && original.input.responseJson !== undefined
+                            && responsePairKey(original) === responsePairKey(record)) {
+                            verifiedSources.set(index, { responseId: record.responseId, responseHash: record.responseHash,
+                                definitionVersion: record.definitionVersion, responseJson: original.input.responseJson });
+                        }
+                    }
                     if (trackCandidates && inputPositions) {
                         winningCandidates.set(key, inputPositions.flatMap(pos => {
                             const candidateIndex = candidates[pos]?.candidateIndex;
@@ -1023,9 +1076,57 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                 catch {
                     return [key, unavailable];
                 }
+            }
+            function retainedPin(index) {
+                const { key } = requests[index];
+                return opening?.pins && Object.hasOwn(opening.pins, key) ? opening.pins[key] : undefined;
+            }
+            function pinReference(pin) {
+                if (!pin?.pinned || pin.none || !Array.isArray(pin.records))
+                    return undefined;
+                const [record, extra] = pin.records;
+                return !extra && isFilingReference(record) ? record : undefined;
+            }
+            async function selectStoredPin(index) {
+                const pin = retainedPin(index);
+                const reference = pinReference(pin);
+                return reference === undefined ? [requests[index].key, unavailable] : selectRequest(index, reference, pin);
+            }
+            const results = await Promise.all(admitted.map((_, index) => dependencies.has(index)
+                ? undefined : opening?.pins && requiredSources.has(index) ? selectStoredPin(index) : selectRequest(index)));
+            signal?.throwIfAborted();
+            await Promise.all([...dependencies].map(async ([index, { rule, sourceIndex }]) => {
+                const request = requests[index];
+                const source = verifiedSources.get(sourceIndex);
+                results[index] = [request.key, unavailable];
+                if (!admitted[index] || request.kind !== 'definition' || !selectsOpeningFiling(request.selection)
+                    || results[sourceIndex]?.[1].status !== 'available')
+                    return;
+                if (!source)
+                    return;
+                try {
+                    const { responseJson, ...verified } = source;
+                    const { extensions } = tools.parseResponse(responseJson);
+                    const reference = rule.reference({ ...verified, ...(extensions && { extensions }) });
+                    if (!isFilingReference(reference))
+                        return;
+                    if (opening?.pins) {
+                        const retained = pinReference(retainedPin(index));
+                        if (!retained || retained.definitionVersion !== reference.definitionVersion
+                            || responsePairKey(retained) !== responsePairKey(reference))
+                            return;
+                        results[index] = await selectStoredPin(index);
+                    }
+                    else {
+                        results[index] = await selectRequest(index, reference);
+                    }
+                }
+                catch {
+                    return;
+                }
             }));
             signal?.throwIfAborted();
-            return { outcomes: new Map(results), winningCandidates };
+            return { outcomes: new Map(results.flatMap(result => result ? [result] : [])), winningCandidates };
         }
         catch {
             signal?.throwIfAborted();
@@ -1085,11 +1186,77 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
             }
         },
     };
+    function validConsumerSubject(definition, key, tools) {
+        if (!definition.subject)
+            return key.subject === undefined;
+        const subject = key.subject;
+        const fields = Object.entries(definition.subject.keys);
+        return Boolean(subject?.type === definition.subject.type && Object.keys(subject.keys).length === fields.length &&
+            fields.every(([name, field]) => Object.hasOwn(subject.keys, name) &&
+                (field.dataType === 'integer' ? Number.isSafeInteger(subject.keys[name]) : typeof subject.keys[name] === 'string')) &&
+            subject.id === tools.subjectId(subject.type, subject.keys));
+    }
+    async function selectScopedDefinition(base, definition, key, selectionOptions = {}, stored) {
+        const rules = openingRules(definition.url);
+        const required = new Set(rules && [...rules].flatMap(([instance, rule]) => [instance, rule.sourceInstance]));
+        if (rules?.size && !validConsumerSubject(definition, key, base.tools))
+            throw new Error('Invalid draft subject.');
+        const pins = stored ? parseJsonExact(stored.pinsJson) : undefined;
+        if (stored && (!pins || typeof pins !== 'object' || Array.isArray(pins)))
+            throw new Error('Invalid draft pins.');
+        const requests = definitionResponseRequests(definition, key, pins, required);
+        const outcomes = await selectWithFixtures(base, requests, {
+            ...selectionOptions,
+            ...(rules?.size && { opening: { rules, ...(pins && { pins }) } }),
+        });
+        const missingPrerequisite = [...required].find(name => {
+            const outcome = outcomes.get(name);
+            return outcome?.status !== 'available' || !outcome.pinned;
+        });
+        return { outcomes, required, ...(missingPrerequisite && { missingPrerequisite }) };
+    }
+    async function selectDefinitionResponses(input, signal) {
+        try {
+            const { key, definitionVersion, expectedRevision } = structuredClone(input);
+            signal?.throwIfAborted();
+            if (!hasOpeningRules(key.definitionUrl))
+                return { status: 'unconfigured' };
+            if (!await authorized(key, 'resume'))
+                return { status: 'unavailable' };
+            const definition = definitions.get(key.definitionUrl);
+            if (!definition || definition.version !== definitionVersion ||
+                (expectedRevision === null && Object.values(definition.subject?.keys ?? {}).some(field => field.minted))) {
+                return { status: 'unavailable' };
+            }
+            const base = await settledReady();
+            const readDraft = () => transaction(['editable'], 'readonly', tx => tx.get('editable', storageKey(key)));
+            const stored = await readDraft();
+            if (stored?.unverifiedStartHistory)
+                return { status: 'unavailable' };
+            if ((stored?.revision ?? null) !== expectedRevision || (stored && stored.definitionVersion !== definitionVersion)) {
+                return { status: 'conflict' };
+            }
+            const { outcomes, missingPrerequisite } = await selectScopedDefinition(base, definition, key, { signal }, stored);
+            const current = await readDraft();
+            signal?.throwIfAborted();
+            if (current?.unverifiedStartHistory || current?.revision !== stored?.revision || current?.pinsJson !== stored?.pinsJson
+                || current?.definitionVersion !== stored?.definitionVersion) {
+                return { status: 'conflict' };
+            }
+            return { status: 'resolved', outcomes, ...(missingPrerequisite && { missingPrerequisite }) };
+        }
+        catch {
+            signal?.throwIfAborted();
+            return { status: 'unavailable' };
+        }
+    }
     async function openingPins(key, definition, observed) {
         const requests = definition
             ? definitionResponseRequests(definition, key).filter(request => request.selection.pin === 'at-open')
             : [];
-        const selections = requests.length ? await responses.select(requests) : undefined;
+        const scoped = definition && hasOpeningRules(definition.url)
+            ? await selectScopedDefinition(await settledReady(), definition, key) : undefined;
+        const selections = scoped?.outcomes ?? (requests.length ? await responses.select(requests) : undefined);
         const pins = Object.create(null);
         let missingPin;
         for (const { key: instance } of requests) {
@@ -1105,10 +1272,11 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
             }
             pins[instance] = delivery;
         }
-        return { pins, missingPin };
+        return { pins, missingPin: missingPin ?? scoped?.missingPrerequisite };
     }
     const drafts = {
         subscribe,
+        ...(openingResponseDependencies?.size && { selectDefinitionResponses }),
         async start(suppliedInput) {
             try {
                 const input = structuredClone(suppliedInput);
@@ -1177,6 +1345,51 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                 return result;
             }
             catch {
+                return { status: 'unavailable' };
+            }
+        },
+        async initializeRevision(suppliedKey, definitionVersion, { receiptRef, responseHash }, signal) {
+            try {
+                signal?.throwIfAborted();
+                const key = structuredClone(suppliedKey);
+                if (!await authorized(key, 'resume') || !await authorized(key, 'read'))
+                    return { status: 'denied' };
+                const definition = definitions.get(key.definitionUrl);
+                if (!definition || definition.version !== definitionVersion ||
+                    !Object.values(definition.subject?.keys ?? {}).some(field => field.minted))
+                    return { status: 'conflict' };
+                const { tools, filings, decisions } = await settledReady();
+                const subject = key.subject;
+                if (!subject || tools.subjectId(subject.type, subject.keys) !== subject.id)
+                    return { status: 'conflict' };
+                const { pins, missingPin } = await openingPins(key, definition);
+                if (missingPin)
+                    return { status: 'unavailable' };
+                const id = storageKey(key);
+                signal?.throwIfAborted();
+                const result = await transaction(['editable', 'filings', 'summaries'], 'readwrite', async (tx) => {
+                    const [existing, stored] = await Promise.all([tx.get('editable', id), tx.list('filings', scope)]);
+                    signal?.throwIfAborted();
+                    if (existing)
+                        return { status: 'conflict' };
+                    const candidates = [...stored.map(({ value }) => value), ...filings].filter(record => sameKey(record.key, key));
+                    const head = selectFilingStatus(key, definition, candidates, decisions, tools);
+                    if ((head.status !== 'returned' && head.status !== 'reopened') ||
+                        head.receiptRef !== receiptRef || head.responseHash !== responseHash)
+                        return { status: 'conflict' };
+                    const filed = candidates.find(record => record.responseId === head.receiptRef && record.responseHash === head.responseHash);
+                    if (filed?.definitionVersion !== definitionVersion || !deepEqual(filed.key.subject, subject))
+                        return { status: 'conflict' };
+                    tx.put('editable', id, { definitionVersion, revision: crypto.randomUUID(), pinsJson: JSON.stringify(pins), subject });
+                    tx.put('summaries', id, { definitionVersion, plans: null, subject });
+                    return { status: 'initialized' };
+                });
+                if (result.status === 'initialized')
+                    committed();
+                return result;
+            }
+            catch {
+                signal?.throwIfAborted();
                 return { status: 'unavailable' };
             }
         },
@@ -1268,6 +1481,8 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                     if (!sameKey(responseKey, key))
                         return { status: 'conflict' };
                 }
+                if (hasOpeningRules(key.definitionUrl) && definition?.version !== definitionVersion)
+                    return { status: 'conflict' };
                 const { pins, missingPin } = expectedRevision === null
                     ? await openingPins(key, definition, { pins: creationPins }) : { pins: {}, missingPin: undefined };
                 // Only closed DraftProgressSummary counts for declared section placements are durable;
@@ -1646,6 +1861,26 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                     return { status: 'invalid-response' };
                 }
                 const id = storageKey(key);
+                if (hasOpeningRules(key.definitionUrl)) {
+                    const validated = await selectDefinitionResponses({ key, definitionVersion, expectedRevision: fence.revision });
+                    if (validated.status === 'conflict')
+                        return { status: 'conflict' };
+                    if (validated.status !== 'resolved' || validated.missingPrerequisite)
+                        return { status: 'unavailable' };
+                    const rules = openingRules(key.definitionUrl);
+                    const required = new Set([...rules].flatMap(([instance, rule]) => [instance, rule.sourceInstance]));
+                    const filed = tools.parseResponse(responseJson);
+                    for (const instance of required) {
+                        const outcome = validated.outcomes.get(instance);
+                        if (outcome?.status !== 'available')
+                            return { status: 'unavailable' };
+                        const [reference, extra] = filed.resolvedInstances?.filter(entry => entry.instance === instance) ?? [];
+                        const { records, valueDigest, none, pinned, mapping } = outcome;
+                        if (extra || !deepEqual(reference, { instance, records, valueDigest, none, pinned, ...(mapping && { mapping }) })) {
+                            return { status: 'invalid-response' };
+                        }
+                    }
+                }
                 const filingId = [scope, filing.responseId];
                 const result = await transaction(['editable', 'summaries', 'filings', 'filingSummaries', 'seeds'], 'readwrite', async (tx) => {
                     const previous = await tx.get('editable', id);

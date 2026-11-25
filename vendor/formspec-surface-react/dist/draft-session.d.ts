@@ -2,11 +2,12 @@
 import { type ActionRefFinding, type IFormEngine } from '@formspec-org/engine';
 import { type PageSequenceEntry } from '@formspec-org/layout';
 import type { BrowserDraftPort, DataSourceSubject, DraftKey, DraftLoadResult, DraftPort, DraftRecord, MatchedFilingObservation } from '@formspec-org/surface';
+import { type DraftDefinitionResponsePort } from './definition-response-reads.js';
 import type { FormDefinition, FormResponse, ResponseSelector } from '@formspec-org/types';
 import { type DraftCheckpointPorts, type DraftNoticeReporter, type DraftWriter } from './draft-writer.js';
 import type { SurfaceDefinitionFormRenderInput } from './SurfaceSlot.js';
 export interface SurfaceDraftStorage {
-    port: DraftPort;
+    port: DraftPort & Partial<DraftDefinitionResponsePort>;
     responses?: ResponseSelector | undefined;
     definitions?: ReadonlyMap<string, FormDefinition> | undefined;
     scope: string;
@@ -62,7 +63,7 @@ type DraftOpen = {
 };
 export declare function createDraftSession(storage: SurfaceDraftStorage, browserPort?: BrowserDraftPort, checkpointPorts?: DraftCheckpointPorts): {
     scope: string;
-    port: DraftPort;
+    port: DraftPort & Partial<DraftDefinitionResponsePort>;
     definitions: ReadonlyMap<string, FormDefinition> | undefined;
     restart: ((key: DraftKey, expectedRevision: string) => Promise<import("@formspec-org/surface").DraftRestartResult>) | undefined;
     acquire(key: DraftKey, input: SurfaceDefinitionFormRenderInput, report: DraftNoticeReporter, onReopen?: () => void, options?: {
@@ -85,7 +86,7 @@ export declare function createDraftSession(storage: SurfaceDraftStorage, browser
     }, subject: DataSourceSubject | undefined, options?: {
         signal?: AbortSignal;
     }): Promise<CommittedFiling>;
-    resolveReads(definition: FormDefinition, key: DraftKey, pins: DraftRecord["pins"] | undefined, signal?: AbortSignal): Promise<Readonly<Record<string, import("@formspec-org/types").ResponseSelectionDelivery>>>;
+    resolveReads(definition: FormDefinition, key: DraftKey, pins: DraftRecord["pins"] | undefined, signal?: AbortSignal, expectedRevision?: string | null): Promise<Readonly<Record<string, import("@formspec-org/types").ResponseSelectionDelivery>>>;
     acknowledgeWarningGroup({ definition, subject, expectedRevision, expectedBasis, code, sections, report, }: {
         definition: FormDefinition;
         subject: DataSourceSubject | undefined;

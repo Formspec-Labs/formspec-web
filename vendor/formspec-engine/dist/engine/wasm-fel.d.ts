@@ -2,22 +2,11 @@
 import type { EvalResult, EvalValidation } from '../diff.js';
 import type { DraftExplanation } from './warning-explanations.js';
 import type { ResponseSubjectKeys } from '../interfaces.js';
-/** Subset of validation objects passed back into WASM as previous state. */
-export type WasmPreviousValidation = Array<{
-    path: string;
-    severity: string;
-    constraintKind: string;
-    code: string;
-    message: string;
-    source?: string;
-    shapeId?: string;
-    context?: Record<string, unknown>;
-}>;
 /** Options object consumed by the WASM definition evaluator (JSON-serialized internally). */
 export declare function wasmEvaluateDefinitionPayload(options: {
     nowIso: string;
     trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
-    previousResult: Pick<EvalResult, 'nonRelevant' | 'validations'> | null;
+    previousResult: Pick<EvalResult, 'nonRelevant'> | null;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];
     subjectType?: string | null;
@@ -26,7 +15,6 @@ export declare function wasmEvaluateDefinitionPayload(options: {
 }): {
     nowIso: string;
     trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
-    previousValidations: WasmPreviousValidation | undefined;
     previousNonRelevant: string[] | undefined;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];

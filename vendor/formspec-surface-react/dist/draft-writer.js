@@ -3,6 +3,7 @@ import { deepEqual, invokeResponseActionAsync, planResponseActionEffects, preact
 import { readSubmitEvaluation, summarizeDraftProgress } from './draft-progress.js';
 import { filingAction } from '@formspec-org/surface';
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
+import { requireDraftResponsePins } from './definition-response-reads.js';
 export function usesDraftCheckpoint(action) {
     try {
         return resolveResponseActionValidationTuple(action).persistence === 'draft-checkpoint';
@@ -935,6 +936,11 @@ export function createDraftWriter(options) {
             }
             if (kind === 'submit' && signedEdit !== undefined && signedEdit !== editAtStart) {
                 throw new Error('Sign this draft before submitting.');
+            }
+            if (port.selectDefinitionResponses && (kind === 'sign' || kind === 'submit')) {
+                await requireDraftResponsePins(port, { key, definitionVersion, expectedRevision: revision });
+                if (!isCurrent())
+                    throw new Error('Draft changed before the filing action.');
             }
             const draft = Object.freeze({ key, definitionVersion, revision, responseJson: latest.draft.responseJson });
             const latestResponse = parseJsonExact(latest.draft.responseJson);

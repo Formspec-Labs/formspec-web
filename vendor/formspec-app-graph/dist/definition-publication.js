@@ -1,0 +1,69 @@
+import { artifactResolutionGraphInput } from './artifact-resolver.js';
+import { RENDERED_NEED_TRACE_CODES } from './rendered-need-trace.js';
+import { createAppGraphReport } from './report.js';
+import { record, stringProp } from './surface-widgets.js';
+import { routeTargets } from './component-routes.js';
+import { renderingSlots } from './surface-definition-slots.js';
+/**
+ * Retains the admission evidence from the whole bundle, with each form's trace inventory
+ * and its redundant-anchor warnings. A refused graph produces no publication records.
+ */
+export function definitionPublicationReports({ report, artifactResolutionReport }) {
+    const trace = report.renderedNeedTrace;
+    if (!trace || !report.ok || report.diagnostics.some(diagnostic => diagnostic.severity === 'error'))
+        return [];
+    const { handles } = artifactResolutionGraphInput(artifactResolutionReport);
+    return trace.definitions.map(definition => {
+        const documentSlots = new Set();
+        const mounts = [];
+        const surfacePointers = new Map();
+        const localeUrls = new Set(definition.locales.map(locale => locale.url));
+        const componentUrls = new Set(definition.components.map(component => component.url));
+        for (const handle of handles) {
+            if (handle.status !== 'loaded')
+                continue;
+            const document = record(handle.document);
+            const url = stringProp(document, 'url');
+            if ((handle.artifactKind === 'definition' && url === definition.url && document?.version === definition.version)
+                || (handle.artifactKind === 'locale' && url && localeUrls.has(url))
+                || (handle.artifactKind === 'component' && url && componentUrls.has(url))
+                || (handle.artifactKind === 'references' && record(document?.targetDefinition)?.url === definition.url)) {
+                documentSlots.add(handle.slot);
+            }
+            if (handle.artifactKind !== 'surface')
+                continue;
+            const pointers = new Set();
+            for (const slot of renderingSlots(handle, definition.url)) {
+                const routePointer = `/routes/${slot.route.index}`;
+                mounts.push({ surface: handle.ref?.url, route: stringProp(slot.route.route, 'id'), slot: slot.slotId });
+                pointers.add('');
+                pointers.add(routePointer);
+                pointers.add(`${routePointer}/navigation`);
+                pointers.add(`${routePointer}/slots/${slot.slotIndex}`);
+            }
+            surfacePointers.set(handle.slot, pointers);
+        }
+        for (const handle of handles) {
+            if (handle.artifactKind !== 'component' || handle.status !== 'loaded')
+                continue;
+            if (routeTargets(handle.document).some(target => mounts.some(mount => target.surface?.url === mount.surface && target.route === mount.route
+                && (target.slot === undefined || target.slot === mount.slot))))
+                documentSlots.add(handle.slot);
+        }
+        const includes = (source) => source?.artifactSlot !== undefined
+            && (documentSlots.has(source.artifactSlot)
+                || surfacePointers.get(source.artifactSlot)?.has(source.jsonPointer ?? ''));
+        return createAppGraphReport({
+            artifactCount: report.summary.artifacts,
+            loadedArtifactCount: report.summary.loadedArtifacts,
+            schemaResults: report.schemaResults,
+            evidenceResults: report.evidenceResults,
+            phases: report.phases,
+            support: report.support,
+            diagnostics: report.diagnostics.filter(diagnostic => diagnostic.code !== RENDERED_NEED_TRACE_CODES.redundant || includes(diagnostic.primarySource)),
+            renderedNeedTrace: {
+                status: trace.status, definitions: [definition], nodes: trace.nodes.filter(node => includes(node.source)),
+            },
+        });
+    });
+}

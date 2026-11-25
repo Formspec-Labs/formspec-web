@@ -1,7 +1,7 @@
 /** @filedesc Surface definition-form slot binding cross-artifact validation against loaded Definitions. */
 import { diagnosticSourceForHandle } from './report.js';
 import { exactDefinitionResolution } from './data-sources.js';
-import { escapeJsonPointerToken, ownProp } from './surface-widgets.js';
+import { embedRouteRefFromSlot, escapeJsonPointerToken, ownProp, walkEmbeddedRoutes } from './surface-widgets.js';
 function record(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
         ? value
@@ -45,6 +45,32 @@ function definitionFormSlots(route) {
                 subjectKeys: ownProp(record(slotRecord?.binding), 'subjectKeys'),
             }];
     });
+}
+/** Direct mounts and the embed slots through which the same Surface renders this Definition. */
+export function renderingSlots(surface, definitionUrl) {
+    const mounts = [];
+    const parents = new Map();
+    const routes = surfaceRoutes(surface);
+    const routesById = new Map(routes.map(route => [routeId(route), route]));
+    for (const route of routes) {
+        mounts.push(...definitionFormSlots(route).filter(slot => slot.definitionRef === definitionUrl));
+        if (!Array.isArray(route.route.slots))
+            continue;
+        route.route.slots.forEach((value, slotIndex) => {
+            const slot = record(value);
+            const target = routesById.get(embedRouteRefFromSlot(slot) ?? '');
+            if (!target)
+                return;
+            const entries = parents.get(target) ?? [];
+            entries.push({ route, slotIndex, slotId: stringProp(slot, 'id') });
+            parents.set(target, entries);
+        });
+    }
+    const mountedRoutes = walkEmbeddedRoutes(mounts.map(mount => mount.route), route => (parents.get(route) ?? []).map(mount => mount.route));
+    for (const route of mountedRoutes.keys()) {
+        mounts.push(...(parents.get(route) ?? []));
+    }
+    return mounts;
 }
 function declaredDefinitionUrls(manifest) {
     const urls = new Set();

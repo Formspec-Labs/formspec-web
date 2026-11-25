@@ -345,7 +345,6 @@ export class FormEngine {
             const previous = this._fullResult;
             this._evaluate(previous && {
                 nonRelevant: previous.nonRelevant.flatMap(shift),
-                validations: shiftFindings(previous.validations),
             }, false, this.editingData());
         });
     }

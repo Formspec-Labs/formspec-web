@@ -26,3 +26,4 @@ export { createBrowserFilingStore, createMemoryFilingStore, previewResponseRecor
 export { previewFilingInvoker } from './preview-filing-invoker.js';
 export { readSessionDraft } from './draft-data-source.js';
 export { createDraftWriter } from './draft-writer.js';
+export { requireDraftResponsePins } from './definition-response-reads.js';

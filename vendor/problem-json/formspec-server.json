@@ -109,5 +109,20 @@
       "type": "about:blank"
     },
     "case": "submit_validation_refused"
+  },
+  {
+    "body": {
+      "context": {
+        "changed_paths": [
+          "household[0].income"
+        ]
+      },
+      "detail": "filed Response data changes when re-evaluated",
+      "error_code": "FORMSPEC-4090",
+      "status": 409,
+      "title": "conflict",
+      "type": "about:blank"
+    },
+    "case": "submit_filed_data_changed"
   }
 ]

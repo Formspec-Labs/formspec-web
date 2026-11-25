@@ -1,5 +1,18 @@
 /** @filedesc Surface definition-form slot binding cross-artifact validation against loaded Definitions. */
-import { type AppGraphContext, type AppGraphDiagnostic } from './types.js';
+import { type AppGraphContext, type AppGraphDiagnostic, type ResolvedArtifactHandle } from './types.js';
+interface ResolvedRoute {
+    route: Record<string, unknown>;
+    index: number;
+}
+interface DefinitionFormSlot {
+    route: ResolvedRoute;
+    slotIndex: number;
+    slotId?: string;
+    definitionRef?: string;
+    subjectKeys?: unknown;
+}
+/** Direct mounts and the embed slots through which the same Surface renders this Definition. */
+export declare function renderingSlots(surface: ResolvedArtifactHandle, definitionUrl: string): Pick<DefinitionFormSlot, "slotId" | "route" | "slotIndex">[];
 /** Parse a Definition subject key from its route string using the Core I-JSON range. */
 export declare function parseRouteSubjectKey(dataType: unknown, value: string): string | number | undefined;
 /**
@@ -13,3 +26,4 @@ export declare function parseRouteSubjectKey(dataType: unknown, value: string): 
  * a cross-artifact one. See surface-spec §"definition-form".
  */
 export declare function validateSurfaceDefinitionSlots(context: AppGraphContext): AppGraphDiagnostic[];
+export {};

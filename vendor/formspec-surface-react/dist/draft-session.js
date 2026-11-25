@@ -2,7 +2,7 @@
 import { createFormEngine, initFormspecEngine, responseSubjectId, } from '@formspec-org/engine';
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { resolvePageSequence } from '@formspec-org/layout';
-import { definitionResponseRequests, resolveDefinitionReads } from './definition-response-reads.js';
+import { definitionResponseRequests, resolveDefinitionReads, responseDeliveries } from './definition-response-reads.js';
 import { readSubmitEvaluation, summarizeDraftProgress } from './draft-progress.js';
 import { createDraftWriter, readCommittedExplanationsAtRevision, } from './draft-writer.js';
 /** Key a draft by Core's filing-unit id; runtime WASM only. */
@@ -28,6 +28,20 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
         const result = await storage.port.load(key, version, signal);
         signal.throwIfAborted();
         return result;
+    }
+    async function resolveReads(definition, key, pins, expectedRevision, signal) {
+        if (expectedRevision !== undefined && storage.port.selectDefinitionResponses) {
+            const result = await storage.port.selectDefinitionResponses({ key, definitionVersion: definition.version, expectedRevision }, signal);
+            signal.throwIfAborted();
+            if (result.status === 'resolved')
+                return { deliveries: responseDeliveries(result.outcomes), scoped: true,
+                    ...(result.missingPrerequisite && { missingPrerequisite: result.missingPrerequisite }) };
+            if (result.status === 'conflict')
+                throw new Error('Draft changed before response instances could be read.');
+            if (result.status !== 'unconfigured')
+                return { deliveries: {}, scoped: true };
+        }
+        return { deliveries: await resolveDefinitionReads(storage.responses, definitionResponseRequests(definition, key, pins), signal) };
     }
     async function loadFilingRecord(key, version, signal) {
         if (!storage.port.loadFiling)
@@ -145,12 +159,23 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                                 const terminalStatus = filingObservation.status === 'filed'
                                     || filingObservation.status === 'accepted'
                                     || filingObservation.status === 'closed-without-acceptance';
+                                const canInitializeRevision = isMinted && !!browserPort?.initializeRevision
+                                    && loadedFiling?.definitionVersion === definition.version
+                                    && (filingObservation.status === 'returned' || filingObservation.status === 'reopened');
+                                if (canInitializeRevision && browserPort?.initializeRevision
+                                    && options?.allowReviseFiled && previous?.status === 'filed') {
+                                    const result = await browserPort.initializeRevision(key, definition.version, previous.filing, lifetime.signal);
+                                    if (result.status !== 'initialized') {
+                                        return publish({ status: result.status === 'denied' ? 'denied' : 'unavailable' });
+                                    }
+                                    continue;
+                                }
                                 if (isMinted || (terminalStatus && !options?.allowReviseFiled)) {
                                     return publish({
                                         status: 'filed',
                                         filing: filingObservation,
                                         response: filedResponse,
-                                        canRevise: !isMinted && filingObservation.status !== 'closed-without-acceptance',
+                                        canRevise: canInitializeRevision || (!isMinted && filingObservation.status !== 'closed-without-acceptance'),
                                     });
                                 }
                             }
@@ -165,20 +190,22 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                         draftSnapshot = draft && parseJsonExact(draft.snapshotJson);
                         const pins = loaded.status === 'initialized' ? loaded.pins : draft?.pins;
                         const requests = definitionResponseRequests(definition, key, pins);
-                        resolutions = await resolveDefinitionReads(storage.responses, requests, lifetime.signal);
+                        const expectedRevision = loaded.status === 'initialized' ? loaded.revision : draft?.revision ?? null;
+                        const read = await resolveReads(definition, key, pins, expectedRevision, lifetime.signal);
+                        resolutions = read.deliveries;
                         const afterReadsEpoch = commitEpoch.get(id) ?? 0;
                         if (afterReadsEpoch !== epoch) {
                             epoch = afterReadsEpoch;
                             continue;
                         }
-                        if (loaded.status === 'absent' && !filedResponse && storage.responses) {
+                        if (loaded.status === 'absent' && !filedResponse && (storage.responses || read.scoped)) {
                             const missingPin = requests.find(req => req.selection.pin === 'at-open' && !resolutions[req.key]?.pinned);
-                            if (missingPin) {
-                                const upstreamTitle = storage.definitions?.get(missingPin.selection.definition.url)?.title;
-                                const requiresAccepted = Boolean(missingPin.selection.disposition?.endsWith(':accepted'));
+                            if (missingPin || read.missingPrerequisite) {
+                                const upstreamTitle = missingPin && storage.definitions?.get(missingPin.selection.definition.url)?.title;
+                                const requiresAccepted = Boolean(missingPin?.selection.disposition?.endsWith(':accepted'));
                                 return publish({
                                     status: 'pin-unavailable',
-                                    instance: missingPin.key,
+                                    instance: missingPin?.key ?? read.missingPrerequisite,
                                     ...(upstreamTitle ? { prerequisiteTitle: upstreamTitle } : {}),
                                     ...(requiresAccepted ? { requiresAccepted: true } : {}),
                                 });
@@ -347,9 +374,9 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                 return { status: 'unavailable' };
             }
         },
-        async resolveReads(definition, key, pins, signal) {
+        async resolveReads(definition, key, pins, signal, expectedRevision) {
             const mergedSignal = signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal;
-            return resolveDefinitionReads(storage.responses, definitionResponseRequests(definition, key, pins), mergedSignal);
+            return (await resolveReads(definition, key, pins, expectedRevision, mergedSignal)).deliveries;
         },
         async acknowledgeWarningGroup({ definition, subject, expectedRevision, expectedBasis, code, sections = [], report, }) {
             try {
@@ -426,7 +453,7 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                         && 'definitionUrl' in rawSnapshot && 'definitionVersion' in rawSnapshot && 'data' in rawSnapshot
                         ? rawSnapshot
                         : undefined;
-                    const resolutions = await resolveDefinitionReads(storage.responses, definitionResponseRequests(definition, key, loaded.draft.pins), lifetime.signal);
+                    const { deliveries: resolutions } = await resolveReads(definition, key, loaded.draft.pins, expectedRevision, lifetime.signal);
                     // Save strictly from an isolated engine at expectedRevision so edits typed concurrently on a form consumer
                     // are never flushed prematurely or discarded on storage conflict/failure.
                     const engine = createFormEngine(definition, {

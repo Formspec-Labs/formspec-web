@@ -90,7 +90,7 @@ function hasRouteTargets(document) {
 function componentVersion(document) {
     return stringProp(record(document), '$formspecComponent');
 }
-function routeTargets(document) {
+export function routeTargets(document) {
     const targets = record(document)?.targetSurfaceRoutes;
     if (!Array.isArray(targets))
         return [];

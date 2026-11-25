@@ -1,4 +1,4 @@
-/** @filedesc Shared extraction for qualified Surface module-widget bindings. */
+/** @filedesc Shared extraction for Surface slots and embedded routes. */
 import type { AppGraphContext, ResolvedArtifactHandle } from './types.js';
 import { type WidgetContributionEntry } from './widget-contribution.js';
 export type JsonRecord = Record<string, unknown>;
@@ -25,6 +25,9 @@ export declare function record(value: unknown): JsonRecord | undefined;
 export declare function stringProp(value: JsonRecord | undefined, key: string): string | undefined;
 export declare function ownProp(value: JsonRecord | undefined, key: string): unknown;
 export declare function recordArray(value: unknown): JsonRecord[];
+export declare function embedRouteRefFromSlot(value: unknown): string | undefined;
+/** Visit each reachable route once and remember the preceding route in its shortest path. */
+export declare function walkEmbeddedRoutes<Route>(roots: readonly Route[], neighbors: (route: Route) => Iterable<Route>): Map<Route, Route | undefined>;
 export declare function handlesByKind(handles: readonly ResolvedArtifactHandle[], artifactKind: string): ResolvedArtifactHandle[];
 export declare function registryWidgetEntries(context: AppGraphContext): RegistryWidgetEntry[];
 export declare function surfaceWidgetSlots(surface: ResolvedArtifactHandle): SurfaceWidgetSlot[];

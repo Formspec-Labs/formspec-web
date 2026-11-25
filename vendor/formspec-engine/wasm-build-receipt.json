@@ -2,9 +2,9 @@
   "version": 1,
   "platform": "linux/arm64",
   "sources": {
-    "formspec": "b204bef8ef04a51d9753a94907794a970675cafd",
+    "formspec": "af6b3d9b7dfdad002b86da533ecb6a158e1b60e1",
     "fel-core": "55d2f539c8514bc596bda0091e124a4d8b5fb177",
-    "integrity-stack": "ff7a945e1b8962c79c289f84c5e50b54f18b47ab"
+    "integrity-stack": "e4a46bf6b76c4b94bb64577871f31cb50270913a"
   },
   "dockerfileSha256": "ce629d94061455308da78e3cc6fac9547ed372422864539a6d4e155d8b5b0915",
   "artifacts": [
@@ -25,8 +25,8 @@
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/formspec_wasm_runtime_bg.wasm",
-      "sha256": "2cc7d4604234726935de12d711305a4e7a020d74e9d53d115171c6d3504bda5b",
-      "bytes": 2204768
+      "sha256": "5a2768bde70a10e5cbc19adbb075a23a15ee4a0964cf6a6e13b459de68498e7b",
+      "bytes": 2205098
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-runtime/formspec_wasm_runtime_bg.wasm.d.ts",
@@ -55,8 +55,8 @@
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools_bg.wasm",
-      "sha256": "08efad2825d89ef8095f425117c109b9c591e91ae85ebc80bf3a1c844ad96d79",
-      "bytes": 4665230
+      "sha256": "6a0fabe2074dcebd17d3880ab64fd325da8dfdb5376d8ee3ff33b16b51ccec3a",
+      "bytes": 4665089
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools_bg.wasm.d.ts",

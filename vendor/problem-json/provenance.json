@@ -1,8 +1,8 @@
 {
   "sourceRevisions": {
-    "stack-common": "8046f6e224c70bcf4315c75dff16a661be28c6fa",
-    "formspec-server": "6a034c18877b7758296a2536aa0c4604b34e5ceb",
-    "workspec-server": "3ca779aa685c064180906ae0f46fcab5b3c678b3"
+    "stack-common": "232012bc63ad9d0e0436a24d6ce3a81530b0f649",
+    "formspec-server": "ac47a3253ddfa262d046e5c840a5853ed06f5124",
+    "workspec-server": "bd4a93c23601ec308712d1c85e8c7266830f3950"
   },
   "scope": "Problem JSON bodies each provider's own serializer emits, captured by its tests (stack-common-error catalog::assert_golden); decoded by tests/shared/problem-json.",
   "files": {
@@ -12,7 +12,7 @@
     },
     "formspec-server.json": {
       "source": "formspec-server/crates/formspec-server-ports/tests/fixtures/problem-json/formspec-server.json",
-      "sha256": "100f40a516ce711fef118d545e6fffc37f9349dd56746316c3bc9e7abd136a37"
+      "sha256": "e72f7df8845dccf4f24ab90e1867b8ef1dc1ea52a52714b920c09a23163992fd"
     },
     "wos-server.json": {
       "source": "workspec-server/crates/wos-server/tests/fixtures/problem-json/wos-server.json",
