@@ -9,7 +9,7 @@ import { autoPlacedDefinitionActions, createFormEngine, findResponseActionByInte
 import { buildPlatformTheme, mergePlatformAndTenantTheme, extractBreakpointEntries, matchBreakpoint, planDefinitionLayout, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
 import { useSignal } from './use-signal';
 import { chromeText } from './use-chrome-text';
-import { useExplanationState } from './explanation-state';
+import { useSubmitEvaluation } from './explanation-state';
 const platformTheme = buildPlatformTheme();
 /**
  * Fail-closed browser policy for human Reference links — the shared rule, so React and the webcomponent admit
@@ -177,7 +177,7 @@ export function FormspecProvider(props) {
     const touchedVersionSignal = useMemo(() => signal(0), []);
     const latestSubmitSignal = useMemo(() => signal(null), []);
     const recordSubmit = useCallback((result) => { latestSubmitSignal.value = result; }, [latestSubmitSignal]);
-    const explanationState = useExplanationState(engine, latestSubmitSignal);
+    const { submitEvaluation, explanationState } = useSubmitEvaluation(engine, latestSubmitSignal);
     const fieldJumpHandlerRef = useRef(null);
     const registerFieldJump = useCallback((handler) => {
         fieldJumpHandlerRef.current = handler;
@@ -273,6 +273,7 @@ export function FormspecProvider(props) {
         touchedVersion: touchedVersionSignal,
         isTouched,
         latestSubmit: latestSubmitSignal,
+        submitEvaluation,
         explanationState,
         recordSubmit,
         registryEntries: registryMap,
@@ -283,7 +284,7 @@ export function FormspecProvider(props) {
         setShowValidationSummaryAttr,
         registerFieldJump,
         jumpToField,
-    }), [engine, layoutPlan, workspace, workspaceNavigation, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, admittedResponseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, onControlActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, explanationState, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation, setShowValidationSummaryAttr, registerFieldJump, jumpToField]);
+    }), [engine, layoutPlan, workspace, workspaceNavigation, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, admittedResponseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, onControlActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, submitEvaluation, explanationState, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation, setShowValidationSummaryAttr, registerFieldJump, jumpToField]);
     return (_jsx(FormspecContext.Provider, { value: value, children: _jsxs(ActionFeedbackProvider, { engine: engine, responseId: semanticControlScope?.responseId, renderInstanceId: semanticControlScope?.renderInstanceId, draftSaveFeedback: props.draftSaveFeedback, submitFeedback: props.submitFeedback, children: [_jsx(FormspecAutosaveEffect, { draftSaveFeedback: props.draftSaveFeedback }), _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children })] }) }));
 }
 function FormspecAutosaveEffect({ draftSaveFeedback }) {

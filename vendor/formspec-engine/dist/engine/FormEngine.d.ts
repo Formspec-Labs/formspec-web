@@ -35,6 +35,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _rx;
     private readonly _evaluationVersion;
     private readonly _hasWarningExplanations;
+    private readonly _hasSubmitTimingShapes;
     private readonly _draftEditVersion;
     private _draftEditDirty;
     private readonly _bindConfigs;
@@ -55,6 +56,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _explanationState;
     private readonly _explanationRefreshVersion;
     private _pendingExplanationState;
+    private _pendingSubmitEvaluation;
     private readonly _explanations;
     private readonly _responseSubject;
     private readonly _responseInstanceResolutions;
@@ -125,6 +127,7 @@ export declare class FormEngine implements IFormEngine {
     getExplanationEntries(): DraftExplanation[];
     getExplanationState(): ExplanationState;
     hasWarningExplanations(): boolean;
+    hasSubmitTimingShapes(): boolean;
     private reviewWarnings;
     private refreshExplanationState;
     setExplanation(shapeId: string, path: string, answer: {

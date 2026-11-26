@@ -57,6 +57,7 @@ export class FormEngine {
         /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
         this._extensionFunctions = new FelExtensionFunctions();
         this._pendingExplanationState = null;
+        this._pendingSubmitEvaluation = null;
         this._registryDocuments = [];
         this._remoteOptionsTasks = [];
         this._instanceSourceAbort = new AbortController();
@@ -116,6 +117,7 @@ export class FormEngine {
         this._labelContextSignal = this._rx.signal(null);
         this.definition = cloneValue(definition);
         this._hasWarningExplanations = definitionHasWarningExplanations(this.definition);
+        this._hasSubmitTimingShapes = (this.definition.shapes ?? []).some((shape) => (shape.timing ?? 'continuous') === 'submit');
         this._explanationState = this._rx.computed(() => {
             const explanations = this._explanations.value;
             if (!this._hasWarningExplanations) {
@@ -402,6 +404,9 @@ export class FormEngine {
     }
     hasWarningExplanations() {
         return this._hasWarningExplanations;
+    }
+    hasSubmitTimingShapes() {
+        return this._hasSubmitTimingShapes;
     }
     reviewWarnings() {
         if (!this._hasWarningExplanations) {
@@ -1039,7 +1044,17 @@ export class FormEngine {
      * and the matching `ExplanationState`, without mutating signals (safe inside reactive computeds).
      */
     getSubmitEvaluation() {
-        this._evaluationVersion.value;
+        const evaluationVersion = this._evaluationVersion.value;
+        const explanationsEntries = this._explanations.value;
+        const refreshVersion = this._explanationRefreshVersion.value;
+        const pending = this._pendingSubmitEvaluation;
+        this._pendingSubmitEvaluation = null;
+        if (pending
+            && pending.evaluationVersion === evaluationVersion
+            && pending.explanations === explanationsEntries
+            && pending.refreshVersion === refreshVersion) {
+            return pending.snapshot;
+        }
         const timestamp = this.nowISO();
         const result = this.evaluateResultForTrigger('submit', timestamp);
         const report = buildValidationReportEnvelope(this.collectResponseValidationResults(result, 'submit'), timestamp, this.definition.url, this.definition.version);
@@ -1048,7 +1063,7 @@ export class FormEngine {
             report,
         };
         const explanations = this._hasWarningExplanations
-            ? freezeSourceMetadata(warningReview(result, this._explanations.value))
+            ? freezeSourceMetadata(warningReview(result, explanationsEntries))
             : this._explanationState.value;
         return { evaluated, explanations };
     }
@@ -1130,6 +1145,7 @@ export class FormEngine {
         });
         const draftEntries = this._explanations.value;
         let pendingExplanationStamps = false;
+        let pendingExplanationReview = null;
         if (response.status === 'completed') {
             let saved;
             if (draftEntries.length) {
@@ -1142,7 +1158,19 @@ export class FormEngine {
                         throw new Error('Save pending warning answers and load their server stamps before emitting this Response');
                     }
                     pendingExplanationStamps = true;
-                    this.refreshExplanationState(warningReview(responseResult, draftEntries));
+                    pendingExplanationReview = warningReview(responseResult, draftEntries);
+                    if (trigger === 'submit' && report) {
+                        this._pendingSubmitEvaluation = {
+                            evaluationVersion: this._evaluationVersion.value,
+                            explanations: draftEntries,
+                            refreshVersion: this._explanationRefreshVersion.value + 1,
+                            snapshot: {
+                                evaluated: { fields: this.collectEvaluatedFields(), report },
+                                explanations: freezeSourceMetadata(pendingExplanationReview),
+                            },
+                        };
+                    }
+                    this.refreshExplanationState(pendingExplanationReview);
                     response = buildFormspecResponseEnvelope({
                         definition: this.definition,
                         data: this.draftResponseData(responseResult),
@@ -1179,7 +1207,32 @@ export class FormEngine {
         if (submitEvalResult && this._hasWarningExplanations && !pendingExplanationStamps) {
             // Seed the fresh Submit evaluation into warning controls so Submit never triggers a second
             // Submit evaluation and clock-only expiry/expansion immediately reopens accepted groups.
-            this.refreshExplanationState(warningReview(submitEvalResult, draftEntries));
+            const reviewed = warningReview(submitEvalResult, draftEntries);
+            if (trigger === 'submit' && report) {
+                this._pendingSubmitEvaluation = {
+                    evaluationVersion: this._evaluationVersion.value,
+                    explanations: draftEntries,
+                    refreshVersion: this._explanationRefreshVersion.value + 1,
+                    snapshot: {
+                        evaluated: { fields: this.collectEvaluatedFields(), report },
+                        explanations: freezeSourceMetadata(reviewed),
+                    },
+                };
+            }
+            this.refreshExplanationState(reviewed);
+        }
+        else if (trigger === 'submit' && submitEvalResult && report && !pendingExplanationReview) {
+            // Seed the fresh Submit evaluation when no explanation refresh ran so post-Submit listeners
+            // reuse this exact Submit pass without a second clock read or WASM evaluation.
+            this._pendingSubmitEvaluation = {
+                evaluationVersion: this._evaluationVersion.value,
+                explanations: draftEntries,
+                refreshVersion: this._explanationRefreshVersion.value,
+                snapshot: {
+                    evaluated: { fields: this.collectEvaluatedFields(), report },
+                    explanations: this._explanationState.value,
+                },
+            };
         }
         return { snapshot: { response, validationReport: report }, pendingExplanationStamps };
     }

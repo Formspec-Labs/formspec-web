@@ -8,6 +8,7 @@ import type { ComponentMap } from './component-map';
 import type { SemanticControlScope, SemanticResponseBinding } from './semantic-controls';
 import type { WorkspacePage } from '@formspec-org/layout';
 import { type ExplanationState } from './explanation-state';
+import type { SubmitEvaluationSnapshot } from '@formspec-org/engine';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
 export type { ActionRefFinding, ActionResolution, ResponseAction, ResponseActionInvocationResult, };
 export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
@@ -110,6 +111,11 @@ export interface FormspecContextValue {
     isTouched: (path: string) => boolean;
     /** The latest submit through this provider's form — null before the first. A `submit`-sourced ValidationSummary reads it. */
     latestSubmit: ReadonlyEngineSignal<SubmitResult | null>;
+    /**
+     * @internal The engine's paused Submit evaluation (`evaluated` + `explanations`), read once typing pauses
+     * and at once for an answer or a Submit, so the Findings margin and warning controls share one Submit pass.
+     */
+    submitEvaluation?: ReadonlyEngineSignal<SubmitEvaluationSnapshot | null>;
     /**
      * @internal The engine's explanation state, read once typing pauses and at once for an answer or a Submit,
      * so the warning controls and the Findings margin share one Submit evaluation. Null when nothing asks for one.

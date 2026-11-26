@@ -3,7 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 /** @filedesc Section navigation, question search and live findings for Core workspace mode. */
 import { createContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { computed } from '@preact/signals-core';
-import { placementCovers, placementKey, readFormProgressFindingRows, readFormProgressFollowUpRows, stripSeverityPrefix, summarizeFormProgress, warningAcknowledgementLegend, } from '@formspec-org/layout';
+import { mergeSubmitTimingFindings, placementCovers, placementKey, readFormProgressFindingRows, readFormProgressFollowUpRows, stripSeverityPrefix, summarizeFormProgress, warningAcknowledgementLegend, } from '@formspec-org/layout';
 import { useFormspecContext } from './context';
 import { FormspecNode, renderActionGroupedChildren } from './node-renderer';
 import { useChromeText } from './use-chrome-text';
@@ -119,7 +119,7 @@ function useSectionTitle(title, report, updateDocumentTitle) {
     }, [report, title, updateDocumentTitle]);
 }
 export function Workspace({ root, pages: allPages }) {
-    const { engine, workspaceNavigation, touchField, touchedVersion, isTouched, latestSubmit, registerFieldJump, explanationState: explanationStateSignal, } = useFormspecContext();
+    const { engine, workspaceNavigation, touchField, touchedVersion, isTouched, latestSubmit, registerFieldJump, submitEvaluation: submitEvaluationSignal, explanationState: explanationStateSignal, } = useFormspecContext();
     const chrome = useChromeText();
     const formTitle = useSignal(useMemo(() => engine.getFormVM(), [engine]).title);
     const pages = useSignal(useMemo(() => computed(() => {
@@ -168,12 +168,17 @@ export function Workspace({ root, pages: allPages }) {
             || page.title || (page.id ? chrome('wizard.stepTitle', { index: index + 1 }) : formTitle || chrome('wizard.steps')));
     }), [engine, pages, chrome, formTitle]));
     useSectionTitle(active?.id ? titles[activeIndex] : undefined, workspaceNavigation?.onSectionTitleChange, workspaceNavigation?.updateDocumentTitle);
-    const snapshot = useSignal(useMemo(() => computed(() => engine.getEvaluatedFormState()), [engine]));
+    const liveSnapshot = useSignal(useMemo(() => computed(() => engine.getEvaluatedFormState()), [engine]));
     const touchedTick = useSignal(touchedVersion);
     const submitted = useSignal(latestSubmit);
-    // The live report omits Submit-timing Shapes, so what the respondent owes comes from the explanation
-    // state the provider reads once typing pauses (and at once for an answer or a Submit).
+    // The live report omits Submit-timing Shapes, so Submit-timing findings and owed warning answers come
+    // from one paused Submit evaluation (read on mount, once typing pauses, and immediately on answer/Submit).
+    const submitEvaluation = useSignal(useMemo(() => submitEvaluationSignal ?? computed(() => null), [submitEvaluationSignal]));
     const explanationState = useSignal(explanationStateSignal);
+    const submitShapeIds = useMemo(() => new Set((engine.getDefinition?.()?.shapes ?? [])
+        .filter((shape) => (shape.timing ?? 'continuous') === 'submit' && typeof shape.id === 'string')
+        .map(shape => shape.id)), [engine]);
+    const snapshot = useMemo(() => mergeSubmitTimingFindings(liveSnapshot, submitEvaluation?.evaluated ?? null, submitShapeIds, explanationState), [liveSnapshot, submitEvaluation, submitShapeIds, explanationState]);
     // Answer edits refresh the snapshot. Search only needs to revisit membership when relevant paths change.
     const relevantPaths = useMemo(() => snapshot.fields.filter(field => field.relevant).map(field => field.path).join('\n'), [snapshot]);
     const relevant = useMemo(() => new Set(relevantPaths ? relevantPaths.split('\n') : []), [relevantPaths]);

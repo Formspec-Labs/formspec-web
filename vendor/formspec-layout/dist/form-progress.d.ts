@@ -87,6 +87,13 @@ export interface FormProgressSummary {
 /** Whether a warning Shape asks for an answer (Core §5.2.1), which only the explanation state reports outside Submit. */
 export declare function declaresWarningFollowUps({ shapes, warningExplanation }: Pick<FormDefinition, 'shapes' | 'warningExplanation'>): boolean;
 /**
+ * Merge Submit-timing Shape results from a paused Submit evaluation into a live `EvaluatedFormState`
+ * so the Workspace Findings margin matches the Filing map before and after Submit (including
+ * Submit-timing errors and `none`-mode Submit-timing warnings) while keeping live field flags fresh
+ * on every keystroke and avoiding duplicate raw rows for explanation-covered Submit-timing warnings.
+ */
+export declare function mergeSubmitTimingFindings(liveState: EvaluatedFormState, submitState: EvaluatedFormState | null, submitShapeIds: ReadonlySet<string>, explanationState: ExplanationStateLike | null): EvaluatedFormState;
+/**
  * Count one evaluation for progress. `explanationState` is the engine's explanation state, or `null` where
  * no warning asks for an answer: without it an answered follow-up is counted again as its warnings.
  */
