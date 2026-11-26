@@ -2,7 +2,7 @@
   "version": 1,
   "platform": "linux/arm64",
   "sources": {
-    "formspec": "3affb431e54f52e42dcb3f56c35caca5ff1419f5",
+    "formspec": "953f9b13c42bc0b6992a823daeb22dfd8a33625f",
     "fel-core": "5205749db390a82c07a446c02970cfef3759396b",
     "integrity-stack": "e4a46bf6b76c4b94bb64577871f31cb50270913a"
   },
@@ -55,8 +55,8 @@
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools_bg.wasm",
-      "sha256": "3369d23e89ee92c2febfa77b853ef1a8623cbb043c56db0cb7e6e4b03b97edb4",
-      "bytes": 4743919
+      "sha256": "7cbef77149fb4019a2171c7453f81b64e4d781bcb738c7d046091a33daaab4ff",
+      "bytes": 4745653
     },
     {
       "path": "vendor/formspec-engine/wasm-pkg-tools/formspec_wasm_tools_bg.wasm.d.ts",
