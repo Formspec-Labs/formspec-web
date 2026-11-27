@@ -27,4 +27,10 @@ export {
   type RespondentReceiptRecord,
   type RespondentReceiptSessionStore,
 } from './session-store.ts';
+export {
+  RESPONDENT_RECEIPT_MAPPING_DOCUMENT,
+  RESPONDENT_RECEIPT_MAPPING_URL,
+  materializeRespondentReceiptPanel,
+  type RespondentReceiptMappingInput,
+} from './receipt-mapping.ts';
 export { respondentWidgetModule } from './widget-module.ts';

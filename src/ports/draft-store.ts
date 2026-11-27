@@ -78,6 +78,60 @@ export interface RecoveredDraftInitialization {
   response?: FormResponse;
 }
 
+export interface DraftProgressSectionPlacement {
+  readonly id?: string;
+  readonly fields: readonly string[];
+}
+
+export interface DraftProgressSummaryInput {
+  readonly sections: readonly DraftProgressSectionPlacement[];
+  readonly progress: unknown;
+}
+
+export interface DraftProgressQueryInput {
+  readonly key: string;
+  readonly definitionUrl: string;
+  readonly definitionVersion: string;
+  readonly subject?: unknown;
+  readonly draftId?: string;
+  readonly sections: readonly DraftProgressSectionPlacement[];
+}
+
+export interface DraftSaveOptions {
+  readonly assertBeforeDispatch?: () => void;
+  readonly draftSnapshot?: Record<string, unknown>;
+  readonly progressSummary?: DraftProgressSummaryInput | null;
+  readonly draftFence?: { readonly revision: string };
+}
+
+export interface DraftRepinInstanceInput {
+  readonly instance: string;
+  readonly priorValueDigest: string;
+  readonly priorRecords?: readonly {
+    readonly responseId: string;
+    readonly definitionVersion: string;
+    readonly responseHash?: string;
+  }[];
+}
+
+export interface DraftRepinOptions {
+  readonly expectedDraftVersion?: number;
+  readonly draftFence?: { readonly revision: string };
+  readonly instances: readonly DraftRepinInstanceInput[];
+  readonly refillFields?: readonly string[];
+  readonly refillValues?: Readonly<Record<string, unknown>>;
+  readonly refreshOptionSnapshot?: boolean;
+  readonly assertBeforeDispatch?: () => void;
+}
+
+export interface DraftRepinOutcome {
+  readonly draftId: string;
+  readonly draftVersion: number;
+  readonly response: FormResponse;
+  readonly draftSnapshot?: Record<string, unknown>;
+  readonly selectionPins?: Record<string, unknown>;
+}
+
 export interface DraftStore {
   load(key: DraftKey): Promise<FormResponse | undefined>;
   /** Optional owner-qualified terminal recovery; omission preserves legacy loading. */
@@ -89,7 +143,11 @@ export interface DraftStore {
   /** Retry only an already retained initialization attempt; absence must never allocate a key or draft. */
   recoverInitialization?(key: DraftKey, formVersionId: string, assertCurrent?: () => void): Promise<RecoveredDraftInitialization | undefined>;
   /** Trusted synchronous guard checked immediately before persistence dispatch. */
-  save(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void>;
+  save(key: DraftKey, response: FormResponse, options?: DraftSaveOptions): Promise<void>;
+  /** Explicit revision-checked re-pin for declared `at-open` response instances (Core §4260). */
+  repinDraft?(key: DraftKey, options: DraftRepinOptions): Promise<DraftRepinOutcome>;
+  /** No-create batch read of committed DraftProgressSummary rows. */
+  readDraftProgress?(queries: readonly DraftProgressQueryInput[]): Promise<Record<string, unknown>>;
   list(subjectRef: string): Promise<DraftKey[]>;
   delete(key: DraftKey): Promise<void>;
   /** Called by the shell when identity changes (revoke / logout). */

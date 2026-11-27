@@ -19,6 +19,10 @@ export interface SubmitConfirmation {
   recordKind?: 'response' | 'case';
   /** Human-displayable reference number (per FW-0013 plain-language errors). */
   referenceNumber: string;
+  /** Durable receipt identifier issued by the accepting service, when known. */
+  receiptId?: string;
+  /** Content fingerprint / cryptographic digest of the accepted Response, when known. */
+  responseHash?: string;
   /** Submission status as reported by the upstream service. */
   status: 'accepted' | 'queued' | 'rejected';
   /** Timestamp supplied by the accepting service, when known. */

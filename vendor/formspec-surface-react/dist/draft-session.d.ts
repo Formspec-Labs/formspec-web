@@ -1,5 +1,5 @@
 /** @filedesc Retain editable draft sessions across browser history and qualify all access by key. */
-import { type ActionRefFinding, type IFormEngine } from '@formspec-org/engine';
+import { type ActionRefFinding, type FormDraftSnapshot, type IFormEngine } from '@formspec-org/engine';
 import { type PageSequenceEntry } from '@formspec-org/layout';
 import type { BrowserDraftPort, DataSourceSubject, DraftKey, DraftLoadResult, DraftPort, DraftRecord, MatchedFilingObservation } from '@formspec-org/surface';
 import { type DraftDefinitionResponsePort } from './definition-response-reads.js';
@@ -24,6 +24,7 @@ export type FiledObservation = Extract<MatchedFilingObservation, {
 type CommittedDraft = {
     status: 'loaded';
     response: FormResponse;
+    draftSnapshot?: FormDraftSnapshot;
     pins?: DraftRecord['pins'];
     revision: string;
     key: DraftKey;
@@ -130,7 +131,7 @@ export declare function createDraftSession(storage: SurfaceDraftStorage, browser
             } | undefined;
         }) => Promise<T>;
         resolveConflict: (choice: "load" | "keep") => Promise<boolean | "reopen">;
-        captureActionResponse: ({ profile }: Parameters<NonNullable<((options: import("@formspec-org/engine").ResponseActionSubmitOptions) => import("@formspec-org/react").SubmitResult | null) | undefined>>[0]) => {
+        captureActionResponse: ({ profile, validationTuple }: Parameters<NonNullable<((options: import("@formspec-org/engine").ResponseActionSubmitOptions) => import("@formspec-org/react").SubmitResult | null) | undefined>>[0]) => {
             response: FormResponse;
             validationReport: import("@formspec-org/types").ValidationReport | null;
         };

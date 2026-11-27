@@ -93,6 +93,8 @@ export function receiptRecordFromConfirmation(
     confirmation: {
       referenceNumber: confirmation.referenceNumber,
       status: confirmation.status,
+      ...(confirmation.receiptId ? { receiptId: confirmation.receiptId } : {}),
+      ...(confirmation.responseHash ? { responseHash: confirmation.responseHash } : {}),
       ...(isAcceptanceTime(confirmation.acceptedAt) ? { acceptedAt: confirmation.acceptedAt } : {}),
       ...(confirmation.trackingUri ? { trackingUri: confirmation.trackingUri } : {}),
       ...(confirmation.caseUrn ? { caseUrn: confirmation.caseUrn } : {}),
@@ -147,6 +149,8 @@ function isSubmitConfirmation(value: unknown): value is SubmitConfirmation {
   ) {
     return false;
   }
+  if (value.receiptId !== undefined && (typeof value.receiptId !== 'string' || value.receiptId.length === 0)) return false;
+  if (value.responseHash !== undefined && (typeof value.responseHash !== 'string' || value.responseHash.length === 0)) return false;
   if (value.acceptedAt !== undefined && !isAcceptanceTime(value.acceptedAt)) return false;
   if (value.trackingUri !== undefined && typeof value.trackingUri !== 'string') return false;
   return value.caseUrn === undefined || typeof value.caseUrn === 'string';

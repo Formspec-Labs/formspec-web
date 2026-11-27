@@ -427,6 +427,112 @@ describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
     const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', fetchImpl: fetch });
     await expect(adapter.save(key, sampleFormResponse)).rejects.toThrow('initialized'); expect(requests).toHaveLength(0);
   });
+
+  it('calls POST /drafts/{draft_id}/repin with revision fence and prior pin evidence, updates binding on 200, and refuses 409/404 without mutating binding', async () => {
+    const repinnedResponse = {
+      ...sampleFormResponse,
+      data: { fullName: 'Ada Lovelace', carried: 250, note: 'Unrelated answer' },
+    };
+    const nextPin = {
+      prior: {
+        records: [{ responseId: 'resp-up-2', definitionVersion: '1.0.0', responseHash: `sha256:${'b'.repeat(64)}` }],
+        valueDigest: `sha256:${'c'.repeat(64)}`,
+        none: false,
+        pinned: true,
+        value: { baseline: 250 },
+      },
+    };
+    let nextStatus = 200;
+    const { fetch, requests } = recordingFetch((request) => {
+      if (request.method === 'POST' && request.url.endsWith('/drafts/draft-http-1/repin')) {
+        if (nextStatus !== 200) {
+          return jsonResponse({ detail: nextStatus === 409 ? 'stale revision or signed draft' : 'not found' }, nextStatus);
+        }
+        return jsonResponse({
+          draft_id: 'draft-http-1',
+          draft_version: 2,
+          status: 'in_progress',
+          canonical_response: repinnedResponse,
+          draft_state: repinnedResponse.data,
+          draft_snapshot: { definitionUrl: sampleFormDefinition.url, definitionVersion: '1.0.0', data: { ...repinnedResponse.data, hiddenField: 'kept' } },
+          selection_pins: nextPin,
+        });
+      }
+      if (request.method === 'POST' && request.url.endsWith('/drafts/progress')) {
+        return jsonResponse({
+          results: {
+            summary: { status: 'current', form: { total: 2, filled: 2, toFix: 0, toCheck: 0, ready: true }, sections: {} },
+          },
+        });
+      }
+      return jsonResponse({ title: 'unexpected' }, 500);
+    });
+
+    const registry = retainedRegistry();
+    const adapter = new HttpDraftStore({
+      baseUrl: 'https://source.example.test',
+      fetchImpl: fetch,
+      bindingRegistry: registry,
+    });
+    const draftKey = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+
+    // 1. Happy path re-pin -> POST /drafts/draft-http-1/repin
+    const repinned = await adapter.repinDraft(draftKey, {
+      expectedDraftVersion: 1,
+      draftFence: { revision: '1' },
+      instances: [{
+        instance: 'prior',
+        priorValueDigest: `sha256:${'a'.repeat(64)}`,
+        priorRecords: [{ responseId: 'resp-up-1', definitionVersion: '1.0.0', responseHash: `sha256:${'a'.repeat(64)}` }],
+      }],
+      refillFields: ['carried'],
+      refillValues: { carried: 250 },
+    });
+    expect(repinned.draftId).toBe('draft-http-1');
+    expect(repinned.draftVersion).toBe(2);
+    expect(repinned.response).toEqual(repinnedResponse);
+    expect(repinned.draftSnapshot).toMatchObject({ data: { hiddenField: 'kept' } });
+    expect(repinned.selectionPins).toEqual(nextPin);
+    expect(registry.get(draftKey)?.draftVersion).toBe(2);
+    expect(requests[0]?.body).toEqual({
+      expected_draft_version: 1,
+      draftFence: { revision: '1' },
+      instances: [{
+        instance: 'prior',
+        prior_value_digest: `sha256:${'a'.repeat(64)}`,
+        prior_records: [{ response_id: 'resp-up-1', definition_version: '1.0.0', response_hash: `sha256:${'a'.repeat(64)}` }],
+      }],
+      refill_fields: ['carried'],
+      refill_values: { carried: 250 },
+    });
+
+    // 2. Stale revision / signed target (409) refuses without mutating retained binding.
+    nextStatus = 409;
+    await expect(adapter.repinDraft(draftKey, {
+      expectedDraftVersion: 1,
+      instances: [{ instance: 'prior', priorValueDigest: `sha256:${'c'.repeat(64)}` }],
+    })).rejects.toMatchObject({ status: 409 });
+    expect(registry.get(draftKey)?.draftVersion).toBe(2);
+
+    // 3. Unauthorized / missing (404) refuses without mutating retained binding.
+    nextStatus = 404;
+    await expect(adapter.repinDraft(draftKey, {
+      expectedDraftVersion: 2,
+      instances: [{ instance: 'prior', priorValueDigest: `sha256:${'c'.repeat(64)}` }],
+    })).rejects.toMatchObject({ status: 404 });
+    expect(registry.get(draftKey)?.draftVersion).toBe(2);
+
+    // 4. No-create progress read -> POST /drafts/progress
+    const progress = await adapter.readDraftProgress([{
+      key: 'summary',
+      definitionUrl: sampleFormDefinition.url,
+      definitionVersion: '1.0.0',
+      sections: [{ id: 'main', fields: ['fullName'] }],
+    }]);
+    expect(progress).toEqual({
+      summary: { status: 'current', form: { total: 2, filled: 2, toFix: 0, toCheck: 0, ready: true }, sections: {} },
+    });
+  });
 });
 
 function retainedRegistry() {

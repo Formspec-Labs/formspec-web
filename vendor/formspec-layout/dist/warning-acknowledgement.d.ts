@@ -52,8 +52,12 @@ export interface WarningAcknowledgementGroupView {
     current: boolean;
     buttonLabel: string;
 }
-/** A group's heading: the first authored `explanationPrompt` among its Shapes, else how many questions it covers. */
-export declare function warningAcknowledgementLegend(group: Pick<WarningAcknowledgementGroupInput, 'shapeIds' | 'paths'>, resolveText: WarningAcknowledgementSource['resolveText']): string;
+/** Built-in grouped acknowledgement code for non-relevant held answers excluded at Submit. */
+export declare const HIDDEN_ANSWERS_OMITTED_CODE = "HIDDEN_ANSWERS_OMITTED";
+/** A group's heading: the first authored `explanationPrompt` among its Shapes, else a clear count. */
+export declare function warningAcknowledgementLegend(group: Pick<WarningAcknowledgementGroupInput, 'shapeIds' | 'paths'> & {
+    code?: string;
+}, resolveText: WarningAcknowledgementSource['resolveText']): string;
 /**
  * Build the renderer-agnostic grouped acknowledgement panels for the current Submit state.
  */

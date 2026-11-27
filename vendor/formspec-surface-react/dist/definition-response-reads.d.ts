@@ -17,7 +17,7 @@ export type DraftDefinitionResponseResult = {
 export interface DraftDefinitionResponsePort {
     selectDefinitionResponses(input: Readonly<DraftDefinitionResponseRead>, signal?: AbortSignal): Promise<DraftDefinitionResponseResult>;
 }
-export declare function requireDraftResponsePins(port: Partial<DraftDefinitionResponsePort> | undefined, input: Readonly<DraftDefinitionResponseRead>): Promise<void>;
+export declare function requireDraftResponsePins(port: Partial<DraftDefinitionResponsePort> | undefined, input: Readonly<DraftDefinitionResponseRead>): Promise<DraftRecord['pins'] | undefined>;
 export declare function definitionResponseRequests(definition: FormDefinition, key: DraftKey, pins?: DraftRecord['pins'], required?: ReadonlySet<string>): DefinitionResponseSelectionRequest[];
 export declare function resolveDefinitionReads(selector: ResponseSelector | undefined, requests: DefinitionResponseSelectionRequest[], signal: AbortSignal): Promise<DraftRecord['pins']>;
 export declare function responseDeliveries(results: ReadonlyMap<string, ResponseSelectionOutcome> | undefined, keys?: Iterable<string>): DraftRecord['pins'];

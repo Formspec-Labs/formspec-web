@@ -856,7 +856,9 @@ function ReviewBody({ capture: c, options, }) {
         const stamp = _jsxs(_Fragment, { children: [entry.author.name ?? entry.author.id, " \u00B7 ", _jsx("time", { dateTime: entry.recorded, children: entry.recorded })] });
         if ('group' in entry) {
             const count = entry.paths.length;
-            const summaryLabel = `${count} ${count === 1 ? 'question' : 'questions'} left unanswered (${entry.code})`;
+            const summaryLabel = entry.code === 'HIDDEN_ANSWERS_OMITTED'
+                ? `${count} hidden ${count === 1 ? 'answer' : 'answers'} excluded from filing (${entry.code})`
+                : `${count} ${count === 1 ? 'question' : 'questions'} left unanswered (${entry.code})`;
             groups.push(_jsxs("details", { "data-explanation-code": entry.code, children: [_jsxs("summary", { children: [summaryLabel, " \u2014 accepted by ", entry.author.name ?? entry.author.id, " at ", _jsx("time", { dateTime: entry.recorded, children: entry.recorded })] }), _jsx("ul", { children: entry.paths.map(path => _jsx("li", { children: path === '#' ? c.copy.heading : p.fields[path].label }, path)) })] }, JSON.stringify([entry.code, entry.partyRef])));
         }
         else {

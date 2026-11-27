@@ -1,6 +1,6 @@
 /** @filedesc Qualified draft storage and progress reads for Surface hosts. */
 import type { DraftExplanation } from '@formspec-org/engine';
-import type { DecidedDisposition, DraftProgressCounts, DraftProgressSummary, Explanation, FilingStatusSubjectPredicate, FormDefinition, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
+import type { DecidedDisposition, DraftProgressCounts, DraftProgressSummary, Explanation, FilingStatusSubjectPredicate, FormDefinition, ResolvedInstanceRecord, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
 import type { DataSourceSubject } from './data-source-loader.js';
 export interface DraftKey {
     scope: string;
@@ -157,6 +157,34 @@ export type DraftSaveResult = {
 export type DraftRestartResult = {
     status: 'discarded';
 } | DraftWriteRefusal;
+/** Prior pin evidence for one declared `at-open` response instance being explicitly re-pinned. */
+export interface DraftRepinInstanceRequest {
+    instance: string;
+    priorValueDigest: Sha256Digest;
+    priorRecords?: readonly ResolvedInstanceRecord[];
+}
+/** Explicit revision-checked re-pin request for an open editable draft (Core §4260). */
+export interface DraftRepinInput {
+    key: DraftKey;
+    definitionVersion: string;
+    /** Compare-and-save fence — stale revisions are refused with `conflict`. */
+    expectedRevision: string;
+    /** Declared `at-open` response instances to re-pin, each checked against its observed prior pin. */
+    instances: readonly DraftRepinInstanceRequest[];
+    /** Optional field paths to refill from the re-pinned instance; all other answers remain untouched. */
+    refillFields?: readonly string[];
+    /** Optional explicit refill values for `refillFields`; omitted fields derive from Definition creation defaults. */
+    refillValues?: Readonly<Record<string, unknown>>;
+    /** Whether to refresh any remote option snapshot alongside re-pinning. */
+    refreshOptionSnapshot?: boolean;
+}
+export type DraftRepinResult = {
+    status: 'repinned';
+    draft: DraftRecord;
+} | {
+    status: 'pin-unavailable';
+    instance: string;
+} | DraftWriteRefusal;
 /** Parent keys only. The same attempt must recover the same initialized unit. */
 export interface DraftStartInput {
     scope: string;
@@ -183,6 +211,8 @@ export interface DraftPort {
     loadFiling?(key: DraftKey, definitionVersion: string, signal?: AbortSignal): Promise<FilingLoadResult>;
     /** Compare the revision and commit both draft pieces and progress atomically. */
     save(input: DraftSaveInput): Promise<DraftSaveResult>;
+    /** Explicitly re-pin declared `at-open` response instances against the expected draft revision (Core §4260). */
+    repinDraft?(input: DraftRepinInput, signal?: AbortSignal): Promise<DraftRepinResult>;
     readSummaries: FilingStatusReader;
 }
 /** Browser preview operations beyond normal draft reads and saves. */

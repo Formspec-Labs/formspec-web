@@ -31,7 +31,7 @@ export { UI_STRINGS, fillUiParams } from './ui-strings.js';
 export type { ChromeStringKey } from './ui-strings.js';
 export { readValidationSummaryRows, validationResultPath, stripSeverityPrefix, dedupeSeverityPrefix, } from './validation-summary.js';
 export type { ValidationSummaryComp, ValidationSummaryRow, ValidationSummarySource } from './validation-summary.js';
-export { readWarningAcknowledgementGroups, warningAcknowledgementLegend } from './warning-acknowledgement.js';
+export { HIDDEN_ANSWERS_OMITTED_CODE, readWarningAcknowledgementGroups, warningAcknowledgementLegend } from './warning-acknowledgement.js';
 export type { WarningAcknowledgementGroupInput, WarningAcknowledgementGroupView, WarningAcknowledgementItem, WarningAcknowledgementSource, WarningAcknowledgementStateInput, } from './warning-acknowledgement.js';
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 export { resolveRouteLandmark } from './route-landmark-projection.js';

@@ -58,6 +58,7 @@ export class FormEngine {
         this._extensionFunctions = new FelExtensionFunctions();
         this._pendingExplanationState = null;
         this._pendingSubmitEvaluation = null;
+        this._responseInstanceNewer = Object.create(null);
         this._registryDocuments = [];
         this._resolvedOptionSets = Object.create(null);
         this._resolvedOptionUris = Object.create(null);
@@ -123,12 +124,13 @@ export class FormEngine {
         this._hasSubmitTimingShapes = (this.definition.shapes ?? []).some((shape) => (shape.timing ?? 'continuous') === 'submit');
         this._explanationState = this._rx.computed(() => {
             const explanations = this._explanations.value;
-            if (!this._hasWarningExplanations) {
+            const evaluationVersion = this._evaluationVersion.value;
+            const hasHeld = this.getHeldNonRelevantPaths().length > 0;
+            if (!this._hasWarningExplanations && !hasHeld) {
                 return explanations.length === 0
                     ? EMPTY_WARNING_REVIEW
                     : freezeSourceMetadata(emptyWarningReview(explanations));
             }
-            const evaluationVersion = this._evaluationVersion.value;
             const refreshVersion = this._explanationRefreshVersion.value;
             const pending = this._pendingExplanationState;
             this._pendingExplanationState = null;
@@ -297,6 +299,62 @@ export class FormEngine {
         await Promise.allSettled(this._instanceSourceTasks);
         return freezeSourceMetadata(cloneValue(this._instanceSourceOutcomes));
     }
+    updateResponseInstanceResolutions(resolutions) {
+        const instances = this.definition.instances;
+        if (!instances)
+            return;
+        let changed = false;
+        for (const [name, instance] of Object.entries(instances)) {
+            if (!instance.response)
+                continue;
+            const hasNext = Object.prototype.hasOwnProperty.call(resolutions, name);
+            const next = hasNext ? cloneValue(resolutions[name]) : undefined;
+            const prev = this._responseInstanceResolutions[name];
+            if (next) {
+                if (!deepEqual(prev, next) || !deepEqual(this.instanceData[name], next.value)) {
+                    this._responseInstanceResolutions[name] = next;
+                    Object.defineProperty(this.instanceData, name, {
+                        value: cloneValue(next.value),
+                        enumerable: true,
+                        writable: true,
+                        configurable: true,
+                    });
+                    changed = true;
+                }
+            }
+            else {
+                if (prev !== undefined) {
+                    delete this._responseInstanceResolutions[name];
+                    changed = true;
+                }
+                delete this._responseInstanceNewer[name];
+                if (instance.data !== undefined) {
+                    const fallback = cloneValue(instance.data);
+                    if (!deepEqual(this.instanceData[name], fallback)) {
+                        Object.defineProperty(this.instanceData, name, {
+                            value: fallback,
+                            enumerable: true,
+                            writable: true,
+                            configurable: true,
+                        });
+                        changed = true;
+                    }
+                }
+                else if (Object.prototype.hasOwnProperty.call(this.instanceData, name)) {
+                    delete this.instanceData[name];
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            this.instanceVersion.value += 1;
+            this._evaluate();
+        }
+    }
+    getResponseInstanceNewer(instanceName) {
+        const newer = this._responseInstanceNewer[instanceName];
+        return newer ? cloneValue(newer) : undefined;
+    }
     setInstanceValue(name, path, value) {
         this.writeInstanceValue(name, path, value);
         this._evaluate();
@@ -422,11 +480,19 @@ export class FormEngine {
     hasWarningExplanations() {
         return this._hasWarningExplanations;
     }
+    getHeldNonRelevantValues() {
+        this._evaluationVersion.value;
+        return cloneValue((this._fullResult?.heldNonRelevantValues ?? {}));
+    }
+    getHeldNonRelevantPaths() {
+        this._evaluationVersion.value;
+        return Object.keys(this._fullResult?.heldNonRelevantValues ?? {}).sort();
+    }
     hasSubmitTimingShapes() {
         return this._hasSubmitTimingShapes;
     }
     reviewWarnings() {
-        if (!this._hasWarningExplanations) {
+        if (!this._hasWarningExplanations && this.getHeldNonRelevantPaths().length === 0) {
             const entries = this._explanations.value;
             return entries.length === 0 ? EMPTY_WARNING_REVIEW : emptyWarningReview(entries);
         }
@@ -1079,7 +1145,7 @@ export class FormEngine {
             fields: this.collectEvaluatedFields(),
             report,
         };
-        const explanations = this._hasWarningExplanations
+        const explanations = (this._hasWarningExplanations || (result.explanationFindings?.length ?? 0) > 0)
             ? freezeSourceMetadata(warningReview(result, explanationsEntries))
             : this._explanationState.value;
         return { evaluated, explanations };
@@ -1221,7 +1287,11 @@ export class FormEngine {
                     response.explanations = cloneValue(saved);
             }
         }
-        if (submitEvalResult && this._hasWarningExplanations && !pendingExplanationStamps) {
+        if (submitEvalResult
+            && (this._hasWarningExplanations
+                || (submitEvalResult.explanationFindings?.length ?? 0) > 0
+                || this.getHeldNonRelevantPaths().length > 0)
+            && !pendingExplanationStamps) {
             // Seed the fresh Submit evaluation into warning controls so Submit never triggers a second
             // Submit evaluation and clock-only expiry/expansion immediately reopens accepted groups.
             const reviewed = warningReview(submitEvalResult, draftEntries);
@@ -1667,15 +1737,21 @@ export class FormEngine {
         return /^https?:\/\//i.test(source) || source.startsWith('/') ? source : null;
     }
     initializeInstanceSource(name, instance) {
-        if (!instance.source)
+        if (!instance.source && !instance.response)
             return;
         const resolver = this._instanceSourceResolver;
-        const source = resolver ? instance.source : FormEngine.resolveInstanceSource(instance.source);
-        if (!source) {
+        if (instance.response && !resolver) {
+            this._instanceSourceOutcomes[name] = { status: 'unavailable', reason: 'Response instance requires a resolver' };
+            return;
+        }
+        const source = instance.source
+            ? (resolver ? instance.source : FormEngine.resolveInstanceSource(instance.source))
+            : null;
+        if (instance.source && !source) {
             this._instanceSourceOutcomes[name] = { status: 'unavailable', reason: 'Unsupported source' };
             return;
         }
-        if (!resolver && instance.static && FormEngine.instanceSourceCache.has(source)) {
+        if (!resolver && source && instance.static && FormEngine.instanceSourceCache.has(source)) {
             try {
                 const cached = FormEngine.instanceSourceCache.get(source);
                 this.validateInstanceSchema(name, cached);
@@ -1690,7 +1766,10 @@ export class FormEngine {
         this._pendingInstanceSources.add(name);
         const signal = this._instanceSourceAbort.signal;
         const request = freezeSourceMetadata(cloneValue({
-            instanceName: name, source: instance.source,
+            instanceName: name,
+            ...(instance.source ? { source: instance.source } : {}),
+            ...(instance.response ? { response: instance.response } : {}),
+            ...(this._responseSubject ? { subject: this._responseSubject } : {}),
             definition: { url: this.definition.url, version: this.definition.version },
             ...(instance.schema ? { schema: instance.schema } : {}),
             static: instance.static === true, readonly: instance.readonly !== false,
@@ -1703,12 +1782,19 @@ export class FormEngine {
             };
             signal.addEventListener('abort', abort, { once: true });
             let installed = false;
+            let loadedOutcome = { status: 'loaded' };
             let previous;
             let hadPrevious = false;
+            let previousDelivery;
+            let hadPreviousDelivery = false;
+            let previousNewer;
+            let hadPreviousNewer = false;
             Promise.resolve().then(async () => {
                 if (signal.aborted || this.hasSubjectRefusal())
                     return;
                 let payload;
+                let responseDelivery;
+                let responseNewer;
                 if (resolver) {
                     const result = readSourceResult(await resolver(request, Object.freeze({ signal })));
                     if (this._disposed)
@@ -1718,8 +1804,32 @@ export class FormEngine {
                         return;
                     }
                     payload = result.value;
-                    if (instance.schema && !isJsonRecord(payload)) {
+                    const allowNonObjectPayload = Boolean(instance.response && (result.none === true || instance.response.cardinality === 'latest-per-subject'));
+                    if (instance.schema && !allowNonObjectPayload && !isJsonRecord(payload)) {
                         throw new Error(`Instance '${name}' schema requires an object`);
+                    }
+                    loadedOutcome = {
+                        status: 'loaded',
+                        ...(result.records !== undefined ? { records: result.records } : {}),
+                        ...(result.valueDigest !== undefined ? { valueDigest: result.valueDigest } : {}),
+                        ...(result.none !== undefined ? { none: result.none } : {}),
+                        ...(result.pinned !== undefined ? { pinned: result.pinned } : {}),
+                        ...(result.mapping !== undefined ? { mapping: result.mapping } : {}),
+                        ...(result.newer !== undefined ? { newer: result.newer } : {}),
+                    };
+                    if (instance.response
+                        && result.records !== undefined
+                        && result.valueDigest !== undefined
+                        && result.none !== undefined) {
+                        responseDelivery = {
+                            value: cloneValue(payload),
+                            records: cloneValue([...result.records]),
+                            valueDigest: result.valueDigest,
+                            none: result.none,
+                            pinned: result.pinned ?? (instance.response.pin === 'at-open'),
+                            ...(result.mapping ? { mapping: cloneValue(result.mapping) } : {}),
+                        };
+                        responseNewer = result.newer ? cloneValue(result.newer) : undefined;
                     }
                 }
                 else {
@@ -1734,7 +1844,20 @@ export class FormEngine {
                 const nextValue = cloneValue(payload);
                 hadPrevious = Object.prototype.hasOwnProperty.call(this.instanceData, name);
                 previous = this.instanceData[name];
+                hadPreviousDelivery = Object.prototype.hasOwnProperty.call(this._responseInstanceResolutions, name);
+                previousDelivery = this._responseInstanceResolutions[name];
+                hadPreviousNewer = Object.prototype.hasOwnProperty.call(this._responseInstanceNewer, name);
+                previousNewer = this._responseInstanceNewer[name];
                 Object.defineProperty(this.instanceData, name, { value: nextValue, enumerable: true, writable: true, configurable: true });
+                if (responseDelivery) {
+                    this._responseInstanceResolutions[name] = responseDelivery;
+                }
+                if (responseNewer) {
+                    this._responseInstanceNewer[name] = responseNewer;
+                }
+                else if (instance.response) {
+                    delete this._responseInstanceNewer[name];
+                }
                 installed = true;
                 this.instanceVersion.value += 1;
             }).catch((error) => {
@@ -1757,9 +1880,9 @@ export class FormEngine {
                         : undefined;
                     this._evaluate(undefined, false, data);
                     if (installed) {
-                        if (!resolver && instance.static)
+                        if (!resolver && source && instance.static)
                             FormEngine.instanceSourceCache.set(source, cloneValue(this.instanceData[name]));
-                        this._instanceSourceOutcomes[name] = { status: 'loaded' };
+                        this._instanceSourceOutcomes[name] = loadedOutcome;
                     }
                 }
                 catch (error) {
@@ -1768,6 +1891,14 @@ export class FormEngine {
                             Object.defineProperty(this.instanceData, name, { value: previous, enumerable: true, writable: true, configurable: true });
                         else
                             delete this.instanceData[name];
+                        if (hadPreviousDelivery && previousDelivery)
+                            this._responseInstanceResolutions[name] = previousDelivery;
+                        else
+                            delete this._responseInstanceResolutions[name];
+                        if (hadPreviousNewer && previousNewer)
+                            this._responseInstanceNewer[name] = previousNewer;
+                        else
+                            delete this._responseInstanceNewer[name];
                         this.instanceVersion.value += 1;
                     }
                     this._instanceSourceOutcomes[name] = { status: 'failed', reason: sourceErrorMessage(error) };

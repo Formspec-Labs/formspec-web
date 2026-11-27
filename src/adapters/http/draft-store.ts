@@ -5,7 +5,19 @@ import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import { savedSourceDraftView, type SourceDraftView, type SavedSourceDraftView, type InitializedSourceDraftView } from './source-draft-view.ts';
 import canonicalize from 'canonicalize';
 import type { components } from '../../api/generated/source-public.d.ts';
-import type { DraftKey, DraftReadState, DraftResumeState, DraftStore, FormResponse, OwnedDraftResumeSelection, RecoveredDraftInitialization } from '../../ports/draft-store.ts';
+import type {
+  DraftKey,
+  DraftProgressQueryInput,
+  DraftReadState,
+  DraftRepinOptions,
+  DraftRepinOutcome,
+  DraftResumeState,
+  DraftSaveOptions,
+  DraftStore,
+  FormResponse,
+  OwnedDraftResumeSelection,
+  RecoveredDraftInitialization,
+} from '../../ports/draft-store.ts';
 import { copyDraftKey, createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
@@ -247,15 +259,15 @@ export class HttpDraftStore implements DraftStore {
     }
   }
 
-  async save(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void> {
+  async save(key: DraftKey, response: FormResponse, options?: DraftSaveOptions): Promise<void> {
     if (this.clearing) throw new Error('Draft state is being cleared');
     const guard = options?.assertBeforeDispatch?.bind(options);
-    const pending = this.saveOnce(key, response, guard ? { assertBeforeDispatch: guard } : undefined);
+    const pending = this.saveOnce(key, response, options ? { ...options, ...(guard ? { assertBeforeDispatch: guard } : {}) } : undefined);
     this.pendingSaves.add(pending);
     try { await pending; } finally { this.pendingSaves.delete(pending); }
   }
 
-  private async saveOnce(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void> {
+  private async saveOnce(key: DraftKey, response: FormResponse, options?: DraftSaveOptions): Promise<void> {
     const generation = this.retirementGeneration;
     const current = () => { if (generation !== this.retirementGeneration) throw new Error('Draft state was retired while saving'); };
     response = snapshotWire(response);
@@ -264,13 +276,29 @@ export class HttpDraftStore implements DraftStore {
     current();
     if (!existing) throw new Error('Draft must be initialized before Save or Sign');
 
+    const body: components['schemas']['UpdateDraftCommand'] = {
+      draft_state: response.data,
+      canonical_response: response,
+      expected_draft_version: existing.draftVersion,
+      ...(options?.draftSnapshot !== undefined ? { draft_snapshot: snapshotWire(options.draftSnapshot) } : {}),
+      ...(options?.progressSummary !== undefined
+        ? {
+            progress_summary: options.progressSummary === null
+              ? null
+              : {
+                  sections: options.progressSummary.sections.map((section) => ({
+                    ...(section.id !== undefined ? { id: section.id } : {}),
+                    fields: [...section.fields],
+                  })),
+                  progress: snapshotWire(options.progressSummary.progress),
+                },
+          }
+        : {}),
+      ...(options?.draftFence !== undefined ? { draftFence: { revision: options.draftFence.revision } } : {}),
+    };
     const update = await this.client.patchJson<SourceDraftView>(
       `/drafts/${encodeURIComponent(existing.draftId)}`,
-      {
-        draft_state: response.data,
-        canonical_response: response,
-        expected_draft_version: existing.draftVersion,
-      },
+      body,
       { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current, assertBeforeDispatch: options?.assertBeforeDispatch },
     );
     current();
@@ -279,6 +307,110 @@ export class HttpDraftStore implements DraftStore {
       draftVersion: update.draft_version,
       response,
     });
+  }
+
+  async repinDraft(suppliedKey: DraftKey, options: DraftRepinOptions): Promise<DraftRepinOutcome> {
+    if (this.clearing) throw new Error('Draft state is being cleared');
+    const key = copyDraftKey(suppliedKey);
+    const generation = this.retirementGeneration;
+    const current = () => { if (generation !== this.retirementGeneration) throw new Error('Draft state was retired while re-pinning'); };
+    current();
+    const existing = this.bindings.get(key);
+    if (!existing) throw new Error('Draft must be initialized before re-pinning');
+    if (!options.instances || options.instances.length === 0) {
+      throw new Error('At least one response instance must be supplied to re-pin');
+    }
+    const anonymousSessionToken = await this.resolveAnonymousSessionToken(key);
+    current();
+    const expectedVersion = options.expectedDraftVersion ?? existing.draftVersion;
+    if (expectedVersion === undefined || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error('Expected draft version is required before re-pinning');
+    }
+    const payload: components['schemas']['RepinDraftCommand'] = {
+      expected_draft_version: expectedVersion,
+      ...(options.draftFence !== undefined ? { draftFence: { revision: options.draftFence.revision } } : {}),
+      instances: options.instances.map((entry) => ({
+        instance: entry.instance,
+        prior_value_digest: entry.priorValueDigest,
+        ...(entry.priorRecords !== undefined
+          ? {
+              prior_records: entry.priorRecords.map((rec) => ({
+                response_id: rec.responseId,
+                definition_version: rec.definitionVersion,
+                ...(rec.responseHash !== undefined ? { response_hash: rec.responseHash } : {}),
+              })),
+            }
+          : {}),
+      })),
+      ...(options.refillFields !== undefined ? { refill_fields: [...options.refillFields] } : {}),
+      ...(options.refillValues !== undefined ? { refill_values: snapshotWire({ ...options.refillValues }) } : {}),
+      ...(options.refreshOptionSnapshot !== undefined ? { refresh_option_snapshot: options.refreshOptionSnapshot } : {}),
+    };
+    const guard = options.assertBeforeDispatch?.bind(options);
+    const view = await this.client.postJson<SourceDraftView>(
+      `/drafts/${encodeURIComponent(existing.draftId)}/repin`,
+      payload,
+      {
+        headers: bearerHeaders(anonymousSessionToken),
+        assertCurrent: current,
+        ...(guard ? { assertBeforeDispatch: guard } : {}),
+        successStatuses: [200],
+      },
+    );
+    current();
+    const { validateCanonicalFormResponse } = await import('../schema/surface-bundle-schema-validators.ts');
+    const saved = await savedSourceDraftView(view, validateCanonicalFormResponse, 'Re-pinned draft has no matching canonical Response');
+    const response = saved.canonical_response;
+    if (
+      view.draft_id !== existing.draftId
+      || !Number.isSafeInteger(view.draft_version)
+      || view.draft_version <= expectedVersion
+      || view.status !== 'in_progress'
+      || response.definitionUrl !== key.formUrl
+      || (key.formVersion !== undefined && response.definitionVersion !== key.formVersion)
+      || !sameResponseDataView(response.data, view.draft_state)
+    ) {
+      throw new Error('Re-pinned draft returned inconsistent identity or revision');
+    }
+    current();
+    this.bindings.put(key, {
+      draftId: view.draft_id,
+      draftVersion: view.draft_version,
+      response,
+    });
+    return freeze({
+      draftId: view.draft_id,
+      draftVersion: view.draft_version,
+      response: snapshotWire(response),
+      ...(view.draft_snapshot && typeof view.draft_snapshot === 'object' ? { draftSnapshot: snapshotWire(view.draft_snapshot) } : {}),
+      ...(view.selection_pins && typeof view.selection_pins === 'object' ? { selectionPins: snapshotWire(view.selection_pins) } : {}),
+    });
+  }
+
+  async readDraftProgress(queries: readonly DraftProgressQueryInput[], key?: DraftKey): Promise<Record<string, unknown>> {
+    const anonymousSessionToken = key ? await this.resolveAnonymousSessionToken(copyDraftKey(key)) : undefined;
+    const payload: components['schemas']['DraftProgressQueryCommand'] = {
+      queries: queries.map((query) => ({
+        key: query.key,
+        definitionUrl: query.definitionUrl,
+        definitionVersion: query.definitionVersion,
+        ...(query.subject !== undefined ? { subject: snapshotWire(query.subject) } : {}),
+        ...(query.draftId !== undefined ? { draftId: query.draftId } : {}),
+        sections: query.sections.map((section) => ({
+          ...(section.id !== undefined ? { id: section.id } : {}),
+          fields: [...section.fields],
+        })),
+      })),
+    };
+    const reply = await this.client.postJson<components['schemas']['DraftProgressQueryResponse']>(
+      '/drafts/progress',
+      payload,
+      { headers: bearerHeaders(anonymousSessionToken), successStatuses: [200] },
+    );
+    if (!reply || typeof reply.results !== 'object' || reply.results === null || Array.isArray(reply.results)) {
+      throw new Error('Draft progress response is malformed');
+    }
+    return freeze(snapshotWire(reply.results));
   }
 
   async list(subjectRef: string): Promise<DraftKey[]> {

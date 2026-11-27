@@ -22,6 +22,17 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * bar IS the reference, and it is shown as such.
  */
 import { WidgetEmptyState } from './empty-state.js';
+const ISO_DATE_TIME_RE = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
+function isValidIsoDateTime(value) {
+    if (!ISO_DATE_TIME_RE.test(value))
+        return false;
+    if (!Number.isFinite(Date.parse(value)))
+        return false;
+    const [datePart] = value.split(/[Tt]/);
+    const [year, month, day] = datePart.split('-').map(Number);
+    const utc = new Date(Date.UTC(year, month - 1, day));
+    return utc.getUTCFullYear() === year && utc.getUTCMonth() === month - 1 && utc.getUTCDate() === day;
+}
 function readReceiptInput(data) {
     if (typeof data !== 'object' || data === null)
         return {};
@@ -43,12 +54,21 @@ function readReceiptInput(data) {
         : [];
     const parsed = {};
     const caseRef = text('caseRef');
-    const submittedAt = text('submittedAt');
+    const receiptId = text('receiptId');
+    const rawSubmittedAt = text('submittedAt');
+    const submittedAt = rawSubmittedAt !== undefined && isValidIsoDateTime(rawSubmittedAt)
+        ? rawSubmittedAt
+        : undefined;
+    const fingerprint = text('fingerprint');
     const issuer = text('issuer');
     if (caseRef !== undefined)
         parsed.caseRef = caseRef;
+    if (receiptId !== undefined)
+        parsed.receiptId = receiptId;
     if (submittedAt !== undefined)
         parsed.submittedAt = submittedAt;
+    if (fingerprint !== undefined)
+        parsed.fingerprint = fingerprint;
     if (issuer !== undefined)
         parsed.issuer = issuer;
     if (facts.length > 0)
@@ -67,7 +87,9 @@ export function ReceiptPanel({ data, route, config }) {
     const caseRef = parsed.caseRef ?? route.params[caseRefParamName];
     const rows = [
         ...(caseRef ? [{ label: 'Your reference', value: caseRef }] : []),
+        ...(parsed.receiptId ? [{ label: 'Receipt ID', value: parsed.receiptId }] : []),
         ...(parsed.submittedAt ? [{ label: 'Sent', value: formatWhen(parsed.submittedAt) }] : []),
+        ...(parsed.fingerprint ? [{ label: 'Fingerprint', value: parsed.fingerprint }] : []),
         ...(parsed.issuer ? [{ label: 'Issued by', value: parsed.issuer }] : []),
         ...(parsed.facts ?? []),
     ];

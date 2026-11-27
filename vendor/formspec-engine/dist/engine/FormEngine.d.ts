@@ -1,4 +1,4 @@
-import type { EvaluatedFormState, FormDefinition, Explanation, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
+import type { EvaluatedFormState, FormDefinition, Explanation, FormItem, FormResponse, NewerSelectedResponse, OptionEntry, ResponseSelectionDelivery, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
 import type { SetValueOptions, SubmitEvaluationSnapshot, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState, ResolvedOptionListsSnapshot } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
@@ -60,6 +60,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _explanations;
     private readonly _responseSubject;
     private readonly _responseInstanceResolutions;
+    private readonly _responseInstanceNewer;
     private _registryDocuments;
     private readonly _resolvedOptionSets;
     private readonly _resolvedOptionUris;
@@ -116,6 +117,8 @@ export declare class FormEngine implements IFormEngine {
     waitForRemoteOptions(): Promise<void>;
     getResolvedOptions(): ResolvedOptionListsSnapshot;
     waitForInstanceSources(): Promise<Readonly<Record<string, InstanceSourceLoadOutcome>>>;
+    updateResponseInstanceResolutions(resolutions: Readonly<Record<string, ResponseSelectionDelivery>>): void;
+    getResponseInstanceNewer(instanceName: string): NewerSelectedResponse | undefined;
     setInstanceValue(name: string, path: string | undefined, value: FormFieldValue): void;
     getInstanceData(name: string, path?: string): FormFieldValue;
     getDisabledDisplay(path: string): 'hidden' | 'protected';
@@ -131,6 +134,8 @@ export declare class FormEngine implements IFormEngine {
     getExplanationEntries(): DraftExplanation[];
     getExplanationState(): ExplanationState;
     hasWarningExplanations(): boolean;
+    getHeldNonRelevantValues(): JsonRecord;
+    getHeldNonRelevantPaths(): string[];
     hasSubmitTimingShapes(): boolean;
     private reviewWarnings;
     private refreshExplanationState;

@@ -22,6 +22,7 @@ export async function loadDraftReviewInputs(plan, { session, site, signal, local
     const { definition, subject } = plan;
     const draft = await session.readCommitted(definition, subject, { afterPendingSaves: true, signal });
     let response;
+    let draftSnapshot;
     let revision;
     let key;
     let pins;
@@ -29,6 +30,7 @@ export async function loadDraftReviewInputs(plan, { session, site, signal, local
     let isFiledRecord = false;
     if (draft.status === 'loaded') {
         response = draft.response;
+        draftSnapshot = draft.draftSnapshot;
         revision = draft.revision;
         key = draft.key;
         pins = draft.pins;
@@ -75,7 +77,10 @@ export async function loadDraftReviewInputs(plan, { session, site, signal, local
             : undefined;
         signal.throwIfAborted();
         const engine = createFormEngine(definition, {
-            savedResponseData: response.data, loadExternalSources: false,
+            ...(!isFiledRecord && draftSnapshot
+                ? { draftSnapshot }
+                : { savedResponseData: response.data }),
+            loadExternalSources: false,
             ...(responseInstanceResolutions && { responseInstanceResolutions }),
             ...(response.explanations && { savedExplanations: response.explanations }),
             ...(key.subject && { responseSubject: key.subject }),

@@ -426,8 +426,12 @@ export function createDraftWriter(options) {
             await review;
         }
     }
-    function captureActionResponse({ profile }) {
-        return engine.getResponseSnapshot({ id: responseId, ...(author && { author }), profile: 'off' }, profile);
+    function captureActionResponse({ profile, validationTuple }) {
+        return engine.getResponseSnapshot({
+            id: responseId,
+            ...(author && { author }),
+            profile: validationTuple?.persistence === 'complete-response' ? 'on-submit' : 'off',
+        }, profile);
     }
     function observeConflict() {
         conflicted = true;
@@ -937,10 +941,12 @@ export function createDraftWriter(options) {
             if (kind === 'submit' && signedEdit !== undefined && signedEdit !== editAtStart) {
                 throw new Error('Sign this draft before submitting.');
             }
-            if (port.selectDefinitionResponses && (kind === 'sign' || kind === 'submit')) {
-                await requireDraftResponsePins(port, { key, definitionVersion, expectedRevision: revision });
+            if (port.selectDefinitionResponses && (kind === 'prepare' || kind === 'sign' || kind === 'submit')) {
+                const deliveries = await requireDraftResponsePins(port, { key, definitionVersion, expectedRevision: revision });
                 if (!isCurrent())
                     throw new Error('Draft changed before the filing action.');
+                if (deliveries)
+                    engine.updateResponseInstanceResolutions?.(deliveries);
             }
             const draft = Object.freeze({ key, definitionVersion, revision, responseJson: latest.draft.responseJson });
             const latestResponse = parseJsonExact(latest.draft.responseJson);

@@ -21,7 +21,7 @@
     ],
     "nativeBundle": {
       "path": "native-bundle.json",
-      "sha256": "a27f8692e62766ff08c8d5a2543126e2871d3544d33513d604be686b4cbfb2b6"
+      "sha256": "70d79dd6346da7a69ea2907d17ef9d3f5588652fb7174c4a39c824d6fea83a52"
     },
     "component": {
       "path": "../v0.1.7/passport-renewal.component.json",

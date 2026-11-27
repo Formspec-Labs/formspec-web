@@ -35,7 +35,7 @@ export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOU
 // Closed renderer-chrome string inventory (Locale spec §3.1.10 `$ui.<ChromeStringKey>`)
 export { UI_STRINGS, fillUiParams } from './ui-strings.js';
 export { readValidationSummaryRows, validationResultPath, stripSeverityPrefix, dedupeSeverityPrefix, } from './validation-summary.js';
-export { readWarningAcknowledgementGroups, warningAcknowledgementLegend } from './warning-acknowledgement.js';
+export { HIDDEN_ANSWERS_OMITTED_CODE, readWarningAcknowledgementGroups, warningAcknowledgementLegend } from './warning-acknowledgement.js';
 // Platform defaults & theme generation
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 // UI Graph Policy route-landmark projection (shared by React + webcomponent)

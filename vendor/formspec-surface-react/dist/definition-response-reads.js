@@ -1,9 +1,9 @@
 export async function requireDraftResponsePins(port, input) {
     const result = await port?.selectDefinitionResponses?.(input);
     if (!result || result.status === 'unconfigured')
-        return;
+        return undefined;
     if (result.status === 'resolved' && !result.missingPrerequisite)
-        return;
+        return responseDeliveries(result.outcomes);
     const name = result.status === 'resolved' ? result.missingPrerequisite : undefined;
     throw new Error(name ? `Required response instance "${name}" is unavailable.` : 'The saved draft prerequisites could not be verified.');
 }

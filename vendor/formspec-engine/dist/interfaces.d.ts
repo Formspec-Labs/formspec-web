@@ -1,6 +1,6 @@
 /** @filedesc Engine public interfaces and shared exported types. */
 import type { EngineSignal, ReadonlyEngineSignal } from './reactivity/types.js';
-import type { EvaluatedFormState, FormDefinition, Explanation, FormInstance, FormItem, FormResponse, ResponseSelectionDelivery, ValidationResult, ValidationReport, ValidationProfile, OptionEntry } from '@formspec-org/types';
+import type { EvaluatedFormState, FormDefinition, Explanation, FormInstance, FormItem, FormResponse, NewerSelectedResponse, ResolvedInstanceRecord, ResponseSelection, ResponseSelectionDelivery, ResponseSelectionMapping, Sha256Digest, ValidationResult, ValidationReport, ValidationProfile, OptionEntry } from '@formspec-org/types';
 import type { EnabledValidationProfile, ValidationReportOptions } from './validation/index.js';
 /** JSON-compatible scalar. */
 export type JsonPrimitive = string | number | boolean | null;
@@ -159,10 +159,14 @@ export interface FormEngineRuntimeContext {
     seed?: string | number;
     meta?: Record<string, string | number | boolean>;
 }
-/** Detached metadata for one authored Definition-local instance source. */
+/** Detached metadata for one authored Definition-local instance source or Response instance. */
 export interface InstanceSourceRequest {
     readonly instanceName: string;
-    readonly source: string;
+    readonly source?: string;
+    readonly response?: Readonly<ResponseSelection>;
+    readonly subject?: Readonly<Partial<Omit<NonNullable<FormResponse['subject']>, 'keys'>> & {
+        keys?: ResponseSubjectKeys;
+    }>;
     readonly definition: Readonly<{
         url?: string;
         version: string;
@@ -174,6 +178,12 @@ export interface InstanceSourceRequest {
 export type InstanceSourceResult = {
     status: 'loaded';
     value: JsonValue;
+    records?: readonly ResolvedInstanceRecord[];
+    valueDigest?: Sha256Digest;
+    none?: boolean;
+    pinned?: boolean;
+    mapping?: ResponseSelectionMapping;
+    newer?: NewerSelectedResponse;
 } | {
     status: 'unavailable';
     reason?: string;
@@ -186,6 +196,12 @@ export type InstanceSourceResult = {
 export type InstanceSourceLoadOutcome = Readonly<{
     status: 'loaded' | 'unavailable' | 'aborted' | 'failed';
     reason?: string;
+    records?: readonly ResolvedInstanceRecord[];
+    valueDigest?: Sha256Digest;
+    none?: boolean;
+    pinned?: boolean;
+    mapping?: ResponseSelectionMapping;
+    newer?: NewerSelectedResponse;
 }>;
 /** Host owns source qualification and a bounded deadline; disposal aborts the signal. */
 export type InstanceSourceResolver = (request: Readonly<InstanceSourceRequest>, options: Readonly<{
@@ -438,6 +454,10 @@ export interface IFormEngine {
     waitForRemoteOptions(): Promise<void>;
     getResolvedOptions?(): ResolvedOptionListsSnapshot;
     waitForInstanceSources(): Promise<Readonly<Record<string, InstanceSourceLoadOutcome>>>;
+    /** Replace live response-instance deliveries and re-evaluate. */
+    updateResponseInstanceResolutions?(resolutions: Readonly<Record<string, ResponseSelectionDelivery>>): void;
+    /** Newer completed Response reported alongside a pinned response instance, if any. */
+    getResponseInstanceNewer?(instanceName: string): NewerSelectedResponse | undefined;
     setInstanceValue(name: string, path: string | undefined, value: FormFieldValue): void;
     getInstanceData(name: string, path?: string): FormFieldValue;
     getDisabledDisplay(path: string): 'hidden' | 'protected';
@@ -457,6 +477,10 @@ export interface IFormEngine {
     getExplanationState(): ExplanationState;
     /** Whether any warning Shape on this Definition declares an explanation mode other than `'none'`. */
     hasWarningExplanations?(): boolean;
+    /** Sorted non-display, non-calculated leaf paths holding non-empty values omitted under `remove` NRB. */
+    getHeldNonRelevantPaths?(): string[];
+    /** Non-display, non-calculated leaf paths and their held non-empty values omitted under `remove` NRB. */
+    getHeldNonRelevantValues?(): JsonRecord;
     /** Whether any Shape on this Definition declares `timing: 'submit'`. */
     hasSubmitTimingShapes?(): boolean;
     /** Evaluates Submit once and returns both the Submit `EvaluatedFormState` and `ExplanationState`. */

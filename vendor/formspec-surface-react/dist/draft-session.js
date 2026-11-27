@@ -29,6 +29,16 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
         signal.throwIfAborted();
         return result;
     }
+    function recordedPinsForDefinition(definition, pins) {
+        if (!pins)
+            return {};
+        return Object.fromEntries(Object.entries(definition.instances ?? {}).flatMap(([name, instance]) => {
+            if (!instance.response || instance.response.pin !== 'at-open')
+                return [];
+            const delivery = Object.hasOwn(pins, name) ? pins[name] : undefined;
+            return delivery ? [[name, delivery]] : [];
+        }));
+    }
     async function resolveReads(definition, key, pins, expectedRevision, signal) {
         if (expectedRevision !== undefined && storage.port.selectDefinitionResponses) {
             const result = await storage.port.selectDefinitionResponses({ key, definitionVersion: definition.version, expectedRevision }, signal);
@@ -40,6 +50,9 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                 throw new Error('Draft changed before response instances could be read.');
             if (result.status !== 'unconfigured')
                 return { deliveries: {}, scoped: true };
+        }
+        if (!storage.responses) {
+            return { deliveries: recordedPinsForDefinition(definition, pins) };
         }
         return { deliveries: await resolveDefinitionReads(storage.responses, definitionResponseRequests(definition, key, pins), signal) };
     }
@@ -347,7 +360,27 @@ export function createDraftSession(storage, browserPort, checkpointPorts) {
                 if (result.status !== 'loaded')
                     return { status: result.status };
                 const response = parseJsonExact(result.draft.responseJson);
-                return { status: 'loaded', response, pins: result.draft.pins, revision: result.draft.revision, key };
+                let draftSnapshot;
+                if (result.draft.snapshotJson) {
+                    try {
+                        const rawSnapshot = parseJsonExact(result.draft.snapshotJson);
+                        if (rawSnapshot && typeof rawSnapshot === 'object' && !Array.isArray(rawSnapshot)
+                            && 'definitionUrl' in rawSnapshot && 'definitionVersion' in rawSnapshot && 'data' in rawSnapshot) {
+                            draftSnapshot = rawSnapshot;
+                        }
+                    }
+                    catch {
+                        draftSnapshot = undefined;
+                    }
+                }
+                return {
+                    status: 'loaded',
+                    response,
+                    ...(draftSnapshot ? { draftSnapshot } : {}),
+                    pins: result.draft.pins,
+                    revision: result.draft.revision,
+                    key,
+                };
             }
             catch {
                 return { status: 'unavailable' };

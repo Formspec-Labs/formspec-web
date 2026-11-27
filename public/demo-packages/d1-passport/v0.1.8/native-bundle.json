@@ -329,6 +329,11 @@
                   "draft": {
                     "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
                     "sourceRef": "host:signing-draft",
+                    "producer": {
+                      "routeRef": "intake",
+                      "definitionRef": "urn:formspec:demo:d1:passport-renewal",
+                      "actionRef": "prepare"
+                    },
                     "x-generation": {
                       "anchors": [
                         "need:review-and-sign-demo-response@2"

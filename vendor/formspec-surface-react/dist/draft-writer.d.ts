@@ -95,7 +95,7 @@ export declare function createDraftWriter(options: DraftWriterOptions): {
         } | undefined;
     }) => Promise<T>;
     resolveConflict: (choice: "load" | "keep") => Promise<boolean | "reopen">;
-    captureActionResponse: ({ profile }: Parameters<NonNullable<DraftActionPorts["submit"]>>[0]) => {
+    captureActionResponse: ({ profile, validationTuple }: Parameters<NonNullable<DraftActionPorts["submit"]>>[0]) => {
         response: FormResponse;
         validationReport: import("@formspec-org/types").ValidationReport | null;
     };

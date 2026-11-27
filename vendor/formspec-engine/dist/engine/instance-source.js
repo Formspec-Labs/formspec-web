@@ -45,12 +45,60 @@ export function cloneSourceJson(value, ancestors = new Set()) {
         ancestors.delete(value);
     }
 }
+function readRecords(value) {
+    if (!Array.isArray(value))
+        throw new Error('Invalid instance source records');
+    return value.map((entry) => {
+        if (!isJsonRecord(entry)
+            || typeof entry.responseId !== 'string'
+            || typeof entry.definitionVersion !== 'string'
+            || (entry.responseHash !== undefined && typeof entry.responseHash !== 'string')) {
+            throw new Error('Invalid instance source record entry');
+        }
+        return {
+            responseId: entry.responseId,
+            definitionVersion: entry.definitionVersion,
+            ...(entry.responseHash !== undefined ? { responseHash: entry.responseHash } : {}),
+        };
+    });
+}
+function readMapping(value) {
+    if (!isJsonRecord(value) || typeof value.url !== 'string' || typeof value.digest !== 'string') {
+        throw new Error('Invalid instance source mapping');
+    }
+    return { url: value.url, digest: value.digest };
+}
+function readNewer(value) {
+    if (!isJsonRecord(value) || typeof value.responseId !== 'string' || typeof value.responseHash !== 'string') {
+        throw new Error('Invalid instance source newer reference');
+    }
+    return { responseId: value.responseId, responseHash: value.responseHash };
+}
 export function readSourceResult(value) {
     const result = cloneSourceJson(value);
     if (!isJsonRecord(result))
         throw new Error('Invalid instance source result');
-    if (result.status === 'loaded' && Object.prototype.hasOwnProperty.call(result, 'value'))
-        return { status: 'loaded', value: result.value };
+    if (result.status === 'loaded' && Object.prototype.hasOwnProperty.call(result, 'value')) {
+        if (result.valueDigest !== undefined && typeof result.valueDigest !== 'string') {
+            throw new Error('Invalid instance source valueDigest');
+        }
+        if (result.none !== undefined && typeof result.none !== 'boolean') {
+            throw new Error('Invalid instance source none flag');
+        }
+        if (result.pinned !== undefined && typeof result.pinned !== 'boolean') {
+            throw new Error('Invalid instance source pinned flag');
+        }
+        return {
+            status: 'loaded',
+            value: result.value,
+            ...(result.records !== undefined ? { records: readRecords(result.records) } : {}),
+            ...(result.valueDigest !== undefined ? { valueDigest: result.valueDigest } : {}),
+            ...(result.none !== undefined ? { none: result.none } : {}),
+            ...(result.pinned !== undefined ? { pinned: result.pinned } : {}),
+            ...(result.mapping !== undefined ? { mapping: readMapping(result.mapping) } : {}),
+            ...(result.newer !== undefined ? { newer: readNewer(result.newer) } : {}),
+        };
+    }
     if (result.status === 'unavailable' && (result.reason === undefined || typeof result.reason === 'string')) {
         return { status: 'unavailable', ...(result.reason === undefined ? {} : { reason: result.reason }) };
     }

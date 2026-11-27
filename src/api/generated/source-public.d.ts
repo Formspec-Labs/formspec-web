@@ -116,6 +116,35 @@ export interface paths {
         patch: operations["update_tenant_brand"];
         trace?: never;
     };
+    "/drafts/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DraftProgressQueryCommand"];
+                };
+            };
+            responses: {
+                200: {
+                    content: {
+                        "application/json": components["schemas"]["DraftProgressQueryResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/drafts/{draft_id}": {
         parameters: {
             query?: never;
@@ -130,6 +159,35 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update_draft"];
+        trace?: never;
+    };
+    "/drafts/{draft_id}/repin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RepinDraftCommand"];
+                };
+            };
+            responses: {
+                200: {
+                    content: {
+                        "application/json": components["schemas"]["DraftView"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/drafts/{draft_id}/application-case": {
@@ -1417,15 +1475,59 @@ export interface components {
         DraftView: {
             canonical_response?: Record<string, unknown> | null;
             draft_id: string;
+            draft_snapshot?: Record<string, unknown> | null;
             draft_state: unknown;
             /** Format: int64 */
             draft_version: number;
             form_version_id: string;
             is_initialization_only?: boolean | null;
+            selection_pins?: Record<string, unknown> | null;
             status: string;
             subject?: components["schemas"]["FilingSubject"] | null;
             subject_ref: string;
             taskDraft?: components["schemas"]["TaskDraftView"] | null;
+        };
+        DraftFenceWire: {
+            revision: string;
+        };
+        DraftProgressSectionPlacement: {
+            id?: string;
+            fields: string[];
+        };
+        DraftProgressSummaryCommand: {
+            sections: components["schemas"]["DraftProgressSectionPlacement"][];
+            progress: unknown;
+        };
+        DraftProgressQueryItem: {
+            key: string;
+            definitionUrl: string;
+            definitionVersion: string;
+            subject?: unknown;
+            draftId?: string;
+            sections: components["schemas"]["DraftProgressSectionPlacement"][];
+        };
+        DraftProgressQueryCommand: {
+            queries: components["schemas"]["DraftProgressQueryItem"][];
+        };
+        DraftProgressQueryResponse: {
+            results: Record<string, unknown>;
+        };
+        RepinDraftInstanceCommand: {
+            instance: string;
+            prior_value_digest: string;
+            prior_records?: {
+                response_id: string;
+                definition_version?: string;
+                response_hash?: string;
+            }[];
+        };
+        RepinDraftCommand: {
+            expected_draft_version: number;
+            draftFence?: components["schemas"]["DraftFenceWire"];
+            instances: components["schemas"]["RepinDraftInstanceCommand"][];
+            refill_fields?: string[];
+            refill_values?: Record<string, unknown>;
+            refresh_option_snapshot?: boolean;
         };
         /**
          * @description Stable machine-readable stack error code: a prefix from the closed set ADR 0092a governs, then four digits. Adding a prefix amends ADR 0092a and this pattern together.
@@ -2151,9 +2253,12 @@ export interface components {
         /** @description Request body for updating a draft. */
         UpdateDraftCommand: {
             canonical_response: unknown;
+            draftFence?: components["schemas"]["DraftFenceWire"];
+            draft_snapshot?: Record<string, unknown> | null;
             draft_state?: unknown;
             /** Format: int64 */
             expected_draft_version?: number | null;
+            progress_summary?: components["schemas"]["DraftProgressSummaryCommand"] | null;
         };
         /** @description Request body for updating mutable managed-form draft metadata. */
         UpdateManagedFormDraftCommand: {

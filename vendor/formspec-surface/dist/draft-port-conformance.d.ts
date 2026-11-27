@@ -26,6 +26,7 @@ export declare const draftPortConformance: {
     'refuses creating a draft when its at-open filing is missing'({ port, key: address, pins }: DraftPortFixture): Promise<void>;
     'records an empty at-open pin'({ port, key: address, pins }: DraftPortFixture): Promise<void>;
     'records an at-open pin once and reports a newer filing without changing the pin'({ port, key: address, pins }: DraftPortFixture): Promise<void>;
+    'explicitly re-pins an at-open filing against its expected revision'({ port, deny, key: address, pins }: DraftPortFixture): Promise<void>;
 };
 /** Run against a fresh store with the input Definition and authorized parents. */
 export declare function checkMintedDraftStart(port: DraftPort, input: Omit<DraftStartInput, 'attemptId'>): Promise<void>;
