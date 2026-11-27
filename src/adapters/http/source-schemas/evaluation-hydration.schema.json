@@ -736,6 +736,186 @@
           "additionalProperties": false
         },
         {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "nativeFiledResponseSelection"
+            },
+            "version": {
+              "const": 1
+            },
+            "purpose": {
+              "const": "formspec.instance.filed-response.select"
+            },
+            "registration": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "providerVersion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "registrationHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "outputSchemaHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "maxEvidenceAgeSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                "maxValiditySeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 900
+                },
+                "publicDescriptor": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "providerId",
+                "providerVersion",
+                "registrationHash",
+                "outputSchemaHash",
+                "maxEvidenceAgeSeconds",
+                "maxValiditySeconds",
+                "publicDescriptor"
+              ],
+              "additionalProperties": false
+            },
+            "requestHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "resolvedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "deliveries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "instanceName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "sourceRef": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "records": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "responseId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "definitionVersion": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "responseHash": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "responseId",
+                        "definitionVersion"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "valueDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "none": {
+                    "type": "boolean"
+                  },
+                  "pinned": {
+                    "type": "boolean"
+                  },
+                  "mapping": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "digest": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "digest"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "newer": {
+                    "type": "object",
+                    "properties": {
+                      "responseId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "responseHash": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "responseId",
+                      "responseHash"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "instanceName",
+                  "sourceRef",
+                  "records",
+                  "valueDigest",
+                  "none",
+                  "pinned"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16
+            },
+            "receiptHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "purpose",
+            "registration",
+            "requestHash",
+            "resolvedAt",
+            "deliveries",
+            "receiptHash"
+          ],
+          "additionalProperties": false
+        },
+        {
           "$ref": "urn:formspec:server:evaluation-composition:1#/$defs/ComposedReceipt"
         },
         {
