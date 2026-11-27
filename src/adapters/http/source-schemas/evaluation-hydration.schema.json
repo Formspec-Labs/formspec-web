@@ -48,6 +48,9 @@
     },
     "providerReceipt": {
       "$ref": "#/$defs/HydrationProviderReceipt"
+    },
+    "optionSnapshot": {
+      "$ref": "#/$defs/HydrationOptionSnapshot"
     }
   },
   "required": [
@@ -925,13 +928,52 @@
           "$ref": "urn:formspec:server:evaluation-composition:4#/$defs/ComposedReceipt"
         },
         {
+          "$ref": "urn:formspec:server:evaluation-composition:5#/$defs/ComposedReceipt"
+        },
+        {
           "type": "null"
         }
       ]
+    },
+    "HydrationOptionSnapshot": {
+      "type": "object",
+      "properties": {
+        "optionSets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "uris": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "snapshotDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "resolvedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "snapshotDigest",
+        "resolvedAt"
+      ],
+      "additionalProperties": false
     }
   },
   "title": "EvaluationHydrationView",
-  "description": "Current read-only facts for one exact owned saved unsigned Response. Hydration version 2 identifies mixed receipt versions 2 or 4; all other supported receipts and absent receipts use hydration version 1.",
+  "description": "Current read-only facts for one exact owned saved unsigned Response. Hydration version 2 identifies mixed receipt versions 2, 4, or 5; all other supported receipts and absent receipts use hydration version 1.",
   "dependentSchemas": {
     "providerReceipt": {
       "if": {
@@ -949,7 +991,8 @@
               "version": {
                 "enum": [
                   2,
-                  4
+                  4,
+                  5
                 ]
               }
             }

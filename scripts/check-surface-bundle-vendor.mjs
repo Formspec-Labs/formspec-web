@@ -205,6 +205,7 @@ const sourceSchemaDir = 'src/adapters/http/source-schemas';
 const sourceSchemaFiles = [
   'evaluation-composition-v2.schema.json',
   'evaluation-composition-v4.schema.json',
+  'evaluation-composition-v5.schema.json',
   'evaluation-composition.schema.json',
   'evaluation-hydration.schema.json',
   'native-current-check-selector.schema.json',
