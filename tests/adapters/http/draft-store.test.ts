@@ -496,11 +496,11 @@ describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
     expect(registry.get(draftKey)?.draftVersion).toBe(2);
     expect(requests[0]?.body).toEqual({
       expected_draft_version: 1,
-      draftFence: { revision: '1' },
+      draftFence: { revision: 1 },
       instances: [{
         instance: 'prior',
         prior_value_digest: `sha256:${'a'.repeat(64)}`,
-        prior_records: [{ response_id: 'resp-up-1', definition_version: '1.0.0', response_hash: `sha256:${'a'.repeat(64)}` }],
+        prior_records: [{ response_id: 'resp-up-1', response_hash: `sha256:${'a'.repeat(64)}` }],
       }],
       refill_fields: ['carried'],
       refill_values: { carried: 250 },

@@ -116,6 +116,22 @@ export interface paths {
         patch: operations["update_tenant_brand"];
         trace?: never;
     };
+    "/authority/{change}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["admit_authority_command"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/drafts/progress": {
         parameters: {
             query?: never;
@@ -125,20 +141,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["DraftProgressQueryCommand"];
-                };
-            };
-            responses: {
-                200: {
-                    content: {
-                        "application/json": components["schemas"]["DraftProgressQueryResponse"];
-                    };
-                };
-            };
-        };
+        post: operations["read_draft_progress"];
         delete?: never;
         options?: never;
         head?: never;
@@ -159,35 +162,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update_draft"];
-        trace?: never;
-    };
-    "/drafts/{draft_id}/repin": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["RepinDraftCommand"];
-                };
-            };
-            responses: {
-                200: {
-                    content: {
-                        "application/json": components["schemas"]["DraftView"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/drafts/{draft_id}/application-case": {
@@ -250,6 +224,22 @@ export interface paths {
         put?: never;
         /** Reads finite current proof references under the actual applicant draft authority. */
         post: operations["read_current_hydration_proofs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/drafts/{draft_id}/repin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["repin_draft"];
         delete?: never;
         options?: never;
         head?: never;
@@ -650,6 +640,38 @@ export interface paths {
         get: operations["export_responses"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/responses/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["select_responses"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/responses/select/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["select_responses_list"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1392,6 +1414,54 @@ export interface components {
             /** @description Ed25519 public key as base64url without padding (RFC 8037 `x`). */
             public_key: string;
         };
+        /** @description Response view returned by `POST /authority/{change}`. */
+        AuthorityAdmissionView: {
+            position: components["schemas"]["AuthorityHeadView"];
+            projected: boolean;
+            replayed: boolean;
+        };
+        /**
+         * @description Closed path values for the single authority-administration route.
+         * @enum {string}
+         */
+        AuthorityChangeKind: "grant" | "revoke";
+        /** AuthorityCommand */
+        AuthorityCommand: {
+            /** @description A typed object: `<type>:<id>`. The bounds are structural; an evaluator's own limits are enforced by the server that admits the command. */
+            object: string;
+            reason: string;
+            relation: string;
+            subject: {
+                iss: string;
+                /**
+                 * PrincipalKind
+                 * @enum {string}
+                 */
+                kind: "user" | "service";
+                sub: string;
+            } | string;
+        };
+        /** @description Canonical authority ledger position returned after admitting a grant or revocation. */
+        AuthorityHeadView: {
+            checkpointRef?: string | null;
+            lastEventHash?: string | null;
+            treeHeadHash: string;
+            /** Format: int64 */
+            treeSize: number;
+        };
+        /** AvailableResponseSelection */
+        AvailableResponseSelection: {
+            mapping?: components["schemas"]["ResponseSelectionMapping"];
+            newer?: components["schemas"]["NewerSelectedResponse"];
+            none: boolean;
+            pinned: boolean;
+            /** ResponseSelectionRecords */
+            records: components["schemas"]["ResolvedInstanceRecord"][];
+            /** @enum {string} */
+            status: "available";
+            value: null | boolean | Record<string, unknown> | unknown[] | number | string;
+            valueDigest: components["schemas"]["Sha256Digest"];
+        };
         BootstrapScopeView: {
             bootstrap_admin_principal_id: string;
             default_notification_policy_id: string;
@@ -1402,6 +1472,26 @@ export interface components {
             scope_key: string;
             tenant_id: string;
             workspace_id: string;
+        };
+        /**
+         * CatalogResponseSelectionRequest
+         * @description The adapter resolves the selection from its own catalog and refuses a digest mismatch.
+         */
+        CatalogResponseSelectionRequest: {
+            /** @description SHA-256 over the complete Data Sources catalog document encoded as integrity-canonical-json-v1. */
+            catalogDigest: components["schemas"]["Sha256Digest"];
+            /** Format: uri */
+            catalogRef: string;
+            consumerSubject?: components["schemas"]["ResponseSelectionSubjectKeys"];
+            key: string;
+            /** @enum {string} */
+            kind: "catalog";
+            pin?: components["schemas"]["ResponseSelectionDelivery"];
+            /** ResponseSelectionRouteParams */
+            routeParams?: {
+                [key: string]: string;
+            };
+            sourceRef: string;
         };
         /** @description Request body for completing one signer. */
         CompleteSignerCommand: {
@@ -1471,63 +1561,92 @@ export interface components {
             response_id: string;
             signers: components["schemas"]["SignatureSignerCommand"][];
         };
+        /** @description Expected draft revision fence enforced across Prepare, Sign, Submit, and Re-Pin (`fs-yvfo`). */
+        DraftFence: {
+            /** Format: int64 */
+            revision: number;
+        };
+        /** @description Batch no-create draft progress request (`POST /drafts/progress`). */
+        DraftProgressBatchRequest: {
+            queries: components["schemas"]["DraftProgressQuery"][];
+        };
+        /** @description Batch no-create draft progress response (`POST /drafts/progress`). */
+        DraftProgressBatchResponse: {
+            results: {
+                [key: string]: components["schemas"]["DraftProgressReadOutcome"];
+            };
+        };
+        /** @description One no-create progress query item for `POST /drafts/progress` (`fs-yvfo`, ADR 0175). */
+        DraftProgressQuery: {
+            definitionUrl: string;
+            definitionVersion: string;
+            draftId?: string | null;
+            key: string;
+            sections: components["schemas"]["DraftProgressSectionPlan"][];
+            subject?: components["schemas"]["FilingSubjectInput"] | null;
+        };
+        /** @description No-create read outcome for one queried draft progress entry (`fs-yvfo`, ADR 0175). */
+        DraftProgressReadOutcome: components["schemas"]["DraftProgressSummary"] | components["schemas"]["DraftProgressStatusOutcome"];
+        /** @description One authored section placement entry pinning which fields belong to a section ID. */
+        DraftProgressSectionPlan: {
+            fields: string[];
+            id: string;
+        };
+        /**
+         * @description Closed non-current draft progress status values.
+         * @enum {string}
+         */
+        DraftProgressStatusKind: "absent" | "stale" | "unavailable";
+        /** @description Non-current progress read status carrying zero counts or draft data. */
+        DraftProgressStatusOutcome: {
+            status: components["schemas"]["DraftProgressStatusKind"];
+        };
+        /**
+         * DraftProgressSummary
+         * @description Advisory progress for one committed draft, grouped by authored section ID.
+         */
+        DraftProgressSummary: {
+            form: Record<string, unknown>;
+            sections: {
+                [key: string]: Record<string, unknown>;
+            };
+            /** @enum {string} */
+            status: "current";
+        };
+        /** @description Optional progress summary payload accepted on `PATCH /drafts/{draft_id}`. */
+        DraftProgressSummaryInput: {
+            progress: components["schemas"]["DraftProgressSummary"];
+            sections: components["schemas"]["DraftProgressSectionPlan"][];
+        };
         /** @description Response body for a draft. */
         DraftView: {
             canonical_response?: Record<string, unknown> | null;
+            /**
+             * Format: int64
+             * @description Returned on `POST /drafts/{draft_id}/sign` so writers can commit buffered edits against
+             *     the newly advanced revision (`fs-yvfo`).
+             */
+            committedDraftRevision?: number | null;
             draft_id: string;
+            /**
+             * @description Verbatim editable engine draft snapshot (`FormDraftSnapshot`), keeping hidden answers and
+             *     empty repeat rows beside the filtered in-progress Response (`fs-yvfo`, `fs-2cbq`).
+             */
             draft_snapshot?: Record<string, unknown> | null;
             draft_state: unknown;
             /** Format: int64 */
             draft_version: number;
             form_version_id: string;
             is_initialization_only?: boolean | null;
-            selection_pins?: Record<string, unknown> | null;
+            option_snapshot?: components["schemas"]["TrustedOptionSnapshot"] | null;
+            /** @description Server-authoritative `pin: "at-open"` deliveries pinned on this draft (`Core §4.4.1`). */
+            selection_pins?: {
+                [key: string]: components["schemas"]["ResponseSelectionDelivery"];
+            } | null;
             status: string;
             subject?: components["schemas"]["FilingSubject"] | null;
             subject_ref: string;
             taskDraft?: components["schemas"]["TaskDraftView"] | null;
-        };
-        DraftFenceWire: {
-            revision: string;
-        };
-        DraftProgressSectionPlacement: {
-            id?: string;
-            fields: string[];
-        };
-        DraftProgressSummaryCommand: {
-            sections: components["schemas"]["DraftProgressSectionPlacement"][];
-            progress: unknown;
-        };
-        DraftProgressQueryItem: {
-            key: string;
-            definitionUrl: string;
-            definitionVersion: string;
-            subject?: unknown;
-            draftId?: string;
-            sections: components["schemas"]["DraftProgressSectionPlacement"][];
-        };
-        DraftProgressQueryCommand: {
-            queries: components["schemas"]["DraftProgressQueryItem"][];
-        };
-        DraftProgressQueryResponse: {
-            results: Record<string, unknown>;
-        };
-        RepinDraftInstanceCommand: {
-            instance: string;
-            prior_value_digest: string;
-            prior_records?: {
-                response_id: string;
-                definition_version?: string;
-                response_hash?: string;
-            }[];
-        };
-        RepinDraftCommand: {
-            expected_draft_version: number;
-            draftFence?: components["schemas"]["DraftFenceWire"];
-            instances: components["schemas"]["RepinDraftInstanceCommand"][];
-            refill_fields?: string[];
-            refill_values?: Record<string, unknown>;
-            refresh_option_snapshot?: boolean;
         };
         /**
          * @description Stable machine-readable stack error code: a prefix from the closed set ADR 0092a governs, then four digits. Adding a prefix amends ADR 0092a and this pattern together.
@@ -1599,6 +1718,8 @@ export interface components {
             form_version_id: string;
             /** @description Canonical hashes of the pinned Locale documents, in locale-code order. */
             locale_hashes: string[];
+            /** @description Canonical hashes of the pinned Extension Registry documents, in published order. */
+            registry_hashes?: string[];
             share_url: string;
             status: string;
             tenant_brand_id: string;
@@ -1635,6 +1756,11 @@ export interface components {
              */
             resume_existing: boolean;
             subject?: components["schemas"]["FilingSubjectInput"] | null;
+        };
+        /** NewerSelectedResponse */
+        NewerSelectedResponse: {
+            responseHash: components["schemas"]["Sha256Digest"];
+            responseId: string;
         };
         NotificationAuditView: {
             audit_events: string[];
@@ -1895,6 +2021,8 @@ export interface components {
             locale_documents?: unknown[];
             ontology?: unknown;
             references?: unknown;
+            /** @description The Extension Registry documents pinned at publish (fs-20e3), preserving exact decimals. */
+            registry_documents?: Record<string, unknown>[];
             runtime_config: unknown;
             /**
              * @description The Theme document the form is published with; the respondent renders it and the accessibility
@@ -1919,6 +2047,8 @@ export interface components {
             locale_documents: unknown;
             ontology: unknown;
             references: unknown;
+            /** @description The pinned Extension Registry documents, in published order (exact JSON). */
+            registry_documents?: Record<string, unknown>[];
             runtime_config: unknown;
             /** @description The pinned Theme document the respondent renders. */
             theme_document?: unknown;
@@ -1984,6 +2114,41 @@ export interface components {
             content_type: string;
             object_ref: string;
         };
+        /** @description Explicit, revision-checked request to re-pin `pin: "at-open"` selections on an unsigned draft (`Core §4.4.1`). */
+        RepinDraftCommand: {
+            draftFence?: components["schemas"]["DraftFence"] | null;
+            /** Format: int64 */
+            expected_draft_version: number;
+            instances: components["schemas"]["RepinInstanceRequest"][];
+            /** @description Target field paths the preparer explicitly selected to refill from the refreshed selection. */
+            refill_fields?: string[] | null;
+            /** @description Optional refilled values for a subset of `refill_fields` (e.g. evaluated from a prefill Mapping). */
+            refill_values?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description When true, refreshes `draft_option_snapshots` atomically alongside the updated selection pins. */
+            refresh_option_snapshot?: boolean;
+        };
+        /** @description One `pin: "at-open"` instance requested for explicit re-pin (`Core §4.4.1`). */
+        RepinInstanceRequest: {
+            instance: string;
+            prior_records?: components["schemas"]["RepinPriorRecordRef"][] | null;
+            prior_value_digest: string;
+        };
+        /** @description Prior receipt record reference verified during explicit draft re-pin (`Core §4.4.1`). */
+        RepinPriorRecordRef: {
+            response_hash?: string | null;
+            response_id: string;
+        };
+        /** ResolvedInstanceRecord */
+        ResolvedInstanceRecord: {
+            /** @description Exact upstream Definition version. */
+            definitionVersion: string;
+            /** @description Required for completed records and absent for current drafts. ResponseJson::handoff_hash() over the complete immutable Response under formspec.response.handoff.v1; equals its IntakeHandoff.responseHash. */
+            responseHash?: components["schemas"]["Sha256Digest"];
+            /** @description Identity of the selected Response. */
+            responseId: string;
+        };
         /** @description StudioCore-compatible anchored Ledger append receipt plus substrate evidence. */
         ResponseActionLedgerAppendReceipt: {
             checkpointReference: string;
@@ -2022,6 +2187,32 @@ export interface components {
             opBatchHash: string;
             sessionRef: Record<string, unknown>;
         };
+        /** ResponseSelectionDelivery */
+        ResponseSelectionDelivery: {
+            mapping?: components["schemas"]["ResponseSelectionMapping"];
+            none: boolean;
+            pinned: boolean;
+            /** ResponseSelectionRecords */
+            records: components["schemas"]["ResolvedInstanceRecord"][];
+            value: null | boolean | Record<string, unknown> | unknown[] | number | string;
+            valueDigest: components["schemas"]["Sha256Digest"];
+        };
+        /** ResponseSelectionMapping */
+        ResponseSelectionMapping: {
+            /** @description Digest pin of the Mapping used. */
+            digest: components["schemas"]["Sha256Digest"];
+            /**
+             * Format: uri
+             * @description URL of the forward Mapping used.
+             */
+            url: string;
+        };
+        /** ResponseSelectionOutcome */
+        ResponseSelectionOutcome: components["schemas"]["AvailableResponseSelection"] | components["schemas"]["UnavailableResponseSelection"];
+        /** ResponseSelectionSubjectKeys */
+        ResponseSelectionSubjectKeys: {
+            [key: string]: string | number;
+        };
         /** @description Response body for signed-response verification. */
         ResponseSignatureVerificationView: {
             form_version_id: string;
@@ -2050,15 +2241,67 @@ export interface components {
         };
         /** @description Request body for retiring or redirecting an old form version. */
         RetireFormVersionCommand: Record<string, never>;
+        /** @description One authorized item returned by `POST /responses/select/list`. */
+        SealedSelectionListItem: {
+            authored: string;
+            data: unknown;
+            definitionVersion: string;
+            kind: string;
+            responseHash?: string | null;
+            responseId: string;
+            subject: components["schemas"]["FilingSubject"];
+        };
+        /**
+         * @description Authorized page returned by `POST /responses/select/list` (`CONSISTENCY-AND-EFFECTS.md` §6).
+         *
+         *     Carries NO counts over total or scanned rows. `nextCursor` is issued ONLY when another
+         *     authorized item past the page's last item is established. When the server scan budget is
+         *     exhausted first, `searchIncomplete` is `true` and `nextCursor` is omitted.
+         */
+        SealedSelectionListPage: {
+            items: components["schemas"]["SealedSelectionListItem"][];
+            nextCursor?: string | null;
+            searchIncomplete: boolean;
+        };
+        /**
+         * @description Request body for `POST /responses/select/list` (`fs-n4dw`, `CONSISTENCY-AND-EFFECTS.md` §6).
+         *
+         *     Accepts ONLY an opaque server-issued `cursor` (no decimal offsets, no caller-supplied scan
+         *     budgets) and returns ONLY authorized projected items with zero counts over unauthorized rows.
+         */
+        SealedSelectionListRequest: {
+            catalogDigest: string;
+            catalogRef: string;
+            consumerSubject?: Record<string, unknown> | null;
+            cursor?: string | null;
+            /** Format: int32 */
+            limit?: number | null;
+            routeParams?: {
+                [key: string]: string;
+            };
+            sourceRef: string;
+        };
         SelectiveDisclosureCommand: {
             /** @description Answer paths to disclose, such as `applicant.name` or `household[*].income`. */
             disclose: string[];
         };
-        /** @description Request body for submitting a draft. */
+        /**
+         * Sha256Digest
+         * @description SHA-256 digest encoded with the sha256: prefix and lowercase hexadecimal.
+         * @example sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+         */
+        Sha256Digest: string;
+        /** @description Request body for signing a draft. */
         SignDraftCommand: {
             canonical_response: unknown;
+            draftFence?: components["schemas"]["DraftFence"] | null;
             /** Format: int64 */
             draft_version: number;
+            /**
+             * @description Optional canonical `formspec.option-snapshot.v1\0` digest the caller observed on the draft.
+             *     Verified against the server-retained snapshot; never admits unverified option lists.
+             */
+            option_snapshot_digest?: string | null;
         };
         /** @description Response body for a signature certificate. */
         SignatureCertificateView: {
@@ -2146,8 +2389,19 @@ export interface components {
         SubmitDraftCommand: {
             anonymous_session_token?: string | null;
             canonical_response: unknown;
+            draftFence?: components["schemas"]["DraftFence"] | null;
+            /**
+             * Format: int64
+             * @description Optional expected draft revision precondition enforced before Submit commit (`fs-yvfo`).
+             */
+            expected_draft_version?: number | null;
             /** @description Explicit current run locator, frozen with this Submit idempotency body. */
             nativeCurrentCheck?: Record<string, unknown> | null;
+            /**
+             * @description Optional canonical `formspec.option-snapshot.v1\0` digest the caller observed on the draft.
+             *     Verified against the server-retained snapshot; never admits unverified option lists.
+             */
+            option_snapshot_digest?: string | null;
             response_data?: unknown;
             signing_requested?: boolean;
             subject_ref?: string | null;
@@ -2250,15 +2504,44 @@ export interface components {
             theme_assets: Record<string, unknown>;
             workspace_id: string;
         };
+        /**
+         * @description Canonical, digest-bound remote option snapshot retained by the trusted filing host.
+         *
+         *     The `snapshot_digest` binds `{ optionSets, uris }` over `formspec.option-snapshot.v1\0`,
+         *     matching `formspec_eval::ResolvedOptionLists::snapshot_digest()` byte-for-byte.
+         */
+        TrustedOptionSnapshot: {
+            /** @description Allowed option values keyed by Definition `optionSets` name. */
+            optionSets?: {
+                [key: string]: string[];
+            };
+            /** @description Server clock instant (RFC 3339) when the filing host pinned this snapshot. */
+            resolvedAt: string;
+            /** @description Canonical domain-framed SHA-256 digest (`sha256:...`) over `{ optionSets, uris }`. */
+            snapshotDigest: string;
+            /** @description Allowed option values keyed by remote option-list URI (`Item.options` or `OptionSet.source`). */
+            uris?: {
+                [key: string]: string[];
+            };
+        };
+        /** UnavailableResponseSelection */
+        UnavailableResponseSelection: {
+            /** @enum {string} */
+            status: "unavailable";
+        };
         /** @description Request body for updating a draft. */
         UpdateDraftCommand: {
             canonical_response: unknown;
-            draftFence?: components["schemas"]["DraftFenceWire"];
+            draftFence?: components["schemas"]["DraftFence"] | null;
+            /**
+             * @description Verbatim editable engine draft snapshot (`FormDraftSnapshot`), keeping hidden answers and
+             *     empty repeat rows beside the filtered in-progress Response (`fs-yvfo`, `fs-2cbq`).
+             */
             draft_snapshot?: Record<string, unknown> | null;
             draft_state?: unknown;
             /** Format: int64 */
             expected_draft_version?: number | null;
-            progress_summary?: components["schemas"]["DraftProgressSummaryCommand"] | null;
+            progress_summary?: components["schemas"]["DraftProgressSummaryInput"] | null;
         };
         /** @description Request body for updating mutable managed-form draft metadata. */
         UpdateManagedFormDraftCommand: {
@@ -2635,6 +2918,142 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    admit_authority_command: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Whether to grant or revoke the authority tuple. */
+                change: components["schemas"]["AuthorityChangeKind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorityCommand"];
+            };
+        };
+        responses: {
+            /** @description Canonical authority change admitted */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityAdmissionView"];
+                };
+            };
+            /** @description Invalid authority command or missing Idempotency-Key */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Verified authenticated principal required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authority change refused by policy */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Idempotency-Key conflicts with a different authority command */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authority ledger or relationship evaluator unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    read_draft_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftProgressBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized no-create draft progress summary results */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftProgressBatchResponse"];
+                };
+            };
+            /** @description Invalid draft progress batch request */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization or storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3055,6 +3474,84 @@ export interface operations {
             };
             /** @description Refusal */
             default: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    repin_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Draft identifier. */
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepinDraftCommand"];
+            };
+        };
+        responses: {
+            /** @description Explicitly re-pinned unsigned draft with updated selection pins and refilled fields */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftView"];
+                };
+            };
+            /** @description Invalid re-pin command */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Verified respondent token required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft unavailable to this respondent */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision conflict, signed or submitted draft, or prior pin digest mismatch */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Storage or resolver unavailable */
+            503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
@@ -3921,7 +4418,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description ACCESSIBILITY_ERRORS: the form has accessibility errors; context.report holds the report and nothing was published */
+            /** @description Publication refused. ACCESSIBILITY_ERRORS includes context.report. Filed Response projection errors include context.findings, context.instance, context.consumerUrl, and context.consumerVersion. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3982,6 +4479,15 @@ export interface operations {
             };
             /** @description Form version not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Only a published form version can be retired */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4380,6 +4886,136 @@ export interface operations {
             };
         };
     };
+    select_responses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogResponseSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Catalog Response selection outcome */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSelectionOutcome"];
+                };
+            };
+            /** @description Verified authenticated principal required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catalog digest mismatch */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Response selection request */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    select_responses_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SealedSelectionListRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized sealed-cursor page of catalog Response selections */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SealedSelectionListPage"];
+                };
+            };
+            /** @description Invalid list query parameters */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Verified authenticated principal required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catalog digest mismatch or invalid/expired/replayed continuation cursor */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Response selection list request */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization or storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_response: {
         parameters: {
             query?: never;
@@ -4588,6 +5224,16 @@ export interface operations {
                     "application/json": components["schemas"]["ReceiptView"];
                 };
             };
+            /** @description Verified staff or respondent credential required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Response not found */
             404: {
                 headers: {
@@ -4598,7 +5244,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Storage unavailable */
+            /** @description Authorization or storage unavailable */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -5025,9 +5671,14 @@ export interface operations {
         requestBody: {
             content: {
                 "application/pdf": number[];
+                "application/vnd.ms-excel.sheet.macroEnabled.12": number[];
+                "application/vnd.oasis.opendocument.spreadsheet": number[];
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": number[];
+                "application/xml": number[];
                 "image/jpeg": number[];
                 "image/png": number[];
                 "text/csv": number[];
+                "text/xml": number[];
             };
         };
         responses: {
@@ -5228,9 +5879,14 @@ export interface operations {
         requestBody: {
             content: {
                 "application/pdf": number[];
+                "application/vnd.ms-excel.sheet.macroEnabled.12": number[];
+                "application/vnd.oasis.opendocument.spreadsheet": number[];
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": number[];
+                "application/xml": number[];
                 "image/jpeg": number[];
                 "image/png": number[];
                 "text/csv": number[];
+                "text/xml": number[];
             };
         };
         responses: {

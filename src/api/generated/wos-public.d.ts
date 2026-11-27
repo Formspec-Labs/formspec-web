@@ -337,6 +337,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/authority/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admits one canonical authority grant or revocation to the scope's shared `authority` ledger. */
+        post: operations["admitAuthorityCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bundles": {
         parameters: {
             query?: never;
@@ -706,6 +723,26 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["requestCompletionExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/completion-exports/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the deployment's declared `Purpose` and `RecipientClass` vocabulary members for
+         *     completion exports in the admitted scope.
+         */
+        get: operations["getCompletionExportOptions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1100,6 +1137,40 @@ export interface paths {
         get: operations["reports_paginate_rows"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/review-dispositions/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Single-filing exact lookup of an authorized review disposition and decision-record comments. */
+        post: operations["review_dispositions_lookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/review-dispositions/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch authorized lookup of review dispositions keyed by exact `{responseId, responseHash}`. */
+        post: operations["review_dispositions_query"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1848,6 +1919,40 @@ export interface components {
          */
         AuthAssuranceLevel: ("low" | "standard" | "high" | "very-high") | string;
         /**
+         * @description Which canonical authority mutation the command requests.
+         * @enum {string}
+         */
+        AuthorityAction: "grant" | "revoke";
+        /** @description Wire body matching `https://formspec.org/schemas/authorization/authority-command.schema.json`. */
+        AuthorityCommandRequest: {
+            object: string;
+            reason: string;
+            relation: string;
+            subject: components["schemas"]["AuthoritySubject"];
+        };
+        /** @description Committed canonical authority position and projection status. */
+        AuthorityCommandResponse: {
+            checkpointRef?: string | null;
+            projected: boolean;
+            replayed: boolean;
+            treeHeadHash: string;
+            /** Format: int64 */
+            treeSize: number;
+        };
+        /** @description Typed identity grantee matching `authority-command.schema.json#/$defs/identity`. */
+        AuthorityIdentity: {
+            iss: string;
+            kind: components["schemas"]["AuthorityPrincipalKind"];
+            sub: string;
+        };
+        /**
+         * @description Principal credential kind matching `authority-command.schema.json`.
+         * @enum {string}
+         */
+        AuthorityPrincipalKind: "user" | "service";
+        /** @description Subject of an authority command: a typed identity or a non-principal relationship subject reference. */
+        AuthoritySubject: components["schemas"]["AuthorityIdentity"] | string;
+        /**
          * @description Typed public payload for `FactsTierRecord.authorizationRejectedRecord` when `event == "wos.governance.authorization_rejected"` (ADR 0070 D-3). Captures who attempted which action against which resource and why policy denied it.
          * @example {
          *       "attemptedAction": "transition:approve",
@@ -1966,6 +2071,15 @@ export interface components {
             /** @description Optional human-readable cancellation reason recorded with the run. */
             reason?: string;
         };
+        /**
+         * @description Closed canonical surface posture derived from a deployment-configured WOS outcome URI. Distinct from FormSpec Core ResponseStatus.
+         * @example accepted
+         * @example returned
+         * @example closed-without-acceptance
+         * @example reopened
+         * @enum {string}
+         */
+        CanonicalDispositionState: "returned" | "accepted" | "closed-without-acceptance" | "reopened";
         /** @description Closed CaseAlternative shape from Governance native reference execution. */
         CaseAlternative: {
             /** @description Scalar replacements evaluated together on a private clone of the retained snapshot. */
@@ -2330,13 +2444,24 @@ export interface components {
         };
         /**
          * CompletionExportJob
-         * @description Durable whole-case completion export job. Exactly three states: running, succeeded, failed.
+         * @description Durable whole-case completion export job with the declarations from its accepted request.
+         * @example {
+         *       "jobId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         *       "processId": "urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db",
+         *       "purpose": "quality-review",
+         *       "recipientClass": "oversight",
+         *       "status": "running"
+         *     }
          */
         CompletionExportJob: {
             /** @description Server-minted export job identity as 32 lowercase hexadecimal characters; the status and download path parameter. */
             jobId: string;
             /** @description Canonical full URN of the actual workflow process. */
             processId: components["schemas"]["ProcessPathIdOneOf0"];
+            /** @description Purpose declared in the accepted request for this job. */
+            purpose: components["schemas"]["CompletionExportVocabularyId"];
+            /** @description Recipient class declared in the accepted request for this job. */
+            recipientClass: components["schemas"]["CompletionExportVocabularyId"];
             /**
              * @description Closed job state: running, succeeded or failed.
              * @constant
@@ -2349,6 +2474,10 @@ export interface components {
             jobId: string;
             /** @description Canonical full URN of the actual workflow process. */
             processId: components["schemas"]["ProcessPathIdOneOf0"];
+            /** @description Purpose declared in the accepted request for this job. */
+            purpose: components["schemas"]["CompletionExportVocabularyId"];
+            /** @description Recipient class declared in the accepted request for this job. */
+            recipientClass: components["schemas"]["CompletionExportVocabularyId"];
             /**
              * @description Closed job state: running, succeeded or failed.
              * @constant
@@ -2364,6 +2493,10 @@ export interface components {
             jobId: string;
             /** @description Canonical full URN of the actual workflow process. */
             processId: components["schemas"]["ProcessPathIdOneOf0"];
+            /** @description Purpose declared in the accepted request for this job. */
+            purpose: components["schemas"]["CompletionExportVocabularyId"];
+            /** @description Recipient class declared in the accepted request for this job. */
+            recipientClass: components["schemas"]["CompletionExportVocabularyId"];
             /**
              * @description Closed job state: running, succeeded or failed.
              * @constant
@@ -2379,13 +2512,44 @@ export interface components {
             jobs: components["schemas"]["CompletionExportJob"][];
         };
         /**
+         * CompletionExportOptions
+         * @description Declared completion-export vocabulary options configured for the admitted scope.
+         * @example {
+         *       "purposes": [
+         *         "quality-review",
+         *         "oversight-transfer"
+         *       ],
+         *       "recipientClasses": [
+         *         "internal",
+         *         "oversight"
+         *       ]
+         *     }
+         */
+        CompletionExportOptions: {
+            /** @description Declared purpose identifiers configured for completion exports in the admitted scope. */
+            purposes: components["schemas"]["CompletionExportVocabularyId"][];
+            /** @description Declared recipient-class identifiers configured for completion exports in the admitted scope. */
+            recipientClasses: components["schemas"]["CompletionExportVocabularyId"][];
+        };
+        /**
          * CompletionExportRequest
-         * @description One actual workflow process selector for a completion export job. The current human credential is a transport input for the request only; the server mints the job identity and a signed job grant.
+         * @description Request to export one workflow process for a declared purpose and recipient class.
+         * @example {
+         *       "processId": "default_process_01hw7rm71vfay8vvw14d2pf2db",
+         *       "purpose": "quality-review",
+         *       "recipientClass": "oversight"
+         *     }
          */
         CompletionExportRequest: {
             /** @description Actual workflow process selected by full process URN or bare process TypeID. */
             processId: components["schemas"]["ProcessPathId"];
+            /** @description Purpose declared by the authenticated requester. The server validates it against the deployment's declared purpose vocabulary and records it with the authorization decision. This declaration grants no authority. */
+            purpose: components["schemas"]["CompletionExportVocabularyId"];
+            /** @description Recipient class declared by the authenticated requester. The server validates it against the deployment's declared recipient-class vocabulary and records it with the authorization decision. This declaration grants no authority. */
+            recipientClass: components["schemas"]["CompletionExportVocabularyId"];
         };
+        /** @description Identifier grammar for members of the deployment's purpose and recipient-class vocabularies. */
+        CompletionExportVocabularyId: string;
         /**
          * @description Canonical reported confidence accompanying native agent output; computed decay, cumulative confidence and floor decisions remain separate evaluation evidence.
          * @example {
@@ -2902,6 +3066,57 @@ export interface components {
          * @example sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
          */
         Digest: string;
+        /**
+         * @description One authorized review comment extracted from the filing's decision record or imported determination.
+         * @example {
+         *       "authorRef": "actor:human:reviewer-1",
+         *       "body": "Supporting verification document requires updated signature date.",
+         *       "id": "comment-1",
+         *       "recordedAt": "2026-11-27T12:00:00Z"
+         *     }
+         */
+        DispositionComment: {
+            /** @description Optional canonical actor URN that authored the comment. */
+            authorRef?: components["schemas"]["ActorRef"];
+            /** @description Authorized human-readable comment recorded with the disposition. */
+            body: string;
+            /** @description Stable identifier of the comment within the decision record. */
+            id: string;
+            /** @description Optional WOS provenance record URN carrying this decision comment. */
+            provenanceRecordRef?: components["schemas"]["WosResourceUrn"];
+            /**
+             * Format: date-time
+             * @description UTC RFC 3339 timestamp when the comment was recorded.
+             */
+            recordedAt: string;
+        };
+        /**
+         * @description Exact filing identity pairing a filed Response identifier with the SHA-256 handoff digest of its canonical immutable bytes (ADR 0170).
+         * @example {
+         *       "responseHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+         *       "responseId": "resp_01j9example0000000000000001"
+         *     }
+         */
+        DispositionFilingKey: {
+            /** @description Exact SHA-256 handoff hash of the immutable filed Response bytes (ADR 0170). */
+            responseHash: string;
+            /** @description Exact filed Response identifier. */
+            responseId: string;
+        };
+        /**
+         * @description Reports whether the deployment's outcome-mapping configuration mapped the recorded outcomeUri to a CanonicalDispositionState (`mapped`) or left it unmapped (`unmapped`, with `state` omitted).
+         * @example mapped
+         * @example unmapped
+         * @enum {string}
+         */
+        DispositionMappingStatus: "mapped" | "unmapped";
+        /**
+         * @description Identifies whether the disposition was read from a native WOS decision record or a scoped imported determination.
+         * @example decision-record
+         * @example imported-determination
+         * @enum {string}
+         */
+        DispositionSourceKind: "decision-record" | "imported-determination";
         /**
          * @description Typed public payload for `driftAlert`. Records an alert threshold crossing from the workflow's drift monitoring policy.
          * @example {
@@ -4739,6 +4954,119 @@ export interface components {
             workflowVersion: string;
         };
         /**
+         * @description Authorized WOS review disposition and decision-record comments verified against exact filing identity (`responseId`, `responseHash`) under ADR 0170.
+         * @example {
+         *       "comments": [],
+         *       "decidedAt": "2026-11-27T12:00:00Z",
+         *       "decidedBy": "actor:human:reviewer-1",
+         *       "mappingStatus": "mapped",
+         *       "outcomeUri": "https://example.org/outcomes/accepted",
+         *       "responseHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+         *       "responseId": "resp_01j9example0000000000000001",
+         *       "sourceKind": "decision-record",
+         *       "state": "accepted"
+         *     }
+         * @example {
+         *       "comments": [],
+         *       "decidedAt": "2026-11-27T12:15:00Z",
+         *       "importedSource": "historical-register-import",
+         *       "mappingStatus": "unmapped",
+         *       "outcomeUri": "https://example.org/outcomes/custom-hold",
+         *       "responseHash": "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+         *       "responseId": "resp_01j9example0000000000000002",
+         *       "sourceKind": "imported-determination"
+         *     }
+         */
+        ReviewDisposition: {
+            /** @description Optional WOS case ledger URN associated with the disposition. */
+            caseLedgerId?: components["schemas"]["WosResourceUrn"];
+            /** @description Authorized comments extracted from the decision record or imported determination. Empty when none were recorded or when `includeComments` is false. */
+            comments: components["schemas"]["DispositionComment"][];
+            /**
+             * Format: date-time
+             * @description UTC RFC 3339 timestamp when this disposition took effect.
+             */
+            decidedAt: string;
+            /** @description Optional canonical actor URN responsible for the recorded disposition. */
+            decidedBy?: components["schemas"]["ActorRef"];
+            /** @description Optional deployment-configured source identifier when `sourceKind` is `imported-determination`. */
+            importedSource?: string;
+            /** @description Indicates whether `outcomeUri` mapped to a canonical surface state (`mapped`) or was unmapped in deployment configuration (`unmapped`). */
+            mappingStatus: components["schemas"]["DispositionMappingStatus"];
+            /**
+             * Format: uri
+             * @description Deployment-configured WOS outcome URI recorded for this filing.
+             */
+            outcomeUri: string;
+            /** @description Optional WOS workflow process URN associated with the disposition. */
+            processId?: components["schemas"]["WosResourceUrn"];
+            /** @description Optional WOS provenance record URN recording the decision. */
+            provenanceRecordRef?: components["schemas"]["WosResourceUrn"];
+            /** @description Verified SHA-256 handoff hash of the immutable filed Response bytes (ADR 0170). */
+            responseHash: string;
+            /** @description Exact filed Response identifier verified against the immutable filing record. */
+            responseId: string;
+            /** @description Source of this disposition (`decision-record` or `imported-determination`). */
+            sourceKind: components["schemas"]["DispositionSourceKind"];
+            /** @description Canonical surface disposition posture mapped from `outcomeUri`. Present when `mappingStatus` is `mapped`; omitted when `mappingStatus` is `unmapped`. */
+            state?: components["schemas"]["CanonicalDispositionState"];
+        };
+        /**
+         * @description Single-filing exact lookup request keyed by `{responseId, responseHash}`.
+         * @example {
+         *       "includeComments": true,
+         *       "responseHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+         *       "responseId": "resp_01j9example0000000000000001"
+         *     }
+         */
+        ReviewDispositionLookupRequest: {
+            /** @description When false, omits decision-record comments (`comments` returns empty). Defaults to true. */
+            includeComments?: boolean;
+            /** @description Exact SHA-256 handoff hash of the immutable filed Response bytes (ADR 0170). */
+            responseHash: string;
+            /** @description Exact filed Response identifier. */
+            responseId: string;
+        };
+        /**
+         * @description Batch lookup request matching `DispositionAuthority` queries over exact `{responseId, responseHash}` filing identities.
+         * @example {
+         *       "filings": [
+         *         {
+         *           "responseHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+         *           "responseId": "resp_01j9example0000000000000001"
+         *         }
+         *       ],
+         *       "includeComments": true
+         *     }
+         */
+        ReviewDispositionQueryRequest: {
+            /** @description Exact filing identities to query within the caller's admitted scope. */
+            filings: components["schemas"]["DispositionFilingKey"][];
+            /** @description When false, omits decision-record comments (`comments` returns empty). Defaults to true. */
+            includeComments?: boolean;
+        };
+        /**
+         * @description Batch response containing only authorized, byte-hash-verified review dispositions matching the requested `{responseId, responseHash}` keys.
+         * @example {
+         *       "items": [
+         *         {
+         *           "comments": [],
+         *           "decidedAt": "2026-11-27T12:00:00Z",
+         *           "mappingStatus": "mapped",
+         *           "outcomeUri": "https://example.org/outcomes/accepted",
+         *           "responseHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+         *           "responseId": "resp_01j9example0000000000000001",
+         *           "sourceKind": "decision-record",
+         *           "state": "accepted"
+         *         }
+         *       ]
+         *     }
+         */
+        ReviewDispositionQueryResponse: {
+            /** @description Verified, authorized review dispositions for matched filings. Unmatched, wrong-hash, or unauthorized filings are excluded without disclosing existence. */
+            items: components["schemas"]["ReviewDisposition"][];
+        };
+        /**
          * @description Closed-with-vendor-extension review-protocol classification (governance §4.1 Protocol Definitions, §4.2 Protocol Combination; workflow-governance.md:248-260). Reserved literals: `independentFirst` (the reviewer's independent assessment MUST be recorded before any agent/upstream recommendation is accessible — §4.2 enforcement obligation); `considerOpposite` (the reviewer is required to consider the opposite outcome before settling); `calibratedConfidence` (the reviewer's confidence is calibrated against historical accuracy); `dualBlind` (two independent reviewers without cross-visibility); `unassisted` (the reviewer is not exposed to upstream recommendations). Vendor extensions MUST use an `^x-[a-z][a-z0-9-]*$` prefix per ADR 0082 D-12.
          * @example independentFirst
          * @example calibratedConfidence
@@ -5225,7 +5553,7 @@ export interface components {
             /** @description Absolute URI of the governing Workflow Document. */
             workflowUrl?: components["schemas"]["WorkflowUrl"];
         };
-        /** @description Opaque resume token returned by the previous page (ADR 0082 D-7). */
+        /** @description Opaque, single-use, scope-and-principal-bound sealed continuation token returned by the previous page (ADR 0082 D-7). Never a decimal offset. */
         TaskListOptionsCursor: string;
         /** @description Exact authored task reference from the authorized native task facts.task_ref. */
         TaskListOptionsTaskRef: string;
@@ -5257,14 +5585,16 @@ export interface components {
          * @enum {unknown}
          */
         TaskOutcomeKind: "submitted" | "completed" | "dismissed" | "expired" | "delegated" | "escalated" | "drafted";
-        /** @description Cursor-paginated task page (ADR 0082 D-7). Items are `TaskListItem` projections for inbox-style consumption. */
+        /** @description Cursor-paginated task page (ADR 0082 D-7). Items are `TaskListItem` projections authorized through the shared authorization coordinator; zero unauthorized totals or offsets are exposed. */
         TaskPage: {
-            /** @description Opaque token for the next page. Omitted when hasMore is false. */
+            /** @description Opaque single-use sealed token for the next page, bound to scope, principal, query filters, sort order, and deployment. Omitted when hasMore is false or searchIncomplete is true. */
             cursor?: string;
-            /** @description True when another page is available from the server. */
+            /** @description True when another authorized page is confirmed available from the server. False when exhausted or when searchIncomplete is true. */
             hasMore: boolean;
-            /** @description Task list items in this page. */
+            /** @description Authorized task list items in this page. */
             items: components["schemas"]["TaskListItem"][];
+            /** @description True when the per-page authorization scan budget was exhausted before establishing whether another authorized page exists. When true, hasMore MUST be false and cursor MUST be omitted; callers retry rather than assuming exhaustion. */
+            searchIncomplete?: boolean;
         };
         /** @description Continues the original committed submission using retained server-side inputs. No new submission or operation key. */
         TaskProgressionContinuation: {
@@ -6410,6 +6740,77 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Problem"];
                 };
+            };
+        };
+    };
+    admitAuthorityCommand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Mutation action: `grant` or `revoke`. */
+                action: components["schemas"]["AuthorityAction"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorityCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Canonical authority change admitted (or idempotently replayed). */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityCommandResponse"];
+                };
+            };
+            /** @description Invalid authority command or missing Idempotency-Key. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Caller is not authorized to administer this relation (`context.reason_code`). */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key belongs to a different authority command. */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authority ledger, policy package, or evaluator unavailable; retry with the same Idempotency-Key. */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -7648,7 +8049,7 @@ export interface operations {
             query?: {
                 /** @description Filter to tasks currently assigned to the supplied actor. Defaults to the calling actor. */
                 assignedActor?: components["schemas"]["ActorRef"] | null;
-                /** @description Opaque resume token returned by the previous page (ADR 0082 D-7). */
+                /** @description Opaque, single-use, scope-and-principal-bound sealed continuation token returned by the previous page (ADR 0082 D-7). Never a decimal offset. */
                 cursor?: components["schemas"]["TaskListOptionsCursor"] | null;
                 /** @description Inclusive UTC RFC 3339 upper bound on `deadline`. Useful for surfacing tasks approaching SLA breach. */
                 deadlineBefore?: string | null;
@@ -7696,8 +8097,32 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Task list access denied */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Case/process binding not found */
             404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sealed cursor expired, replayed, tampered, or bound to a different principal/scope/query */
+            410: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authorization could not reach a decision */
+            503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
@@ -7784,7 +8209,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Job accepted, or the caller's active job for this process. */
+            /** @description Job accepted, or the caller's active job for this process with identical declarations. */
             202: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -7796,7 +8221,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompletionExportJob"];
                 };
             };
-            /** @description Invalid process. */
+            /** @description Invalid process, purpose, or recipientClass. */
             400: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -7804,8 +8229,16 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Current human archive permission refused. */
+            /** @description Current human archive permission refused (`context.reason_code`). */
             403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active completion export already exists for this caller and process with different declarations (`WOS-2409`). */
+            409: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
@@ -7820,7 +8253,52 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Owner, authority or job engine unavailable; retry the request. */
+            /** @description Owner, authority or job engine unavailable (`context.reason_code`, `Retry-After`); retry the request. */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCompletionExportOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Declared completion-export purpose and recipient-class options for the admitted scope. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompletionExportOptions"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Caller is not eligible for completion exports. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scope authorization policy package is unavailable; retry the request. */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8448,7 +8926,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Current human archive permission refused. */
+            /** @description Current human export-status permission refused (`context.reason_code`). */
             403: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8464,7 +8942,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Owner, authority or job engine unavailable; retry the request. */
+            /** @description Owner, authority or job engine unavailable (`context.reason_code`, `Retry-After`); retry the request. */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8506,7 +8984,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Current human archive permission refused. */
+            /** @description Current human export-status permission refused (`context.reason_code`). */
             403: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8530,7 +9008,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Owner, authority or job engine unavailable; retry the request. */
+            /** @description Owner, authority or job engine unavailable (`context.reason_code`, `Retry-After`); retry the request. */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8564,7 +9042,7 @@ export interface operations {
                     "application/zip": string;
                 };
             };
-            /** @description Current human archive permission refused. */
+            /** @description Current human archive release permission refused (`context.reason_code`). */
             403: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8588,7 +9066,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Owner, authority or job engine unavailable; retry the request. */
+            /** @description Owner, authority, decision ledger, or job engine unavailable (`context.reason_code`, `Retry-After`); retry the request. */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8868,12 +9346,142 @@ export interface operations {
             };
         };
     };
+    review_dispositions_lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDispositionLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized, ADR 0170 byte-hash-verified review disposition. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDisposition"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Caller lacks disposition read authorization. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Filing or disposition not found for exact {responseId, responseHash}. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Retained filing evidence failed ADR 0170 byte-hash verification. */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization could not reach a decision. */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    review_dispositions_query: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDispositionQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized, ADR 0170 byte-hash-verified review dispositions. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDispositionQueryResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Caller lacks scope eligibility. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization could not reach a decision. */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     task_list: {
         parameters: {
             query?: {
                 /** @description Filter to tasks currently assigned to the supplied actor. Defaults to the calling actor. */
                 assignedActor?: components["schemas"]["ActorRef"] | null;
-                /** @description Opaque resume token returned by the previous page (ADR 0082 D-7). */
+                /** @description Opaque, single-use, scope-and-principal-bound sealed continuation token returned by the previous page (ADR 0082 D-7). Never a decimal offset. */
                 cursor?: components["schemas"]["TaskListOptionsCursor"] | null;
                 /** @description Inclusive UTC RFC 3339 upper bound on `deadline`. Useful for surfacing tasks approaching SLA breach. */
                 deadlineBefore?: string | null;
@@ -8898,7 +9506,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Cursor-paginated task page. */
+            /** @description Cursor-paginated task page authorized through the shared coordinator. */
             200: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -8910,6 +9518,36 @@ export interface operations {
             };
             /** @description Bearer token missing or invalid. */
             401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Task list access denied. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sealed cursor expired, replayed, tampered, or bound to a different principal/scope/query. */
+            410: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization could not reach a decision. */
+            503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
@@ -8942,8 +9580,28 @@ export interface operations {
                     "application/json": components["schemas"]["Task"];
                 };
             };
+            /** @description Task read denied by coordinator. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Task not found. */
             404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization could not reach a decision. */
+            503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;

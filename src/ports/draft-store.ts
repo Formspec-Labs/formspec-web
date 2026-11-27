@@ -79,20 +79,31 @@ export interface RecoveredDraftInitialization {
 }
 
 export interface DraftProgressSectionPlacement {
-  readonly id?: string;
+  readonly id: string;
   readonly fields: readonly string[];
+}
+
+export interface DraftProgressSummaryDocument {
+  readonly status: 'current';
+  readonly form: Readonly<Record<string, unknown>>;
+  readonly sections: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 export interface DraftProgressSummaryInput {
   readonly sections: readonly DraftProgressSectionPlacement[];
-  readonly progress: unknown;
+  readonly progress: DraftProgressSummaryDocument;
+}
+
+export interface DraftProgressSubjectInput {
+  readonly type: string;
+  readonly keys: Readonly<Record<string, string | number>>;
 }
 
 export interface DraftProgressQueryInput {
   readonly key: string;
   readonly definitionUrl: string;
   readonly definitionVersion: string;
-  readonly subject?: unknown;
+  readonly subject?: DraftProgressSubjectInput;
   readonly draftId?: string;
   readonly sections: readonly DraftProgressSectionPlacement[];
 }
@@ -101,7 +112,7 @@ export interface DraftSaveOptions {
   readonly assertBeforeDispatch?: () => void;
   readonly draftSnapshot?: Record<string, unknown>;
   readonly progressSummary?: DraftProgressSummaryInput | null;
-  readonly draftFence?: { readonly revision: string };
+  readonly draftFence?: { readonly revision: number | string };
 }
 
 export interface DraftRepinInstanceInput {
@@ -109,14 +120,14 @@ export interface DraftRepinInstanceInput {
   readonly priorValueDigest: string;
   readonly priorRecords?: readonly {
     readonly responseId: string;
-    readonly definitionVersion: string;
+    readonly definitionVersion?: string;
     readonly responseHash?: string;
   }[];
 }
 
 export interface DraftRepinOptions {
   readonly expectedDraftVersion?: number;
-  readonly draftFence?: { readonly revision: string };
+  readonly draftFence?: { readonly revision: number | string };
   readonly instances: readonly DraftRepinInstanceInput[];
   readonly refillFields?: readonly string[];
   readonly refillValues?: Readonly<Record<string, unknown>>;

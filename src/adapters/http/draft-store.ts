@@ -287,14 +287,20 @@ export class HttpDraftStore implements DraftStore {
               ? null
               : {
                   sections: options.progressSummary.sections.map((section) => ({
-                    ...(section.id !== undefined ? { id: section.id } : {}),
+                    id: section.id,
                     fields: [...section.fields],
                   })),
-                  progress: snapshotWire(options.progressSummary.progress),
+                  progress: snapshotWire({
+                    status: options.progressSummary.progress.status,
+                    form: { ...options.progressSummary.progress.form },
+                    sections: Object.fromEntries(
+                      Object.entries(options.progressSummary.progress.sections).map(([k, v]) => [k, { ...v }]),
+                    ),
+                  }),
                 },
           }
         : {}),
-      ...(options?.draftFence !== undefined ? { draftFence: { revision: options.draftFence.revision } } : {}),
+      ...(options?.draftFence !== undefined ? { draftFence: { revision: parseDraftFenceRevision(options.draftFence.revision) } } : {}),
     };
     const update = await this.client.patchJson<SourceDraftView>(
       `/drafts/${encodeURIComponent(existing.draftId)}`,
@@ -328,7 +334,7 @@ export class HttpDraftStore implements DraftStore {
     }
     const payload: components['schemas']['RepinDraftCommand'] = {
       expected_draft_version: expectedVersion,
-      ...(options.draftFence !== undefined ? { draftFence: { revision: options.draftFence.revision } } : {}),
+      ...(options.draftFence !== undefined ? { draftFence: { revision: parseDraftFenceRevision(options.draftFence.revision) } } : {}),
       instances: options.instances.map((entry) => ({
         instance: entry.instance,
         prior_value_digest: entry.priorValueDigest,
@@ -336,7 +342,6 @@ export class HttpDraftStore implements DraftStore {
           ? {
               prior_records: entry.priorRecords.map((rec) => ({
                 response_id: rec.responseId,
-                definition_version: rec.definitionVersion,
                 ...(rec.responseHash !== undefined ? { response_hash: rec.responseHash } : {}),
               })),
             }
@@ -389,20 +394,22 @@ export class HttpDraftStore implements DraftStore {
 
   async readDraftProgress(queries: readonly DraftProgressQueryInput[], key?: DraftKey): Promise<Record<string, unknown>> {
     const anonymousSessionToken = key ? await this.resolveAnonymousSessionToken(copyDraftKey(key)) : undefined;
-    const payload: components['schemas']['DraftProgressQueryCommand'] = {
+    const payload: components['schemas']['DraftProgressBatchRequest'] = {
       queries: queries.map((query) => ({
         key: query.key,
         definitionUrl: query.definitionUrl,
         definitionVersion: query.definitionVersion,
-        ...(query.subject !== undefined ? { subject: snapshotWire(query.subject) } : {}),
+        ...(query.subject !== undefined
+          ? { subject: snapshotWire({ type: query.subject.type, keys: { ...query.subject.keys } }) }
+          : {}),
         ...(query.draftId !== undefined ? { draftId: query.draftId } : {}),
         sections: query.sections.map((section) => ({
-          ...(section.id !== undefined ? { id: section.id } : {}),
+          id: section.id,
           fields: [...section.fields],
         })),
       })),
     };
-    const reply = await this.client.postJson<components['schemas']['DraftProgressQueryResponse']>(
+    const reply = await this.client.postJson<components['schemas']['DraftProgressBatchResponse']>(
       '/drafts/progress',
       payload,
       { headers: bearerHeaders(anonymousSessionToken), successStatuses: [200] },
@@ -474,6 +481,15 @@ export function createHttpDraftStore(config: HttpDraftStoreConfig): HttpDraftSto
 
 function bearerHeaders(token: string | undefined): HeadersInit {
   return token ? { authorization: `Bearer ${token}` } : {};
+}
+function parseDraftFenceRevision(revision: number | string): number {
+  const numeric = typeof revision === 'number'
+    ? revision
+    : (/^[0-9]+$/.test(revision) ? Number(revision) : Number.NaN);
+  if (!Number.isSafeInteger(numeric) || numeric < 1) {
+    throw new Error('Draft fence revision must be a positive integer');
+  }
+  return numeric;
 }
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') { for (const child of Object.values(value)) freeze(child); Object.freeze(value); }

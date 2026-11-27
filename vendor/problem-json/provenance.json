@@ -1,8 +1,8 @@
 {
   "sourceRevisions": {
     "stack-common": "22a922d4acd946377b5824cd0af150f10b7f7a92",
-    "formspec-server": "11fa19d24b20ac651d1afe5c963ef5fff421ee4c",
-    "workspec-server": "611f7f19669dac527f309d67b87be59ec748af80"
+    "formspec-server": "ebd20f5b6322cdde69b6557732ac66068464e35a",
+    "workspec-server": "0d62e4d5be7107bb012cac0b214018714e0be4ee"
   },
   "scope": "Problem JSON bodies each provider's own serializer emits, captured by its tests (stack-common-error catalog::assert_golden); decoded by tests/shared/problem-json.",
   "files": {
