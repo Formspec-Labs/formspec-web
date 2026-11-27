@@ -25,6 +25,8 @@ type CanonicalResponse = Record<string, unknown> & { data: Record<string, unknow
 
 interface ResponseView extends Pick<components['schemas']['ResponseView'], 'response_id' | 'accepted_at'> {
   status: 'accepted' | 'queued' | 'rejected';
+  response_hash?: string | null;
+  receipt_id?: string | null;
 }
 
 export class HttpSubmitTransport implements SubmitTransport {
@@ -116,6 +118,10 @@ export class HttpSubmitTransport implements SubmitTransport {
       recordKind: 'response',
       referenceNumber: response.response_id,
       status: response.status,
+      ...(typeof response.receipt_id === 'string' && response.receipt_id.trim().length > 0
+        ? { receiptId: response.receipt_id } : {}),
+      ...(typeof response.response_hash === 'string' && response.response_hash.trim().length > 0
+        ? { responseHash: response.response_hash } : {}),
       ...(isAcceptanceTime(response.accepted_at)
         ? { acceptedAt: response.accepted_at } : {}),
     };

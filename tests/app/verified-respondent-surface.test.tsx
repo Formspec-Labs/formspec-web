@@ -254,6 +254,46 @@ describe('verified respondent Surface integration', () => {
     expect(await screen.findByText('accepted')).toBeDefined();
     expect(screen.getByLabelText('App verification')).toBeDefined();
   });
+
+  it('forwards readServerReceipt into ReceiptPanel for fresh-device receipt hydration', async () => {
+    const fingerprint = `sha256:${'f'.repeat(64)}`;
+    const readServerReceipt = vi.fn(async (caseRef: string) => ({
+      status: 'loaded' as const,
+      recordId: 'rcpt-fresh-99',
+      receipt: {
+        case_ref: caseRef,
+        receipt_id: 'rcpt-fresh-99',
+        accepted_at: '2026-06-15T11:22:33Z',
+        response_hash: fingerprint,
+        status: 'accepted',
+      },
+    }));
+    const fixture = await createFixture({ singletonSubject: true });
+    const emptyStore = createMemoryRespondentReceiptSessionStore();
+    window.history.replaceState({}, '', '/receipt/CASE-FRESH');
+
+    render(
+      <VerifiedRespondentSurface
+        bundleConfig={bundleConfig}
+        composition={fixture.composition}
+        formCompositionFactory={fixture.formCompositionFactory}
+        config={publicPortalProfile}
+        preferredLocales={['en']}
+        sessionStore={emptyStore}
+        readServerReceipt={readServerReceipt}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: 'Your receipt', level: 1 });
+    await waitFor(() => {
+      expect(readServerReceipt).toHaveBeenCalledWith('CASE-FRESH');
+    });
+    const receiptRegion = await screen.findByRole('region', { name: 'Submission receipt' });
+    expect(await within(receiptRegion).findByText('CASE-FRESH')).toBeDefined();
+    expect(await within(receiptRegion).findByText('rcpt-fresh-99')).toBeDefined();
+    expect(await within(receiptRegion).findByText(fingerprint)).toBeDefined();
+    expect(await within(receiptRegion).findByText('accepted')).toBeDefined();
+  });
 });
 
 interface FixtureOptions {
@@ -612,7 +652,9 @@ function signedPayload({ appLocaleVersion = '2.1', singletonSubject, keyedSubjec
             additionalProperties: false,
             properties: {
               caseRef: { type: 'string' },
+              receiptId: { type: 'string' },
               submittedAt: { type: 'string' },
+              fingerprint: { type: 'string' },
               facts: {
                 type: 'array',
                 items: {

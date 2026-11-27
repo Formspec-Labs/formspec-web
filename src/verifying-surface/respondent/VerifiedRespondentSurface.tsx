@@ -17,6 +17,7 @@ import type { FormspecWebConfig, RespondentSurfaceBundleConfig } from '../../con
 import type { Composition } from '../../composition/types.ts';
 import { createDefaultComposition } from '../../composition/default.ts';
 import type { SubmitConfirmation } from '../../ports/submit-transport.ts';
+import type { RespondentReceiptReadResult } from '../../adapters/http/response-receipt.ts';
 import {
   loadSurfaceBundleSchemaValidators,
   loadCanonicalModulePayloadSchemaResources,
@@ -46,6 +47,8 @@ export interface VerifiedRespondentSurfaceProps {
   readonly config: FormspecWebConfig;
   readonly bundleConfig: RespondentSurfaceBundleConfig;
   readonly sessionStore?: RespondentReceiptSessionStore;
+  /** Optional respondent-scoped server receipt reader (`GET /responses/{id}/receipt`) for fresh-device hydration. */
+  readonly readServerReceipt?: (caseRef: string) => Promise<RespondentReceiptReadResult>;
   readonly preferredLocales?: readonly string[];
 }
 
@@ -55,6 +58,7 @@ export function VerifiedRespondentSurface({
   config,
   bundleConfig,
   sessionStore: suppliedSessionStore,
+  readServerReceipt,
   preferredLocales,
 }: VerifiedRespondentSurfaceProps) {
   const [location, navigate] = useBrowserLocation(window.location.pathname);
@@ -105,6 +109,7 @@ export function VerifiedRespondentSurface({
           preferredLocales={preferredLocales}
           receiptResourceUrl={bundleConfig.receiptResourceUrl}
           sessionStore={sessionStore}
+          readServerReceipt={readServerReceipt}
         />
       )}
     />
@@ -120,6 +125,7 @@ interface AdmittedRespondentSurfaceProps extends AdmittedSurfaceRenderInput {
   readonly navigate: (href: string) => void;
   readonly receiptResourceUrl: string;
   readonly sessionStore: RespondentReceiptSessionStore;
+  readonly readServerReceipt?: ((caseRef: string) => Promise<RespondentReceiptReadResult>) | undefined;
   readonly preferredLocales?: readonly string[];
 }
 
@@ -133,6 +139,7 @@ function AdmittedRespondentSurface({
   receiptResourceUrl,
   renderSurface,
   sessionStore,
+  readServerReceipt,
 }: AdmittedRespondentSurfaceProps) {
   const payload = admission.verification.payload;
   const appId = payload.manifest.id;
@@ -157,10 +164,12 @@ function AdmittedRespondentSurface({
       receiptResourceUrl,
       proofRoutes,
       sessionStore,
+      ...(readServerReceipt ? { readServerReceipt } : {}),
     }),
     [
       appId,
       proofRoutes,
+      readServerReceipt,
       receiptResourceUrl,
       releaseIdentity,
       sessionStore,
