@@ -1,6 +1,6 @@
 import type { EvaluatedFormState, FormDefinition, Explanation, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
-import type { SetValueOptions, SubmitEvaluationSnapshot, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import type { SetValueOptions, SubmitEvaluationSnapshot, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState, ResolvedOptionListsSnapshot } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
 import { type LocaleDocument } from '../locale.js';
@@ -61,6 +61,9 @@ export declare class FormEngine implements IFormEngine {
     private readonly _responseSubject;
     private readonly _responseInstanceResolutions;
     private _registryDocuments;
+    private readonly _resolvedOptionSets;
+    private readonly _resolvedOptionUris;
+    private readonly _remoteOptionsAbort;
     private readonly _remoteOptionsTasks;
     private readonly _instanceSourceResolver?;
     private readonly _instanceSourceAbort;
@@ -111,6 +114,7 @@ export declare class FormEngine implements IFormEngine {
     getOptionsState(path: string): RemoteOptionsState;
     getOptionsStateSignal(path: string): EngineSignal<RemoteOptionsState> | undefined;
     waitForRemoteOptions(): Promise<void>;
+    getResolvedOptions(): ResolvedOptionListsSnapshot;
     waitForInstanceSources(): Promise<Readonly<Record<string, InstanceSourceLoadOutcome>>>;
     setInstanceValue(name: string, path: string | undefined, value: FormFieldValue): void;
     getInstanceData(name: string, path?: string): FormFieldValue;
@@ -261,6 +265,8 @@ export declare class FormEngine implements IFormEngine {
     setRegistryEntries(entries: RegistryEntry[]): void;
     migrateResponse(responseData: JsonRecord, fromVersion: string): JsonRecord;
     private nowISO;
+    private seedResolvedOptions;
+    private remoteOptionSetEntry;
     private initializeOptionSignals;
     private initializeInstances;
     /**

@@ -2,6 +2,7 @@ import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-run
 /** @filedesc Lossless frozen Response review with qualified labels and owned attachment previews. */
 import { useCallback, useEffect, useMemo, useRef, useState, } from "react";
 import canonicalize from "canonicalize";
+import { jsonNumberText } from "@formspec-org/engine";
 import { getDraftReviewIrrelevantPaths, isQualifiedDraftReview } from '../internal/draft-review-qualification.js';
 import { canonicalFiniteJson, snapshotFiniteJson, } from "@formspec-org/surface";
 import { Heading, nextLevel } from "../heading.js";
@@ -87,12 +88,12 @@ function isMoneyObject(value) {
     if (keys.length !== 2 || !own(value, "amount") || !own(value, "currency"))
         return false;
     const { amount, currency } = value;
-    const validAmount = (typeof amount === "number" && Number.isFinite(amount)) ||
+    const validAmount = jsonNumberText(amount) !== undefined ||
         (typeof amount === "string" && /^-?\d+(?:\.\d+)?$/.test(amount.trim()));
     return validAmount && typeof currency === "string" && /^[A-Z]{3}$/.test(currency);
 }
 function formatMoneyValue(amount, currency, locale, options) {
-    const rawStr = typeof amount === "number" ? String(amount) : amount.trim();
+    const rawStr = jsonNumberText(amount) ?? (typeof amount === "string" ? amount.trim() : String(amount));
     const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(rawStr);
     const effectiveLocale = locale || "en-US";
     if (match) {
@@ -140,9 +141,9 @@ function formatMoneyValue(amount, currency, locale, options) {
             return `${currency} ${rawStr}`;
         }
     }
-    const num = typeof amount === "number" ? amount : Number(rawStr);
+    const num = Number(rawStr);
     if (!Number.isFinite(num))
-        return `${currency} ${String(amount)}`;
+        return `${currency} ${rawStr}`;
     try {
         return new Intl.NumberFormat(effectiveLocale, {
             style: "currency",
@@ -184,9 +185,11 @@ function formatDateValue(value, locale) {
         return `${month}/${day}/${year}`;
     }
 }
-function isYearIntegerField(value, node) {
-    if (!Number.isInteger(value) ||
-        value < 1900 ||
+function isYearIntegerField(rawDigits, node) {
+    if (!/^\d{4}$/.test(rawDigits))
+        return false;
+    const value = Number(rawDigits);
+    if (value < 1900 ||
         value > 2199 ||
         node.currency ||
         node.prefix ||
@@ -200,24 +203,45 @@ function isYearIntegerField(value, node) {
     return (/\b(?:fiscal|calendar|tax|birth|reporting|program|grant|school|award|graduation|model|plan)\s+year\b|^\s*year\b|\byear\s*(?:\([^)]*\))?\s*:?\s*$/i.test(node.label) ||
         /(?:^|[_-])(?:year|fy)(?:$|[_-])|year$/i.test(leafKey));
 }
-function formatNumericValue(value, node, locale) {
-    if (node.currency || node.prefix === "$") {
-        return formatMoneyValue(value, node.currency ?? "USD", locale);
-    }
-    if (isYearIntegerField(value, node)) {
-        return String(value);
-    }
-    const effectiveLocale = locale || "en-US";
-    let formatted;
+/**
+ * Format an exact decimal/integer string with locale integer grouping via BigInt while preserving
+ * every stored fractional digit verbatim (never rounds through IEEE-754 float or fixed max decimals).
+ */
+function formatExactDecimalText(rawDigits, effectiveLocale) {
+    const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(rawDigits);
+    if (!match)
+        return rawDigits;
+    const [, sign, intPart, fracPart] = match;
+    let groupedInt = intPart;
+    let decimalSep = ".";
     try {
-        formatted = new Intl.NumberFormat(effectiveLocale, {
-            maximumFractionDigits: node.precision ?? 4,
-        }).format(value);
+        groupedInt = new Intl.NumberFormat(effectiveLocale, {
+            useGrouping: true,
+        }).format(BigInt(intPart));
+        if (fracPart !== undefined) {
+            const parts = new Intl.NumberFormat(effectiveLocale).formatToParts(1.1);
+            decimalSep = parts.find((part) => part.type === "decimal")?.value ?? ".";
+        }
     }
     catch {
-        formatted = String(value);
+        groupedInt = intPart;
+        decimalSep = ".";
     }
-    const inferredPercent = !node.suffix &&
+    return fracPart !== undefined
+        ? `${sign}${groupedInt}${decimalSep}${fracPart}`
+        : `${sign}${groupedInt}`;
+}
+function formatNumericValue(rawDigits, node, locale, options) {
+    if (node.currency || node.prefix === "$") {
+        return formatMoneyValue(rawDigits, node.currency ?? "USD", locale, options);
+    }
+    if (isYearIntegerField(rawDigits, node)) {
+        return rawDigits;
+    }
+    const effectiveLocale = locale || "en-US";
+    const formatted = formatExactDecimalText(rawDigits, effectiveLocale);
+    const inferredPercent = !options?.lossless &&
+        !node.suffix &&
         node.dataType === "decimal" &&
         /(?:\(%|\bpercentage\b|%)/i.test(node.label);
     const suffix = node.suffix ?? (inferredPercent ? "%" : undefined);
@@ -611,8 +635,9 @@ function Value({ node, copy, phase, locale, }) {
     if (isMoneyObject(v)) {
         return (_jsx("span", { className: "fs-response-review-number", children: formatMoneyValue(v.amount, v.currency, locale ?? "en-US", { lossless: !isDraftReview }) }));
     }
-    if (typeof v === "number" && isDraftReview) {
-        return (_jsx("span", { className: "fs-response-review-number", children: formatNumericValue(v, node, locale ?? "en-US") }));
+    const numericText = jsonNumberText(v);
+    if (numericText !== undefined) {
+        return (_jsx("span", { className: "fs-response-review-number", children: formatNumericValue(numericText, node, locale ?? "en-US", { lossless: !isDraftReview }) }));
     }
     if (typeof v === "string") {
         const option = node.options?.filter((o) => o.value === v);

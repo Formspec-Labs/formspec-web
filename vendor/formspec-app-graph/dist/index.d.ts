@@ -1,6 +1,6 @@
 /** @filedesc Public exports for the AppGraphValidator report kernel. */
 export * from './types.js';
-export { definitionPublicationReports } from './definition-publication.js';
+export { definitionPublicationReports, type DefinitionPublicationReportsOptions } from './definition-publication.js';
 export { widgetActionScopeMatches, CANONICAL_RESPONSE_SCHEMA_REF, type WidgetActionScopeInput } from './widget-action-scope.js';
 export { artifactIdentityKey, compareDiagnostics, createAppGraphReport, diagnosticSourceForHandle, normalizeDiagnostics, type CreateAppGraphReportInput, } from './report.js';
 export { componentNodeIdentityKey, type AppGraphComponentMembershipIdentity, type AppGraphComponentNodeIdentity, } from './component-identity.js';

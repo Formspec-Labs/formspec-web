@@ -59,6 +59,9 @@ export class FormEngine {
         this._pendingExplanationState = null;
         this._pendingSubmitEvaluation = null;
         this._registryDocuments = [];
+        this._resolvedOptionSets = Object.create(null);
+        this._resolvedOptionUris = Object.create(null);
+        this._remoteOptionsAbort = new AbortController();
         this._remoteOptionsTasks = [];
         this._instanceSourceAbort = new AbortController();
         this._pendingInstanceSources = new Set();
@@ -163,6 +166,9 @@ export class FormEngine {
                 }
             }
             this._registryDocuments = [{ entries: registryEntries }];
+        }
+        if (options.resolvedOptions) {
+            this.seedResolvedOptions(options.resolvedOptions);
         }
         this.initializeOptionSignals();
         this.initializeInstances(options.loadExternalSources !== false);
@@ -275,6 +281,17 @@ export class FormEngine {
     }
     async waitForRemoteOptions() {
         await Promise.allSettled(this._remoteOptionsTasks);
+    }
+    getResolvedOptions() {
+        const optionSets = {};
+        for (const name of Object.keys(this._resolvedOptionSets).sort()) {
+            optionSets[name] = [...new Set(this._resolvedOptionSets[name].map((entry) => entry.value))].sort();
+        }
+        const uris = {};
+        for (const uri of Object.keys(this._resolvedOptionUris).sort()) {
+            uris[uri] = [...new Set(this._resolvedOptionUris[uri].map((entry) => entry.value))].sort();
+        }
+        return { optionSets, uris };
     }
     async waitForInstanceSources() {
         await Promise.allSettled(this._instanceSourceTasks);
@@ -1496,6 +1513,7 @@ export class FormEngine {
     dispose() {
         this._disposed = true;
         this._instanceSourceAbort.abort();
+        this._remoteOptionsAbort.abort();
         // The only owned WASM allocation is the resident FEL context; signals need no teardown.
         this._felContext?.handle.free();
         this._felContext = null;
@@ -1522,13 +1540,61 @@ export class FormEngine {
     nowISO() {
         return this._runtimeContext.nowProvider().toISOString();
     }
+    seedResolvedOptions(input) {
+        const normalizeList = (entries) => entries.map((entry) => (typeof entry === 'string'
+            ? { value: entry, label: entry }
+            : {
+                value: String(entry.value),
+                label: String(entry.label),
+                ...(entry.keywords && entry.keywords.length > 0 ? { keywords: [...entry.keywords] } : {}),
+                ...(entry['x-generation'] ? { 'x-generation': entry['x-generation'] } : {}),
+            }));
+        for (const [name, entries] of Object.entries(input.optionSets ?? {})) {
+            this._resolvedOptionSets[name] = normalizeList(entries);
+        }
+        for (const [uri, entries] of Object.entries(input.uris ?? {})) {
+            this._resolvedOptionUris[uri] = normalizeList(entries);
+        }
+    }
+    remoteOptionSetEntry(name) {
+        if (!name)
+            return null;
+        const set = this.definition.optionSets?.[name];
+        if (!set || Array.isArray(set) || typeof set !== 'object')
+            return null;
+        const source = set.source;
+        if (typeof source !== 'string' || source.length === 0)
+            return null;
+        const valueField = typeof set.valueField === 'string'
+            ? set.valueField
+            : undefined;
+        const labelField = typeof set.labelField === 'string'
+            ? set.labelField
+            : undefined;
+        return { source, valueField, labelField };
+    }
     initializeOptionSignals() {
-        const visit = (items, prefix = '') => {
-            for (const item of items) {
-                const path = prefix ? `${prefix}.${item.key}` : item.key;
-                if (item.type === 'field') {
-                    const options = Array.isArray(item.options)
-                        ? item.options.map((option) => {
+        const resolvedDef = resolveOptionSetsOnDefinition(this.definition);
+        const visit = (authoredItems, resolvedItems, prefix = '') => {
+            for (let index = 0; index < authoredItems.length; index += 1) {
+                const authored = authoredItems[index];
+                const resolved = resolvedItems[index] ?? authored;
+                const path = prefix ? `${prefix}.${authored.key}` : authored.key;
+                if (authored.type === 'field') {
+                    const authoredOptions = authored.options;
+                    const remoteSet = this.remoteOptionSetEntry(authored.optionSet);
+                    let options;
+                    if (remoteSet && authored.optionSet) {
+                        const supplied = this._resolvedOptionSets[authored.optionSet]
+                            ?? this._resolvedOptionUris[remoteSet.source];
+                        options = supplied ? cloneValue(supplied) : [];
+                    }
+                    else if (!authored.optionSet && typeof authoredOptions === 'string' && authoredOptions.length > 0) {
+                        const supplied = this._resolvedOptionUris[authoredOptions];
+                        options = supplied ? cloneValue(supplied) : [];
+                    }
+                    else if (Array.isArray(resolved.options)) {
+                        options = resolved.options.map((option) => {
                             const base = {
                                 value: String(option.value),
                                 label: String(option.label),
@@ -1544,18 +1610,21 @@ export class FormEngine {
                                     return { ...base, keywords };
                             }
                             return base;
-                        })
-                        : [];
+                        });
+                    }
+                    else {
+                        options = [];
+                    }
                     this.optionSignals[path] = this._rx.signal(options);
                     this.optionStateSignals[path] = this._rx.signal({ loading: false, error: null });
                 }
-                if (item.children) {
-                    visit(item.children, path);
+                if (authored.children) {
+                    visit(authored.children, resolved.children ?? [], path);
                 }
             }
         };
         // Resolve a display-only copy; evaluation always receives the authored Definition.
-        visit(resolveOptionSetsOnDefinition(this.definition).items);
+        visit(this.definition.items, resolvedDef.items);
     }
     initializeInstances(loadExternalSources) {
         const instances = this.definition.instances;
@@ -1800,15 +1869,69 @@ export class FormEngine {
         }
     }
     initializeRemoteOptions() {
-        for (const bind of Object.values(this._bindConfigs)) {
-            if (!bind.remoteOptions) {
+        const pathsByOptionSet = new Map();
+        const pathsByUri = new Map();
+        const collect = (items, prefix = '') => {
+            for (const item of items) {
+                const path = prefix ? `${prefix}.${item.key}` : item.key;
+                if (item.type === 'field') {
+                    const rawOptions = item.options;
+                    const declaredSet = item.optionSet && this.definition.optionSets?.[item.optionSet];
+                    if (declaredSet && item.optionSet) {
+                        if (this.remoteOptionSetEntry(item.optionSet)) {
+                            const list = pathsByOptionSet.get(item.optionSet) ?? [];
+                            list.push(path);
+                            pathsByOptionSet.set(item.optionSet, list);
+                        }
+                    }
+                    else if (!item.optionSet && typeof rawOptions === 'string' && rawOptions.length > 0) {
+                        const list = pathsByUri.get(rawOptions) ?? [];
+                        list.push(path);
+                        pathsByUri.set(rawOptions, list);
+                    }
+                }
+                if (item.children) {
+                    collect(item.children, path);
+                }
+            }
+        };
+        collect(this.definition.items);
+        const signal = this._remoteOptionsAbort.signal;
+        const setPathsState = (paths, nextState) => {
+            for (const path of paths) {
+                const state = this.optionStateSignals[path] ?? this._rx.signal({ loading: false, error: null });
+                this.optionStateSignals[path] = state;
+                state.value = nextState;
+            }
+        };
+        const setPathsOptions = (paths, options) => {
+            for (const path of paths) {
+                this.optionSignals[path] = this.optionSignals[path] ?? this._rx.signal([]);
+                this.optionSignals[path].value = cloneValue(options);
+            }
+        };
+        // 1. URL-backed top-level optionSets (Core §4.6), including sets referenced only by a Summary.
+        for (const name of Object.keys(this.definition.optionSets ?? {})) {
+            const remoteSet = this.remoteOptionSetEntry(name);
+            if (!remoteSet)
+                continue;
+            const paths = pathsByOptionSet.get(name) ?? [];
+            if (Object.prototype.hasOwnProperty.call(this._resolvedOptionSets, name)) {
+                setPathsOptions(paths, this._resolvedOptionSets[name]);
                 continue;
             }
-            const path = toBasePath(bind.path);
-            const state = this.optionStateSignals[path] ?? this._rx.signal({ loading: false, error: null });
-            this.optionStateSignals[path] = state;
-            state.value = { loading: true, error: null };
-            const task = fetch(bind.remoteOptions)
+            if (Object.prototype.hasOwnProperty.call(this._resolvedOptionUris, remoteSet.source)) {
+                this._resolvedOptionSets[name] = cloneValue(this._resolvedOptionUris[remoteSet.source]);
+                setPathsOptions(paths, this._resolvedOptionSets[name]);
+                continue;
+            }
+            const fetchUrl = FormEngine.resolveInstanceSource(remoteSet.source);
+            if (!fetchUrl) {
+                setPathsState(paths, { loading: false, error: 'Unsupported remote options source' });
+                continue;
+            }
+            setPathsState(paths, { loading: true, error: null });
+            const task = fetch(fetchUrl, { signal })
                 .then((response) => {
                 if (!response.ok) {
                     throw new Error(`Remote options fetch failed (${response.status})`);
@@ -1816,17 +1939,63 @@ export class FormEngine {
                 return response.json();
             })
                 .then((payload) => {
-                const options = normalizeRemoteOptions(payload);
-                this.optionSignals[path] = this.optionSignals[path] ?? this._rx.signal([]);
-                this.optionSignals[path].value = options;
-                state.value = { loading: false, error: null };
+                if (this._disposed)
+                    return;
+                const options = normalizeRemoteOptions(payload, {
+                    valueField: remoteSet.valueField,
+                    labelField: remoteSet.labelField,
+                });
+                this._resolvedOptionSets[name] = cloneValue(options);
+                this._resolvedOptionUris[remoteSet.source] = cloneValue(options);
+                setPathsOptions(paths, options);
+                setPathsState(paths, { loading: false, error: null });
                 this._evaluate();
             })
                 .catch((error) => {
-                state.value = {
+                if (this._disposed)
+                    return;
+                setPathsState(paths, {
                     loading: false,
                     error: error instanceof Error ? error.message : String(error),
-                };
+                });
+            });
+            this._remoteOptionsTasks.push(task);
+        }
+        // 2. URI-string Item.options (Core §4.2.3).
+        for (const [uri, paths] of pathsByUri.entries()) {
+            if (Object.prototype.hasOwnProperty.call(this._resolvedOptionUris, uri)) {
+                setPathsOptions(paths, this._resolvedOptionUris[uri]);
+                continue;
+            }
+            const fetchUrl = FormEngine.resolveInstanceSource(uri);
+            if (!fetchUrl) {
+                setPathsState(paths, { loading: false, error: 'Unsupported remote options source' });
+                continue;
+            }
+            setPathsState(paths, { loading: true, error: null });
+            const task = fetch(fetchUrl, { signal })
+                .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Remote options fetch failed (${response.status})`);
+                }
+                return response.json();
+            })
+                .then((payload) => {
+                if (this._disposed)
+                    return;
+                const options = normalizeRemoteOptions(payload);
+                this._resolvedOptionUris[uri] = cloneValue(options);
+                setPathsOptions(paths, options);
+                setPathsState(paths, { loading: false, error: null });
+                this._evaluate();
+            })
+                .catch((error) => {
+                if (this._disposed)
+                    return;
+                setPathsState(paths, {
+                    loading: false,
+                    error: error instanceof Error ? error.message : String(error),
+                });
             });
             this._remoteOptionsTasks.push(task);
         }
@@ -2072,6 +2241,7 @@ export class FormEngine {
             previousResult,
             instances: this.instanceData,
             registryDocuments: this._registryDocuments,
+            resolvedOptions: this.getResolvedOptions(),
             subjectType: this._responseSubject && (this._responseSubject.type ?? null),
             subjectKeys: this._responseSubject?.keys,
         }), this._extensionFunctions);
@@ -2146,6 +2316,7 @@ export class FormEngine {
             explanations: this._explanations.value,
             instances: options.instances ?? this.instanceData,
             registryDocuments: this._registryDocuments,
+            resolvedOptions: this.getResolvedOptions(),
             subjectType: this._responseSubject && (this._responseSubject.type ?? null),
             subjectKeys: this._responseSubject?.keys,
         }), this._extensionFunctions);

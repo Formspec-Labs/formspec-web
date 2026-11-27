@@ -1,7 +1,7 @@
 /** @filedesc WASM definition-eval payload, EvalResult merge, and validation merge. */
 import type { EvalResult, EvalValidation } from '../diff.js';
 import type { DraftExplanation } from './warning-explanations.js';
-import type { ResponseSubjectKeys } from '../interfaces.js';
+import type { ResolvedOptionListsInput, ResponseSubjectKeys } from '../interfaces.js';
 /** Options object consumed by the WASM definition evaluator (JSON-serialized internally). */
 export declare function wasmEvaluateDefinitionPayload(options: {
     nowIso: string;
@@ -9,6 +9,7 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     previousResult: Pick<EvalResult, 'nonRelevant'> | null;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];
+    resolvedOptions?: ResolvedOptionListsInput;
     subjectType?: string | null;
     subjectKeys?: ResponseSubjectKeys;
     explanations?: DraftExplanation[];
@@ -18,6 +19,7 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     previousNonRelevant: string[] | undefined;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];
+    resolvedOptions?: ResolvedOptionListsInput;
     subjectType?: string | null;
     subjectKeys?: ResponseSubjectKeys;
     explanations?: DraftExplanation[];

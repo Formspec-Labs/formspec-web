@@ -8,6 +8,10 @@ export declare function currencyMinFractionDigits(code: string): number;
  * converting through IEEE-754 floats (preserves arbitrary-precision fractional digits verbatim).
  */
 export declare function formatMoneyDisplay(raw: string, currencyCode: string): string;
+/** Resolve ISO 4217 currency code (e.g. "USD") to its narrow symbol (e.g. "$"). */
+export declare function toCurrencySymbol(code: string, locale?: string): string;
+/** Losslessly format a monetary amount with its narrow currency symbol without IEEE-754 float rounding. */
+export declare function formatExactCurrency(raw: string, currencyCode: string, locale?: string): string;
 /** Strip thousands commas (and optional pasted currency symbol/whitespace) when the entry is numeric. */
 export declare function normalizeMoneyInput(raw: string, currencySymbol: string): string;
 /**

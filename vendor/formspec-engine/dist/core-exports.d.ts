@@ -1,6 +1,6 @@
 /** @filedesc Render-safe public surface shared by `index.ts` and `engine-render-entry.ts` — no FEL tooling facade or tools bridge (ADR 0050 §8). */
 import type { FormBind, FormDefinition, FormInstance, FormItem, FormShape, FormVariable, OptionEntry, ValidationReport as FormspecValidationReport, ValidationResult as FormspecValidationResult } from '@formspec-org/types';
-export type { AuthoredSignatureInput, AuthoredSignatureSignedPayload, AssemblyProvenance, AssemblyResult, ComponentDocument, ComponentObject, DefinitionResolver, DocumentType, EngineNowInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, ExtensionUsageIssue, FELAnalysis, FELAnalysisError, FELBuiltinFunctionCatalogEntry, FELRewriteOptions, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, IFormEngine, InstanceSourceRequest, InstanceSourceResult, InstanceSourceLoadOutcome, InstanceSourceResolver, IRuntimeMappingEngine, MappingDiagnostic, MappingDirection, PinnedResponseReference, RegistryEntry, RemoteOptionsState, RewriteMap, RuntimeMappingResult, SchemaValidationError, SchemaValidationResult, SchemaValidator, SchemaValidatorSchemas, SetValueOptions, SubmitEvaluationSnapshot, WriteSource, } from './interfaces.js';
+export type { AuthoredSignatureInput, AuthoredSignatureSignedPayload, AssemblyProvenance, AssemblyResult, ComponentDocument, ComponentObject, DefinitionResolver, DocumentType, EngineNowInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, ExtensionUsageIssue, FELAnalysis, FELAnalysisError, FELBuiltinFunctionCatalogEntry, FELRewriteOptions, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, IFormEngine, InstanceSourceRequest, InstanceSourceResult, InstanceSourceLoadOutcome, InstanceSourceResolver, IRuntimeMappingEngine, MappingDiagnostic, MappingDirection, PinnedResponseReference, RegistryEntry, RemoteOptionsState, ResolvedOptionListsInput, ResolvedOptionListsSnapshot, RewriteMap, RuntimeMappingResult, SchemaValidationError, SchemaValidationResult, SchemaValidator, SchemaValidatorSchemas, SetValueOptions, SubmitEvaluationSnapshot, WriteSource, } from './interfaces.js';
 export { isStamped, matchesEntry, sameAnswer, type DraftExplanation, type ExplanationFinding, type ExplanationKey, type ExplanationState, } from './engine/warning-explanations.js';
 export type { EvalDiagnostic } from './diff.js';
 export type { FelExtensionFunctionRegistration } from './extension-functions.js';
@@ -15,10 +15,8 @@ export { RESPONSE_ACTIONS_EFFECT_TIME_BINDINGS, RESPONSE_ACTIONS_PRECONDITION_BI
 export type { CatalogValidationResult, PreconditionCatalogEntry, } from './precondition-catalog.js';
 /** @deprecated Use `FormItem` from `@formspec-org/types`. Removed in v1. */
 export type FormspecItem = FormItem;
-/** @deprecated Use `FormBind` from `@formspec-org/types` (and the engine's `RemoteOptionsState` for remote options). Removed in v1. */
-export type FormspecBind = FormBind & {
-    remoteOptions?: string;
-};
+/** @deprecated Use `FormBind` from `@formspec-org/types` (and URI `Item.options` / URL-backed `optionSets` for remote options). Removed in v1. */
+export type FormspecBind = FormBind;
 /** @deprecated Use `FormShape` from `@formspec-org/types`. Removed in v1. */
 export type FormspecShape = FormShape;
 /** @deprecated Use `FormVariable` from `@formspec-org/types`. Removed in v1. */
@@ -52,7 +50,7 @@ export { jsonNumberText, parseJsonNumber, jsonValueText } from './json-values.js
 export type { ExactJsonNumber } from './json-values.js';
 export { clampJsonNumber, stepJsonNumber } from './numeric-input.js';
 export { cloneValue as cloneJsonValue } from './json-values.js';
-export { wasmCanonicalizeResponseData as canonicalizeResponseData, wasmCreateResponse as createResponse, wasmCreateRepeatRow as createRepeatRow, } from './wasm-bridge-runtime.js';
+export { wasmAssembleCandidate as assembleCandidate, wasmCanonicalizeResponseData as canonicalizeResponseData, wasmCreateResponse as createResponse, wasmCreateRepeatRow as createRepeatRow, } from './wasm-bridge-runtime.js';
 /**
  * Core's filing-unit id from a subject type and typed keys, using runtime WASM only. For hosts that
  * key storage by subject before an engine exists; `FormEngine` derives `Response.subject.id` itself.

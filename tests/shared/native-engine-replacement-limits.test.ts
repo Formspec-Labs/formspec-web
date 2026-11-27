@@ -30,9 +30,8 @@ describe('native replacement capability and abort limits', () => {
 
   it('releases host abort while a real remote-options fetch remains pending and observes its late completion', async () => {
     const form = definition();
-    // Existing public engine remote-options behavior is not included in generated FormBind types.
-    const bind: NonNullable<FormDefinition['binds']>[number] & { remoteOptions: string } = { path: 'parent', remoteOptions: 'https://options.example/values' };
-    form.binds = [bind];
+    form.optionSets = { remote: { source: 'https://options.example/values' } };
+    form.items.push({ type: 'field', key: 'remoteChoice', label: 'Remote Choice', dataType: 'choice', optionSet: 'remote' });
     let finish!: (response: Response) => void;
     const fetch = vi.fn().mockResolvedValueOnce(new Response('[]')).mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }));
     vi.stubGlobal('fetch', fetch);

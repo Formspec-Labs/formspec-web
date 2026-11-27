@@ -4,7 +4,7 @@ export { cloneValue, deepEqual, isJsonRecord } from '../json-values.js';
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { Path, PathSegmentKind } from '@formspec-org/types';
 import { wasmCoerceFieldValue, wasmEvalFel, wasmNormalizeIndexedPath, } from '../wasm-bridge-runtime.js';
-export function normalizeRemoteOptions(payload) {
+export function normalizeRemoteOptions(payload, mapping) {
     const record = payload !== null && typeof payload === 'object'
         ? payload
         : null;
@@ -16,12 +16,14 @@ export function normalizeRemoteOptions(payload) {
     if (!options) {
         throw new Error('Remote options response must be an array or { options: [...] }');
     }
+    const valueField = mapping?.valueField || 'value';
+    const labelField = mapping?.labelField || 'label';
     return options
-        .filter((option) => !!option && typeof option === 'object' && 'value' in option && 'label' in option)
+        .filter((option) => !!option && typeof option === 'object' && valueField in option && labelField in option)
         .map((option) => {
         const base = {
-            value: String(option.value),
-            label: String(option.label),
+            value: String(option[valueField]),
+            label: String(option[labelField]),
             ...(option['x-generation'] && typeof option['x-generation'] === 'object'
                 ? { 'x-generation': option['x-generation'] }
                 : {}),

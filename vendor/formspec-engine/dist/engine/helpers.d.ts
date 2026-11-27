@@ -5,12 +5,14 @@ import type { FormBind, FormDefinition, FormItem, OptionEntry, ValidationResult 
 import type { EvalValidation } from '../diff.js';
 import type { FormEngineRuntimeContext, FormFieldValue, JsonRecord, JsonValue, MappingDiagnostic, RuntimeMappingResult } from '../interfaces.js';
 export type EngineBindConfig = FormBind & {
-    remoteOptions?: string;
     precision?: number;
     disabledDisplay?: 'hidden' | 'protected';
 };
 type RuntimeNowInput = Date | string | number;
-export declare function normalizeRemoteOptions(payload: unknown): OptionEntry[];
+export declare function normalizeRemoteOptions(payload: unknown, mapping?: {
+    valueField?: string;
+    labelField?: string;
+}): OptionEntry[];
 export declare function makeValidationResult(result: Pick<ValidationResult, 'path' | 'severity' | 'constraintKind' | 'code' | 'message' | 'source'> & Partial<Pick<ValidationResult, 'shapeId' | 'context'>>): ValidationResult;
 /** Paths stay resolved instance paths with 0-based indexes (Core §4.3.3), exactly as WASM emits them. */
 export declare function toValidationResult(result: EvalValidation): ValidationResult;
