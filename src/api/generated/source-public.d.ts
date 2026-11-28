@@ -630,6 +630,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/responses/exact-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exact_read_response"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/responses/exact-read/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["list_pinned_responses"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/responses/export": {
         parameters: {
             query?: never;
@@ -1688,6 +1720,52 @@ export interface components {
          *      </details>
          */
         ErrorCode: string;
+        /**
+         * @description Exact filing pin identifying a completed Response by `(responseId, responseHash)` and optional
+         *     Definition URL/version pins.
+         */
+        ExactRecordPin: {
+            /** @description Optional pinned Definition URL that must match the filed Response. */
+            expectedDefinitionUrl?: string | null;
+            /** @description Optional pinned Definition version that must match the filed Response. */
+            expectedDefinitionVersion?: string | null;
+            /** @description Exact ADR 0170 canonical SHA-256 handoff digest (`sha256:<64-hex>`). */
+            responseHash: string;
+            /** @description Exact stored Response identifier. */
+            responseId: string;
+        };
+        /** @description Request body for `POST /responses/exact-read` (`fs-8s94`). */
+        ExactRecordReadRequest: {
+            /** @description Optional pinned Definition URL that must match the filed Response. */
+            expectedDefinitionUrl?: string | null;
+            /** @description Optional pinned Definition version that must match the filed Response. */
+            expectedDefinitionVersion?: string | null;
+            /** @description Exact ADR 0170 canonical SHA-256 handoff digest (`sha256:<64-hex>`). */
+            responseHash: string;
+            /** @description Exact stored Response identifier. */
+            responseId: string;
+        };
+        /** @description Verified response returned by `POST /responses/exact-read`. */
+        ExactRecordReadView: {
+            /** @description UTC RFC 3339 timestamp when Source accepted the filing. */
+            acceptedAt: string;
+            /** @description Exact verbatim canonical Response JSON preserving ADR 0170 decimal numbers. */
+            canonicalResponse: Record<string, unknown>;
+            /** @description Exact Definition URL of the filed Response. */
+            definitionUrl: string;
+            /** @description Exact Definition version of the filed Response. */
+            definitionVersion: string;
+            /** @description Published form version identifier of the filed Response. */
+            formVersionId: string;
+            /** @description Completed pinned child/referenced Response citations recorded in `resolvedInstances[]`. */
+            pinnedReferences: components["schemas"]["PinnedResponseReference"][];
+            /** @description Verified ADR 0170 canonical SHA-256 handoff hash. */
+            responseHash: string;
+            /** @description Exact stored Response identifier. */
+            responseId: string;
+            /** @description Verified ADR 0172 subject identity of the filed Response. */
+            subject: components["schemas"]["FilingSubject"];
+        };
         FeatureStateView: {
             exposure_state: string;
             feature_key: string;
@@ -1757,8 +1835,8 @@ export interface components {
             /**
              * @description String or integer identity keys matching exactly the Definition subject declaration. Integers must lie in the I-JSON interoperable range (RFC 7493 section 2.2). An empty object identifies a per-scope singleton. Scope is not a key.
              * @example {
-             *       "ffy": 2026,
-             *       "uei": "A"
+             *       "orgId": "A",
+             *       "period": 2026
              *     }
              */
             keys: {
@@ -1771,8 +1849,8 @@ export interface components {
             /**
              * @description String or integer identity keys matching exactly the Definition subject declaration. Integers must lie in the I-JSON interoperable range (RFC 7493 section 2.2). An empty object identifies a per-scope singleton. Scope is not a key.
              * @example {
-             *       "ffy": 2026,
-             *       "uei": "A"
+             *       "orgId": "A",
+             *       "period": 2026
              *     }
              */
             keys: {
@@ -1884,6 +1962,65 @@ export interface components {
             intent_type: string;
             outbox_job_id: string;
             status: string;
+        };
+        /** @description One authorized, ADR 0170 byte-hash-verified item returned by `POST /responses/exact-read/list`. */
+        PinnedRecordListItem: {
+            acceptedAt: string;
+            /** @description Present only when `includeCanonicalResponse` is `true`; verbatim ADR 0170 Response JSON. */
+            canonicalResponse?: Record<string, unknown> | null;
+            definitionUrl: string;
+            definitionVersion: string;
+            formVersionId: string;
+            /** @description Owning `resolvedInstances[].instance` name when listed from a parent Response. */
+            instance?: string | null;
+            responseHash: string;
+            responseId: string;
+            subject: components["schemas"]["FilingSubject"];
+        };
+        /** @description Verified parent summary returned when `POST /responses/exact-read/list` is queried by `parent`. */
+        PinnedRecordParentSummary: {
+            definitionUrl: string;
+            definitionVersion: string;
+            responseHash: string;
+            responseId: string;
+        };
+        /**
+         * @description Request body for `POST /responses/exact-read/list` (`fs-8s94`).
+         *
+         *     Callers supply exactly one of `parent` (to list pinned child/referenced records cited inside a
+         *     filed parent Response) or `records` (1..=100 explicit pinned `{responseId, responseHash}` items).
+         */
+        PinnedRecordsListRequest: {
+            /** @description When `true`, includes verbatim ADR 0170 `canonicalResponse` JSON on each returned item. */
+            includeCanonicalResponse?: boolean | null;
+            /** @description Optional `resolvedInstances[].instance` filter when `parent` is provided. */
+            instance?: string | null;
+            parent?: components["schemas"]["ExactRecordPin"] | null;
+            /** @description Explicit batch of exact pinned `{responseId, responseHash}` references (1..=100). */
+            records?: components["schemas"]["ExactRecordPin"][] | null;
+        };
+        /**
+         * @description Response returned by `POST /responses/exact-read/list`.
+         *
+         *     Carries ONLY authorized, ADR 0170 hash-verified items and zero counts over unentitled rows.
+         */
+        PinnedRecordsListView: {
+            items: components["schemas"]["PinnedRecordListItem"][];
+            parent?: components["schemas"]["PinnedRecordParentSummary"] | null;
+        };
+        /**
+         * @description Completed child/referenced Response citation extracted from a filed parent Response's
+         *     `resolvedInstances[]`.
+         */
+        PinnedResponseReference: {
+            /** @description Pinned Definition version recorded in `resolvedInstances[]`. */
+            definitionVersion: string;
+            /** @description Owning Definition instance name under `resolvedInstances[]`. */
+            instance: string;
+            /** @description Pinned ADR 0170 canonical SHA-256 handoff hash recorded in `resolvedInstances[]`. */
+            responseHash: string;
+            /** @description Pinned child/referenced Response identifier. */
+            responseId: string;
         };
         PostSubmitPreviewCommand: {
             response_data: Record<string, unknown>;
@@ -4973,6 +5110,156 @@ export interface operations {
                 };
             };
             /** @description Storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exact_read_response: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExactRecordReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized, ADR 0170 byte-hash-verified exact filed Response */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExactRecordReadView"];
+                };
+            };
+            /** @description Verified authenticated principal required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Pinned response not found or caller lacks read authorization */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Exact responseHash or Definition pin mismatch, or stored byte verification conflict */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid exact-record read request */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization or storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_pinned_responses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedRecordsListRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized, ADR 0170 byte-hash-verified pinned child/referenced Responses */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedRecordsListView"];
+                };
+            };
+            /** @description Verified authenticated principal required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Pinned parent response not found or caller lacks read authorization */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Parent responseHash or Definition pin mismatch, or stored byte verification conflict */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid pinned-records list request */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authorization or storage unavailable */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
