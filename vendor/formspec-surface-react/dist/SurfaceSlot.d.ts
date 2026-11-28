@@ -9,7 +9,7 @@ import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourceSelect
 import type { DraftSession } from './draft-session.js';
 import type { DraftActionInvoker } from './draft-writer.js';
 import { nextLevel } from './heading.js';
-import { type FilingStatusViewContext } from './FilingStatus.js';
+import { type FormStatusViewContext } from './FormStatus.js';
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetRouteContext } from './widget-api.js';
 import { type WidgetActionCoordinator } from './widget-action-runtime.js';
 export type ResolvedDefinitionFormPlan = Extract<SlotPlan<SurfaceWidget>, {
@@ -46,7 +46,7 @@ export interface SurfaceDefinitionFormRenderInput {
     route: SurfaceWidgetRouteContext;
     /** Resolved shell strings for the active locale. */
     strings: SurfaceStrings;
-    /** The filing-unit type and typed keys, with the ID derived by Core in runtime WASM. */
+    /** The subject type and typed keys, with the ID derived by Core in runtime WASM. */
     responseSubject?: (NonNullable<FormEngineOptions['responseSubject']> & {
         id: string;
     }) | undefined;
@@ -136,7 +136,7 @@ export interface SurfaceSemanticControlPairing {
  */
 export declare function createSurfaceSemanticControlScopeResolver(pairing: SurfaceSemanticControlPairing): SurfaceSemanticControlScopeResolver;
 export interface SurfaceSlotProps {
-    filingStatus?: FilingStatusViewContext | undefined;
+    formStatus?: FormStatusViewContext | undefined;
     formSession?: SurfaceFormSession | undefined;
     activeSection?: string | undefined;
     focusField?: string | undefined;
@@ -228,6 +228,6 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * landmark — which is the honest shape for a slot the author did not name.
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function SurfaceSlot({ plan, filingStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, embedSlotPrefix, onSlotFormEngineChange, onSlotVisibilityChange, overviewDestination, reviewDestination, onSlotDraftAvailabilityChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, focusField, sectionNavigationActive, }: SurfaceSlotProps): ReactNode;
+export declare function SurfaceSlot({ plan, formStatus, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, embedSlotPrefix, onSlotFormEngineChange, onSlotVisibilityChange, overviewDestination, reviewDestination, onSlotDraftAvailabilityChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, focusField, sectionNavigationActive, }: SurfaceSlotProps): ReactNode;
 export declare function renderDefaultDefinitionForm(input: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

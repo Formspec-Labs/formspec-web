@@ -5,7 +5,7 @@ import { resolvePageSequence } from '@formspec-org/layout';
 import { definitionResponseRequests, resolveDefinitionReads, responseDeliveries } from './definition-response-reads.js';
 import { readSubmitEvaluation, summarizeDraftProgress } from './draft-progress.js';
 import { createDraftWriter, readCommittedExplanationsAtRevision, } from './draft-writer.js';
-/** Key a draft by Core's filing-unit id; runtime WASM only. */
+/** Key a draft by Core's subject id; runtime WASM only. */
 export async function deriveDraftSubject(subject) {
     if (!subject)
         return undefined;

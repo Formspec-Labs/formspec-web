@@ -91,7 +91,7 @@ export function DraftDefinitionForm({ input, session, children, }) {
         let release;
         const opening = latest.current;
         const ready = async () => {
-            // The planned subject names the filing unit; a renderer-supplied id never keys the draft.
+            // The planned subject names the subject; a renderer-supplied id never keys the draft.
             const subject = await deriveDraftSubject(opening.plan.subject);
             if (!active)
                 return;
@@ -203,7 +203,7 @@ export function DraftDefinitionForm({ input, session, children, }) {
     if (open.status === 'filed') {
         const filing = open.filing;
         const badgeLabel = filingStatusLabel(filing.status, strings);
-        return (_jsxs("section", { className: "fs-surface-filed-summary", "data-filing-status": filing.status, "aria-labelledby": messageId, children: [_jsxs("div", { className: "fs-surface-filed-summary__header", children: [_jsx("span", { className: "fs-surface-filing__badge", "data-filing-status": filing.status, children: badgeLabel }), _jsx("p", { id: messageId, className: "fs-surface-filed-summary__lead", children: filingBannerLead(filing.status) })] }), _jsxs("p", { className: "fs-surface-filing__meta fs-surface-filed-summary__receipt", "data-receipt-ref": "", children: ["Receipt reference: ", _jsx(FormattedReceiptRef, { reference: filing.receiptRef })] }), filing.sample && (_jsx("p", { className: "fs-surface-filing__meta", children: strings(filing.sample === 'fixture' ? 'filingFixture' : 'filingPreviewSubmit') })), filing.comments.length > 0 && (_jsx("div", { className: "fs-surface-filed-summary__comments", children: filing.comments.map((comment, index) => (_jsx("p", { className: "fs-surface-filing__comment", children: comment }, index))) })), _jsxs("div", { className: "fs-surface-filed-summary__actions", children: [reviewDest && reviewHref && (_jsx("a", { className: "fs-surface-action-link fs-surface-action-link--primary", href: reviewHref, onClick: event => {
+        return (_jsxs("section", { className: "fs-surface-filed-summary", "data-filing-status": filing.status, "aria-labelledby": messageId, children: [_jsxs("div", { className: "fs-surface-filed-summary__header", children: [_jsx("span", { className: "fs-surface-filing__badge", "data-filing-status": filing.status, children: badgeLabel }), _jsx("p", { id: messageId, className: "fs-surface-filed-summary__lead", children: filingBannerLead(filing.status) })] }), _jsxs("p", { className: "fs-surface-filing__meta fs-surface-filed-summary__receipt", "data-receipt-ref": "", children: ["Receipt reference: ", _jsx(FormattedReceiptRef, { reference: filing.receiptRef })] }), filing.sample && (_jsx("p", { className: "fs-surface-filing__meta", children: strings(filing.sample === 'fixture' ? 'formStatusFixture' : 'formStatusPreviewSubmit') })), filing.comments.length > 0 && (_jsx("div", { className: "fs-surface-filed-summary__comments", children: filing.comments.map((comment, index) => (_jsx("p", { className: "fs-surface-filing__comment", children: comment }, index))) })), _jsxs("div", { className: "fs-surface-filed-summary__actions", children: [reviewDest && reviewHref && (_jsx("a", { className: "fs-surface-action-link fs-surface-action-link--primary", href: reviewHref, onClick: event => {
                                 if (!navigate || !isPlainLinkClick(event))
                                     return;
                                 event.preventDefault();

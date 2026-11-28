@@ -50,7 +50,7 @@ export function resolveLocalDefinitionForm(routes, routeRef, slotRef) {
     return { route, slot: slot };
 }
 /** Walk entries by their authored owner. Used for reverse references in editors. */
-export function filingStatusEntries(binding) {
+export function formStatusEntries(binding) {
     const groups = record(binding)?.groups;
     if (!Array.isArray(groups))
         return [];
@@ -69,7 +69,7 @@ export function filingStatusEntries(binding) {
  * Validate exact local targets and bind their parameters. A caller supplying
  * current params also checks for collisions that can only appear at runtime.
  */
-export function resolveFilingStatusTargets(routes, source, binding, currentParams) {
+export function resolveFormStatusTargets(routes, source, binding, currentParams) {
     const issues = [];
     const authored = record(binding)?.groups;
     if (!Array.isArray(authored) || authored.length === 0) {
@@ -300,7 +300,7 @@ function subjectSourceIdentity(target, definition) {
     return { ok: true, identity: JSON.stringify([subject.type, sources, predicates]) };
 }
 /** Every member must address a distinct authored subject through an entry parameter or predicate. */
-export function filingRepeatSubjectBound(entry, binding, definition) {
+export function formStatusRepeatSubjectBound(entry, binding, definition) {
     const keys = record(record(record(definition)?.subject)?.keys);
     const mapping = record(record(binding)?.subjectKeys);
     const boundByParam = Object.keys(keys ?? {}).some(key => {
@@ -312,7 +312,7 @@ export function filingRepeatSubjectBound(entry, binding, definition) {
     return (entry.subject ?? []).some(predicate => Boolean(keys && Object.prototype.hasOwnProperty.call(keys, predicate.key))
         && typeof record(predicate.from)?.rowField === 'string');
 }
-function filingRepeatFieldIssues(group, groupPointer, schema, targets) {
+function formStatusRepeatFieldIssues(group, groupPointer, schema, targets) {
     const repeat = group.repeat;
     if (!repeat)
         return [{ pointer: `${groupPointer}/repeat`, reason: 'invalid-repeat-source' }];
@@ -377,10 +377,10 @@ function filingRepeatFieldIssues(group, groupPointer, schema, targets) {
     return issues;
 }
 /** Admit only an explicit array of records with the scalar fields the group consumes. */
-export function filingRepeatFieldsValid(group, schema, targets) {
-    return filingRepeatFieldIssues(group, '', schema, targets).length === 0;
+export function formStatusRepeatFieldsValid(group, schema, targets) {
+    return formStatusRepeatFieldIssues(group, '', schema, targets).length === 0;
 }
-export function validateFilingStatusTargets(context) {
+export function validateFormStatusTargets(context) {
     const diagnostics = [];
     const definitionsByUrl = new Map();
     for (const handle of context.handles) {
@@ -399,9 +399,9 @@ export function validateFilingStatusTargets(context) {
             continue;
         const routes = surface.routes;
         routes.forEach((route, routeIndex) => route.slots.forEach((slot, slotIndex) => {
-            if (slot.slotType !== 'filing-status')
+            if (slot.slotType !== 'form-status')
                 return;
-            const resolved = resolveFilingStatusTargets(routes, route, slot.binding);
+            const resolved = resolveFormStatusTargets(routes, route, slot.binding);
             const emitted = new Set();
             const report = ({ pointer, reason, key }) => {
                 const dedupeKey = JSON.stringify([pointer, reason, key ?? null]);
@@ -409,11 +409,11 @@ export function validateFilingStatusTargets(context) {
                     return;
                 emitted.add(dedupeKey);
                 diagnostics.push({
-                    code: 'APP-GRAPH-FILING-STATUS-TARGET', severity: 'error', origin: 'app-graph-validator',
+                    code: 'APP-GRAPH-FORM-STATUS-TARGET', severity: 'error', origin: 'app-graph-validator',
                     phase: 'cross-artifact',
                     message: key
-                        ? `Filing-status slot '${slot.id}' cannot resolve subject key '${key}' (${reason}).`
-                        : `Filing-status slot '${slot.id}' cannot resolve its forms (${reason}).`,
+                        ? `Form-status slot '${slot.id}' cannot resolve subject key '${key}' (${reason}).`
+                        : `Form-status slot '${slot.id}' cannot resolve its forms (${reason}).`,
                     primarySource: diagnosticSourceForHandle(handle, `/routes/${routeIndex}/slots/${slotIndex}/binding${pointer}`),
                     details: { reason },
                 });
@@ -451,7 +451,7 @@ export function validateFilingStatusTargets(context) {
                         report({ pointer: pointer + '/repeat', reason: 'invalid-repeat-source' });
                     }
                     else {
-                        for (const issue of filingRepeatFieldIssues(group, pointer, descriptor?.schema, forms)) {
+                        for (const issue of formStatusRepeatFieldIssues(group, pointer, descriptor?.schema, forms)) {
                             report(issue);
                         }
                     }
@@ -464,7 +464,7 @@ export function validateFilingStatusTargets(context) {
                         : [];
                     if (group.repeat) {
                         const candidates = loadedDefinitions.length ? loadedDefinitions : [undefined];
-                        if (candidates.some(definition => !filingRepeatSubjectBound(target.entry, target.slot.binding, definition))) {
+                        if (candidates.some(definition => !formStatusRepeatSubjectBound(target.entry, target.slot.binding, definition))) {
                             report({ pointer: target.pointer, reason: 'ambiguous-repeat' });
                         }
                     }

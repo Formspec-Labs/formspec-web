@@ -1,6 +1,6 @@
 import { exactDefinitionResolution } from './data-sources.js';
 import { diagnosticSourceForHandle } from './report.js';
-import { resolveLocalDefinitionForm } from './filing-status-targets.js';
+import { resolveLocalDefinitionForm } from './form-status-targets.js';
 import { ownProp } from './surface-widgets.js';
 function record(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : undefined;

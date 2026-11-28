@@ -38,7 +38,7 @@ import { type SurfaceDiagnostic } from './diagnostics.js';
 import type { SurfaceRoute } from './route-path.js';
 import { type SurfaceApp, type SurfaceRouteHandle } from './composition.js';
 import { type DraftStartPlan } from './draft-start.js';
-import { type FilingSectionLocaleLookup, type FilingStatusPlan } from './filing-status.js';
+import { type FormStatusSectionLocaleLookup, type FormStatusPlan } from './form-status.js';
 import type { ThemeAuthority } from './theme-authority.js';
 import { type ExperienceDocumentHandle, type ExperienceUnitPlan } from './experience-unit.js';
 import { type HeadingLevel, type StaticContentPlan, type SurfaceStaticAssetResolver } from './static-content.js';
@@ -80,8 +80,8 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     slotType: 'draft-start';
     start: DraftStartPlan | undefined;
 } | {
-    slotType: 'filing-status';
-    tracker: FilingStatusPlan;
+    slotType: 'form-status';
+    tracker: FormStatusPlan;
 } | {
     slotType: 'experience-unit';
     unit: ExperienceUnitPlan;
@@ -125,10 +125,10 @@ export interface SlotPlanContext<TComponent> {
     params?: Readonly<Record<string, string>> | undefined;
     screenerHandles?: readonly ScreenerDocumentHandle[] | undefined;
     resolveDefinitionComponent?: SurfaceDefinitionComponentResolver | undefined;
-    filingStatus?: {
+    formStatus?: {
         app: SurfaceApp;
         themeAuthority: ThemeAuthority;
-        resolveDefinitionLocaleString?: FilingSectionLocaleLookup | undefined;
+        resolveDefinitionLocaleString?: FormStatusSectionLocaleLookup | undefined;
     };
     experiences: readonly ExperienceDocument[];
     /** Exact manifested source identity for qualified Experience bindings. */
@@ -198,7 +198,7 @@ export interface RoutePlan<TComponent> {
     bands?: readonly {
         routeId: string;
         slot: Extract<SlotPlan<TComponent>, {
-            slotType: 'filing-status';
+            slotType: 'form-status';
         }>;
     }[];
     diagnostics: readonly SurfaceDiagnostic[];

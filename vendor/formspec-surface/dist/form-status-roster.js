@@ -1,6 +1,6 @@
-/** @filedesc Expands qualified roster rows into ordinary subject-keyed filing destinations. */
+/** @filedesc Expands qualified roster rows into ordinary subject-keyed form-status destinations. */
 import { generationNeedAnchors } from './need-trace.js';
-import { filingRepeatFieldsValid, filingRepeatSubjectBound, resolveFilingStatusTargets } from '@formspec-org/app-graph';
+import { formStatusRepeatFieldsValid, formStatusRepeatSubjectBound, resolveFormStatusTargets } from '@formspec-org/app-graph';
 import { dataSourceLoadRequest, loadWidgetDataInputs, resolveDataSourceDescriptor } from './data-source-loader.js';
 function own(value, field) {
     if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.hasOwn(value, field))
@@ -52,13 +52,13 @@ function memberForms(group, member) {
     const [first, ...rest] = forms;
     return first && [first, ...rest];
 }
-export function planFilingRoster(input, planFixed) {
+export function planFormStatusRoster(input, planFixed) {
     const binding = input.binding;
     const authored = own(binding, 'groups');
     if (!Array.isArray(authored) || !authored.some(group => own(group, 'repeat') !== undefined))
         return;
     const refuse = (reason) => ({ status: 'unresolved', reason });
-    const template = resolveFilingStatusTargets(input.handle.surface.routes, input.bindingRoute, binding);
+    const template = resolveFormStatusTargets(input.handle.surface.routes, input.bindingRoute, binding);
     if (template.issues.length)
         return refuse(template.issues[0].reason);
     const context = {
@@ -83,9 +83,9 @@ export function planFilingRoster(input, planFixed) {
             const ref = own(slot.binding, 'definitionRef');
             return { entry, binding: slot.binding, definition: typeof ref === 'string' ? input.definitions.get(ref) : undefined };
         });
-        if (!filingRepeatFieldsValid(group, descriptor.source.schema, forms))
+        if (!formStatusRepeatFieldsValid(group, descriptor.source.schema, forms))
             return refuse('invalid-repeat-source');
-        if (!forms.every(form => filingRepeatSubjectBound(form.entry, form.binding, form.definition)))
+        if (!forms.every(form => formStatusRepeatSubjectBound(form.entry, form.binding, form.definition)))
             return refuse('ambiguous-repeat');
         const source = descriptor.source;
         const definition = source.definitionRef && input.definitions.get(source.definitionRef);

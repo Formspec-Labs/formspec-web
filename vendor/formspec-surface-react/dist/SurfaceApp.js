@@ -540,7 +540,7 @@ export function SurfaceAppView(props) {
                                     event.preventDefault();
                                     onNavigate(entryPath);
                                 }, children: appTitle })
-                            : _jsx("span", { className: "fs-surface-brand", ...brandTrace, children: appTitle }))), browser && (browser.editionPicker || hostAppearance === undefined) && (_jsxs("div", { className: "fs-surface-masthead-controls", children: [browser.editionPicker, hostAppearance === undefined && browser.appearancePicker] })), browser && (_jsx("p", { className: "fs-surface-save-notice", role: browser.saveNoticeLive === false ? undefined : "status", children: browser.saveNotice }))] }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: navigationParams, onNavigate: onNavigate, resolveNavigationHref: props.resolveNavigationHref, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { ref: main, id: "fs-surface-main", tabIndex: -1, className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, formSession: formSession, overviewDestination: overviewDestination, bandPreferenceScope: JSON.stringify([bundle.manifest.id, props.viewerPreferenceKey, browser?.previewScope]), filingStatus: {
+                            : _jsx("span", { className: "fs-surface-brand", ...brandTrace, children: appTitle }))), browser && (browser.editionPicker || hostAppearance === undefined) && (_jsxs("div", { className: "fs-surface-masthead-controls", children: [browser.editionPicker, hostAppearance === undefined && browser.appearancePicker] })), browser && (_jsx("p", { className: "fs-surface-save-notice", role: browser.saveNoticeLive === false ? undefined : "status", children: browser.saveNotice }))] }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: navigationParams, onNavigate: onNavigate, resolveNavigationHref: props.resolveNavigationHref, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { ref: main, id: "fs-surface-main", tabIndex: -1, className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, formSession: formSession, overviewDestination: overviewDestination, bandPreferenceScope: JSON.stringify([bundle.manifest.id, props.viewerPreferenceKey, browser?.previewScope]), formStatus: {
                                 readSummaries: props.readSummaries,
                                 revision: props.filingDraftRevision,
                                 navigate: (href) => browser ? browser.navigate(href) : onNavigate(href),
@@ -578,11 +578,11 @@ function SurfaceDocumentTitle({ title }) {
     }, [title]);
     return null;
 }
-function filingStatusGroupRouteRefs(handle, repeatOnly) {
+function formStatusGroupRouteRefs(handle, repeatOnly) {
     const refs = [];
     let isFilingHub = false;
     for (const slot of handle.route.slots ?? []) {
-        if (slot.slotType !== "filing-status")
+        if (slot.slotType !== "form-status")
             continue;
         const binding = slot.binding;
         if (!binding || typeof binding !== "object" || !Array.isArray(binding.groups))
@@ -663,7 +663,7 @@ function resolveOverviewDestination(app, routePlan, fallbackEntryPath, navigatio
                 return parentHref;
         }
     }
-    // 2. Nearest addressable filing-status overview hub in the same surface and scope
+    // 2. Nearest addressable form-status overview hub in the same surface and scope
     //    (path prefix affinity -> direct reference -> repeat reference -> entry -> declaration order).
     const candidates = [];
     app.routes.forEach((candidate, order) => {
@@ -672,8 +672,8 @@ function resolveOverviewDestination(app, routePlan, fallbackEntryPath, navigatio
             routeNavigationScope(candidate) !== scope) {
             return;
         }
-        const nonRepeat = filingStatusGroupRouteRefs(candidate, false);
-        const repeat = filingStatusGroupRouteRefs(candidate, true);
+        const nonRepeat = formStatusGroupRouteRefs(candidate, false);
+        const repeat = formStatusGroupRouteRefs(candidate, true);
         if (!nonRepeat.isFilingHub && !repeat.isFilingHub)
             return;
         const href = resolveCandidateHref(candidate);
@@ -726,11 +726,11 @@ function buildNavTree(routes) {
                 parentOf.set(handle, parent);
         }
     }
-    // Pass 2: score filing-status hub candidates (path prefix affinity -> non-repeat -> declared order)
+    // Pass 2: score form-status hub candidates (path prefix affinity -> non-repeat -> declared order)
     const candidatesByChild = new Map();
     routes.forEach((hub, hubOrder) => {
         for (const repeatOnly of [false, true]) {
-            const { isFilingHub, refs } = filingStatusGroupRouteRefs(hub, repeatOnly);
+            const { isFilingHub, refs } = formStatusGroupRouteRefs(hub, repeatOnly);
             if (isFilingHub)
                 filingHubs.add(hub);
             for (const routeRef of refs) {

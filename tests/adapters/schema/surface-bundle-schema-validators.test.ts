@@ -405,10 +405,10 @@ describe('loadSurfaceBundleSchemaValidators', () => {
         } }],
       }] },
     };
-    const filingStatus = {
+    const formStatus = {
       artifactKind: 'surface', schemaId: SURFACE_SCHEMA_ID,
-      document: { $formspecSurface: '0.4', id: 'filing', entry: 'overview', routes: [
-        { id: 'overview', path: '/', slots: [{ id: 'tracker', slotType: 'filing-status', binding: {
+      document: { $formspecSurface: '0.4', id: 'status', entry: 'overview', routes: [
+        { id: 'overview', path: '/', slots: [{ id: 'tracker', slotType: 'form-status', binding: {
           groups: [{ id: 'annual', label: 'Annual forms', forms: [{ routeRef: 'apply', slotRef: 'capture' }] }],
         } }] },
         { id: 'apply', path: '/apply', slots: [{ id: 'capture', slotType: 'definition-form', binding: {
@@ -416,7 +416,7 @@ describe('loadSurfaceBundleSchemaValidators', () => {
         } }] },
       ] },
     };
-    for (const artifact of [old, screener, filingStatus]) {
+    for (const artifact of [old, screener, formStatus]) {
       expect(validateArtifact(validate, { ...artifact, schemaId: undefined }).ok).toBe(true);
       expect(validateArtifact(validate, artifact).ok).toBe(true);
     }
@@ -440,7 +440,7 @@ describe('loadSurfaceBundleSchemaValidators', () => {
     }).ok).toBe(false);
     for (const version of ['0.2', '0.3']) {
       expect(validateArtifact(validate, {
-        ...filingStatus, document: { ...filingStatus.document, $formspecSurface: version },
+        ...formStatus, document: { ...formStatus.document, $formspecSurface: version },
       }).ok).toBe(false);
     }
   });

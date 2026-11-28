@@ -16,7 +16,7 @@ export interface SurfaceDraftStorage {
         name?: string;
     };
 }
-/** Key a draft by Core's filing-unit id; runtime WASM only. */
+/** Key a draft by Core's subject id; runtime WASM only. */
 export declare function deriveDraftSubject(subject: DataSourceSubject | undefined): Promise<DraftKey['subject']>;
 export type FiledObservation = Extract<MatchedFilingObservation, {
     receiptRef: string;

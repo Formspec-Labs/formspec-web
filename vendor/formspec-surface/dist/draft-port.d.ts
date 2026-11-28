@@ -1,6 +1,6 @@
 /** @filedesc Qualified draft storage and progress reads for Surface hosts. */
 import type { DraftExplanation } from '@formspec-org/engine';
-import type { DecidedDisposition, DraftProgressCounts, DraftProgressSummary, Explanation, FilingStatusSubjectPredicate, FormDefinition, ResolvedInstanceRecord, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
+import type { DecidedDisposition, DraftProgressCounts, DraftProgressSummary, Explanation, FormStatusSubjectPredicate, FormDefinition, ResolvedInstanceRecord, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
 import type { DataSourceSubject } from './data-source-loader.js';
 export interface DraftKey {
     scope: string;
@@ -10,28 +10,28 @@ export interface DraftKey {
         id: string;
     }) | undefined;
 }
-export type FilingProgressCounts = Readonly<DraftProgressCounts>;
+export type FormProgressCounts = Readonly<DraftProgressCounts>;
 export interface DraftSectionPlacement {
     id?: string;
     fields: readonly string[];
 }
-export interface FilingSubjectPredicate {
+export interface FormSubjectPredicate {
     key: string;
-    op: FilingStatusSubjectPredicate['op'];
+    op: FormStatusSubjectPredicate['op'];
     value: string | number;
 }
-export interface FilingSubjectMatch {
+export interface FormSubjectMatch {
     type: string;
-    predicates: readonly FilingSubjectPredicate[];
+    predicates: readonly FormSubjectPredicate[];
 }
-export interface FilingDraftQuery {
+export interface FormStatusQuery {
     /** Correlates a result to this Definition, subject, and section plan within the batch. */
     key: string;
     definitionUrl: string;
     definitionVersion: string;
     subject?: DataSourceSubject;
-    /** Selects a single filing unit by subject-key predicates when the URL does not supply every key directly. */
-    subjectMatch?: FilingSubjectMatch;
+    /** Selects a single subject by subject-key predicates when the URL does not supply every key directly. */
+    subjectMatch?: FormSubjectMatch;
     sections: readonly DraftSectionPlacement[];
 }
 export type CurrentDraftProgress = DraftProgressSummary;
@@ -42,10 +42,10 @@ export type CurrentDraftProgress = DraftProgressSummary;
  * represented by the closed schema yields `undefined` so the caller stores no counts.
  */
 export declare function canonicalDraftProgress(value: unknown, allowedSectionIds?: ReadonlySet<string> | readonly string[]): CurrentDraftProgress | undefined;
-export type MatchedFilingDraftObservation = CurrentDraftProgress | {
+export type MatchedFormStatusDraftObservation = CurrentDraftProgress | {
     status: 'absent' | 'stale' | 'unavailable';
 };
-export type FilingDraftObservation = MatchedFilingDraftObservation | {
+export type FormStatusDraftObservation = MatchedFormStatusDraftObservation | {
     status: 'denied';
 };
 export type MatchedFilingObservation = {
@@ -64,15 +64,15 @@ export type MatchedFilingObservation = {
 export type FilingObservation = MatchedFilingObservation | {
     status: 'denied';
 };
-export type FilingStatusObservation = {
-    draft: FilingDraftObservation;
+export type FormStatusObservation = {
+    draft: FormStatusDraftObservation;
     filing: FilingObservation;
     subject?: undefined;
     subjectMatch?: undefined;
 } | {
-    draft: MatchedFilingDraftObservation;
+    draft: MatchedFormStatusDraftObservation;
     filing: MatchedFilingObservation;
-    /** Resolved filing unit when the query used `subjectMatch`. */
+    /** Resolved subject when the query used `subjectMatch`. */
     subject: DataSourceSubject;
     subjectMatch: 'matched';
 } | {
@@ -85,11 +85,11 @@ export type FilingStatusObservation = {
     subject?: undefined;
     subjectMatch: 'none' | 'ambiguous';
 };
-export declare function matchesFilingSubjectPredicates(definition: FormDefinition, subject: DataSourceSubject | undefined, match: FilingSubjectMatch): boolean;
-export type FilingStatusReader = (queries: readonly FilingDraftQuery[], input: {
+export declare function matchesFormSubjectPredicates(definition: FormDefinition, subject: DataSourceSubject | undefined, match: FormSubjectMatch): boolean;
+export type StatusReader = (queries: readonly FormStatusQuery[], input: {
     previewScope: string | undefined;
     signal: AbortSignal;
-}) => Promise<ReadonlyMap<string, FilingStatusObservation>>;
+}) => Promise<ReadonlyMap<string, FormStatusObservation>>;
 export interface DraftRecord {
     /** Opaque compare-and-save token, unique across discard and recreation. */
     revision: string;
@@ -207,13 +207,13 @@ export interface DraftPort {
     start?(input: DraftStartInput): Promise<DraftStartResult>;
     /** Authorize before looking up a draft or disclosing its pin. */
     load(key: DraftKey, definitionVersion: string, signal?: AbortSignal): Promise<DraftLoadResult>;
-    /** Authorize and load the latest completed filing (response JSON + decision observation) for this filing unit. */
+    /** Authorize and load the latest completed filing (response JSON + decision observation) for this subject. */
     loadFiling?(key: DraftKey, definitionVersion: string, signal?: AbortSignal): Promise<FilingLoadResult>;
     /** Compare the revision and commit both draft pieces and progress atomically. */
     save(input: DraftSaveInput): Promise<DraftSaveResult>;
     /** Explicitly re-pin declared `at-open` response instances against the expected draft revision (Core §4260). */
     repinDraft?(input: DraftRepinInput, signal?: AbortSignal): Promise<DraftRepinResult>;
-    readSummaries: FilingStatusReader;
+    readSummaries: StatusReader;
 }
 /** Browser preview operations beyond normal draft reads and saves. */
 export interface BrowserDraftPort extends DraftPort {

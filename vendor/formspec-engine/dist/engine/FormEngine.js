@@ -92,7 +92,7 @@ export class FormEngine {
         const { runtimeContext, registryEntries, reactiveRuntime = preactReactiveRuntime, issuerFetcher, issuerOverride, extensionFunctions, } = options;
         this._instanceSourceResolver = options.instanceSourceResolver;
         this._responseSubject = cloneValue(options.responseSubject ?? undefined);
-        // A declared filing unit's id is Core's hash of its keys, never the host's claim.
+        // A declared subject's id is Core's hash of its keys, never the host's claim.
         if (this._responseSubject && definition.subject)
             delete this._responseSubject.id;
         if (this._responseSubject && !definition.subject && this._responseSubject.id === undefined) {
@@ -1167,7 +1167,7 @@ export class FormEngine {
     captureSnapshotInternal(meta, validationProfile, allowPendingExplanationStamps) {
         this.assertNoRemovedModeOption(meta, 'getResponse');
         if (meta?.subject && (this._responseSubject || this.definition.subject || 'keys' in meta.subject)) {
-            throw new Error('Supply filing-unit identity through the responseSubject constructor option');
+            throw new Error('Supply subject identity through the responseSubject constructor option');
         }
         // A refused subject has no Core id; its Response would be schema-invalid, so none is emitted.
         const subjectRefusal = this.subjectRefusal();

@@ -1,47 +1,47 @@
 import type { FormDefinition } from '@formspec-org/types';
 import { type SurfaceApp, type SurfaceRouteHandle } from './composition.js';
 import type { DataSourceCatalogHandle, DataSourceLoadRequest, LoadWidgetDataInputsRequest, DataSourceSubject } from './data-source-loader.js';
-import { type FilingDraftQuery } from './draft-port.js';
+import { type FormStatusQuery } from './draft-port.js';
 import type { SurfaceDefinitionComponentResolver } from './slot-plan.js';
 import type { SurfaceRoute } from './route-path.js';
 import type { ThemeAuthority } from './theme-authority.js';
-export type FilingSectionLocaleLookup = (definition: FormDefinition, key: string) => string | null;
-export interface FilingStatusSectionPlan {
+export type FormStatusSectionLocaleLookup = (definition: FormDefinition, key: string) => string | null;
+export interface FormStatusSectionPlan {
     id: string;
     label: string;
     href?: string | undefined;
     weight: number;
 }
-export interface ResolvedFilingStatusLinks {
+export interface ResolvedFormStatusLinks {
     href: string;
     params: Readonly<Record<string, string>>;
     sections: Readonly<Record<string, string>>;
 }
-interface FilingStatusEntryPlan {
+interface FormStatusEntryPlan {
     key: string;
     hint?: string;
     description?: string;
     needAnchors: readonly string[];
 }
-export type FilingStatusRowPlan = FilingStatusEntryPlan & ({
+export type FormStatusRowPlan = FormStatusEntryPlan & ({
     status: 'ready';
     slotId: string;
     params?: Readonly<Record<string, string>> | undefined;
     href?: string | undefined;
-    resolveLinks?: ((subject: DataSourceSubject) => ResolvedFilingStatusLinks | undefined) | undefined;
+    resolveLinks?: ((subject: DataSourceSubject) => ResolvedFormStatusLinks | undefined) | undefined;
     route: SurfaceRouteHandle;
-    query: FilingDraftQuery;
-    sections: readonly FilingStatusSectionPlan[];
+    query: FormStatusQuery;
+    sections: readonly FormStatusSectionPlan[];
     fieldTemplates: readonly string[];
     weight: number;
 } | {
     status: 'disabled';
     route?: SurfaceRouteHandle;
     routeRef: string;
-    reason: FilingStatusRowRefusal;
+    reason: FormStatusRowRefusal;
 });
-type FilingStatusRowRefusal = 'route-address-unavailable' | 'definition-unresolved' | 'slot-unresolved' | 'subject-unavailable' | 'invalid-binding';
-export interface FilingStatusGroupPlan {
+type FormStatusRowRefusal = 'route-address-unavailable' | 'definition-unresolved' | 'slot-unresolved' | 'subject-unavailable' | 'invalid-binding';
+export interface FormStatusGroupPlan {
     id: string;
     label: string;
     needAnchors: readonly string[];
@@ -51,21 +51,21 @@ export interface FilingStatusGroupPlan {
         label: string;
         waitingLabel: string;
     };
-    rows: readonly FilingStatusRowPlan[];
+    rows: readonly FormStatusRowPlan[];
 }
-export type FilingStatusPlan = {
+export type FormStatusPlan = {
     status: 'ready';
-    groups: readonly FilingStatusGroupPlan[];
+    groups: readonly FormStatusGroupPlan[];
     needAnchors: readonly string[];
 } | {
     status: 'roster';
     requests: readonly DataSourceLoadRequest[];
-    load(ports: Pick<LoadWidgetDataInputsRequest, 'loader' | 'authorize' | 'validatePayload'>, sessionGeneration?: string): Promise<FilingStatusPlan>;
+    load(ports: Pick<LoadWidgetDataInputsRequest, 'loader' | 'authorize' | 'validatePayload'>, sessionGeneration?: string): Promise<FormStatusPlan>;
 } | {
     status: 'unresolved';
     reason: string;
 };
-export interface FilingPlanInput {
+export interface FormStatusPlanInput {
     slotId: string;
     dataSources?: readonly DataSourceCatalogHandle[] | undefined;
     app: SurfaceApp;
@@ -76,9 +76,9 @@ export interface FilingPlanInput {
     definitions: ReadonlyMap<string, FormDefinition>;
     themeAuthority: ThemeAuthority;
     resolveDefinitionComponent?: SurfaceDefinitionComponentResolver | undefined;
-    resolveDefinitionLocaleString?: FilingSectionLocaleLookup | undefined;
+    resolveDefinitionLocaleString?: FormStatusSectionLocaleLookup | undefined;
     surfaceRef?: string | undefined;
     resolveSubject: (definition: FormDefinition, binding: Record<string, unknown>, route: SurfaceRoute, params: Readonly<Record<string, string>>) => DataSourceSubject | false | undefined;
 }
-export declare function planFilingStatus(input: FilingPlanInput): FilingStatusPlan;
+export declare function planFormStatus(input: FormStatusPlanInput): FormStatusPlan;
 export {};

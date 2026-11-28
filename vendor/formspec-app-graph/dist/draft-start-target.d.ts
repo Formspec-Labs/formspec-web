@@ -1,7 +1,7 @@
 /** @filedesc Resolve a new draft's destination and the source of each subject key. */
 import type { FormDefinition } from '@formspec-org/types';
 import type { AppGraphContext, AppGraphDiagnostic } from './types.js';
-import { type TargetRoute } from './filing-status-targets.js';
+import { type TargetRoute } from './form-status-targets.js';
 export declare function resolveDraftStartTarget<R extends TargetRoute>(routes: readonly R[], source: TargetRoute, binding: unknown, lookupDefinition: (ref: string) => FormDefinition | undefined): {
     route: R;
     slotId: string;

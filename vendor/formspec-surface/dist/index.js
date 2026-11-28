@@ -31,7 +31,7 @@ export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, deriveS
 export { snapshotFiniteJson, canonicalFiniteJson } from "./finite-json.js";
 export { captureResponseFieldMetadata, } from './response-field-metadata.js';
 export * from "./screener-slot.js";
-export { matchesFilingSubjectPredicates, } from './draft-port.js';
+export { matchesFormSubjectPredicates, } from './draft-port.js';
 export { canonicalDraftProgress } from './draft-port.js';
 export { defaultDraftResponseId, prepareDraftFixtures, prepareResponseFiling, prepareResponseFixtures, responseDraftKey, responsePairKey, responseSelectionRecord, selectFilingStatus, selectFilingSummaryStatus, toResponseFilingSummary, validateDraftFixtures, validResponseAuthored, } from './response-records.js';
 export { draftStartHref } from './draft-start.js';

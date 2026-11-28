@@ -50,7 +50,7 @@ import type { RegistryEntry, LocaleDocument, ThemeDocument } from "@formspec-org
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetModule } from "./widget-api.js";
 import type { SurfaceDefinitionFormRenderInput, SurfaceDefinitionFormRenderer, SurfaceFormSession, SurfaceSemanticControlScopeResolver } from "./SurfaceSlot.js";
 import type { SurfaceSemanticOutputScopeResolver } from "./semantic-output.js";
-import type { FilingStatusOptions } from "./FilingStatus.js";
+import type { FormStatusOptions } from "./FormStatus.js";
 export interface SurfaceTransitionOutcome {
     advanced: boolean;
     reason?: string;
@@ -145,10 +145,10 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     /** Opaque host generation marker; changing it invalidates late navigation. */
     sessionGeneration?: string | number | undefined;
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
-    /** Reads authorized draft progress across the filing tracker in one batch. */
-    readSummaries?: FilingStatusOptions["readSummaries"];
+    /** Reads authorized draft progress across the form-status tracker in one batch. */
+    readSummaries?: FormStatusOptions["readSummaries"];
     /** Change when a committed observation should be read again. */
-    filingDraftRevision?: FilingStatusOptions["revision"];
+    filingDraftRevision?: FormStatusOptions["revision"];
     /** Stable opaque viewer identity for browser preferences on a shared browser profile. */
     viewerPreferenceKey?: string | undefined;
     /** Pure selection of an admitted Component for both the form and its tracker links. */

@@ -15,10 +15,10 @@ import {
   type DraftSaveResult,
   type DraftStartInput,
   type DraftStartResult,
-  type FilingDraftObservation,
-  type FilingDraftQuery,
+  type FormStatusDraftObservation,
+  type FormStatusQuery,
   type FilingObservation,
-  type FilingStatusObservation,
+  type FormStatusObservation,
   type MatchedFilingObservation,
 } from '@formspec-org/surface';
 import type {
@@ -237,7 +237,7 @@ function parseDraftView(value: unknown): ParsedDraftView | undefined {
   };
 }
 
-function parseDraftObservation(value: unknown): FilingDraftObservation {
+function parseDraftObservation(value: unknown): FormStatusDraftObservation {
   if (!isRecord(value)) return { status: 'unavailable' };
   if (
     value.status === 'absent' ||
@@ -738,10 +738,10 @@ export class HttpDraftPort implements DraftPort {
   }
 
   readSummaries = async (
-    queries: readonly FilingDraftQuery[],
+    queries: readonly FormStatusQuery[],
     input: { previewScope: string | undefined; signal: AbortSignal },
-  ): Promise<ReadonlyMap<string, FilingStatusObservation>> => {
-    const unavailableMap = (): Map<string, FilingStatusObservation> =>
+  ): Promise<ReadonlyMap<string, FormStatusObservation>> => {
+    const unavailableMap = (): Map<string, FormStatusObservation> =>
       new Map(
         queries.map((q) => [
           q.key,
@@ -776,7 +776,7 @@ export class HttpDraftPort implements DraftPort {
       }
       const resultsObj = res.parsed.results;
       const filingsObj = isRecord(res.parsed.filings) ? res.parsed.filings : undefined;
-      const out = new Map<string, FilingStatusObservation>();
+      const out = new Map<string, FormStatusObservation>();
       for (const query of queries) {
         const draft = parseDraftObservation(resultsObj[query.key]);
         const filing = parseFilingObservation(filingsObj?.[query.key]);

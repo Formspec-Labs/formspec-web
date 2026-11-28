@@ -43,7 +43,7 @@ export function canonicalDraftProgress(value, allowedSectionIds) {
     }
     return { status: 'current', form: { ...formCounts, ready }, sections: Object.fromEntries(sectionEntries) };
 }
-export function matchesFilingSubjectPredicates(definition, subject, match) {
+export function matchesFormSubjectPredicates(definition, subject, match) {
     const declaration = definition.subject;
     if (!declaration || declaration.type !== match.type || !subject || subject.type !== match.type) {
         return false;

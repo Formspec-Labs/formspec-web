@@ -2,7 +2,7 @@
 import { attachVerifiedJsonToken, createFormEngine, deepEqual, initFormspecEngine, initFormspecEngineTools, isStamped, isValidResponseAuthored, matchesEntry, parseVerifiedJsonObject, responseSubjectId, sameAnswer, selectResponses, } from '@formspec-org/engine';
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { resolvePageSequence } from '@formspec-org/layout';
-import { canonicalDraftProgress, canonicalFiniteJson, matchesFilingSubjectPredicates, prepareResponseFiling, prepareResponseFixtures, responseDraftKey, responsePairKey, responseSelectionRecord, catalogResponseDigest, catalogResponseProjection, catalogResponseSelection, resolveDataSourceDescriptor, selectFilingStatus, selectFilingSummaryStatus, toResponseFilingSummary, } from '@formspec-org/surface';
+import { canonicalDraftProgress, canonicalFiniteJson, matchesFormSubjectPredicates, prepareResponseFiling, prepareResponseFixtures, responseDraftKey, responsePairKey, responseSelectionRecord, catalogResponseDigest, catalogResponseProjection, catalogResponseSelection, resolveDataSourceDescriptor, selectFilingStatus, selectFilingSummaryStatus, toResponseFilingSummary, } from '@formspec-org/surface';
 import { definitionResponseRequests } from './definition-response-reads.js';
 import { readSubmitEvaluation, summarizeDraftProgress } from './draft-progress.js';
 export async function previewResponseRecordTools() {
@@ -1973,7 +1973,7 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                             const expectedId = initialized.tools.subjectId(subject.type, subject.keys);
                             const candidateKey = { scope, definitionUrl, subject };
                             if (expectedId !== subject.id || JSON.stringify(id) !== JSON.stringify(storageKey(candidateKey))) {
-                                throw new Error('Stored summary metadata does not match its filing unit.');
+                                throw new Error('Stored summary metadata does not match its subject.');
                             }
                             const bucket = allUnits.get(subject.id) ?? { subject, evidence: [], unverified: false };
                             bucket.evidence.push({ key: candidateKey, relation: 'resume' });
@@ -1986,7 +1986,7 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                             if (!subject)
                                 continue;
                             if (initialized.tools.subjectId(subject.type, subject.keys) !== subject.id) {
-                                throw new Error('Stored filing summary metadata does not match its filing unit.');
+                                throw new Error('Stored filing summary metadata does not match its subject.');
                             }
                             const bucket = allUnits.get(subject.id) ?? { subject, evidence: [], unverified: false };
                             bucket.evidence.push({ key: filing.key, relation: 'read' });
@@ -2009,7 +2009,7 @@ function createFilingStore(options, transaction, subscribe, committed, storageAv
                             });
                             if (hasPotentialUnresolved)
                                 return;
-                            const matching = [...allUnits.values()].filter(({ subject }) => matchesFilingSubjectPredicates(definition, subject, match));
+                            const matching = [...allUnits.values()].filter(({ subject }) => matchesFormSubjectPredicates(definition, subject, match));
                             if (matching.length === 0) {
                                 result.set(query.key, {
                                     subjectMatch: 'none',

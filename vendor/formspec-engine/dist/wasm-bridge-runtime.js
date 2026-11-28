@@ -165,7 +165,7 @@ export function wasmAssembleCandidate(definition, response, resolution, evaluati
     return parseWasmJson(wasm().assembleCandidate(JSON.stringify(definition), JSON.stringify(response), JSON.stringify(evaluation ?? null), JSON.stringify(resolution)));
 }
 /**
- * Derive Core's filing-unit id (`Response.subject.id`) from a subject type and exact typed keys.
+ * Derive Core's subject id (`Response.subject.id`) from a subject type and exact typed keys.
  * Throws for untyped keys or an integer outside the I-JSON range.
  */
 export function wasmResponseSubjectId(subjectType, keys) {

@@ -72,7 +72,7 @@ const PUBLISHER = 'https://publisher.example.gov/';
 const TENANT_COLOR = '#7A1F3D';
 const CHECKED_AT = '2026-07-28T20:00:00.000Z';
 const RESPONDENT_DEFINITION = definitionWithoutLegacyPresentation(demoSampleForm);
-const FILING_SUBJECT = { type: 'urn:example:filing-unit', keys: {} };
+const FILING_SUBJECT = { type: 'urn:example:subject', keys: {} };
 
 afterEach(() => {
   cleanup();
@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe('verified respondent Surface integration', () => {
-  it('opens a second filing unit without restoring the first unit’s answers', async () => {
+  it('opens a second subject without restoring the first subject’s answers', async () => {
     const fixture = await createFixture({ pendingFirstSubmit: true, keyedSubject: true });
     const openUnit = (year: number) => {
       window.history.replaceState({}, '', `/apply/${year}`);

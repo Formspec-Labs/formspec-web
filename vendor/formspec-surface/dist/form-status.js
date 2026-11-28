@@ -1,17 +1,17 @@
-/** @filedesc Plans exact filing-status destinations and section links without opening forms. */
-import { parseRouteSubjectKey, resolveFilingStatusTargets } from '@formspec-org/app-graph';
+/** @filedesc Plans exact form-status destinations and section links without opening forms. */
+import { parseRouteSubjectKey, resolveFormStatusTargets } from '@formspec-org/app-graph';
 import { fillUiParams, resolvePageSequence, UI_STRINGS } from '@formspec-org/layout';
 import { formHref, matchRoute, routeHref } from './composition.js';
-import { planFilingRoster } from './filing-roster.js';
-import { matchesFilingSubjectPredicates } from './draft-port.js';
+import { planFormStatusRoster } from './form-status-roster.js';
+import { matchesFormSubjectPredicates } from './draft-port.js';
 import { generationNeedAnchors } from './need-trace.js';
 function subjectIdentity(subject) {
     return subject ? [subject.type, Object.entries(subject.keys).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)] : null;
 }
-export function planFilingStatus(input) {
+export function planFormStatus(input) {
     if (input.handle.surface.$formspecSurface !== '0.4')
         return { status: 'unresolved', reason: 'surface-version-unsupported' };
-    return planFilingRoster(input, binding => planFixed({ ...input, binding })) ?? planFixed(input);
+    return planFormStatusRoster(input, binding => planFixed({ ...input, binding })) ?? planFixed(input);
 }
 // Correlation IDs live only as long as their Definition. Interning the full placements
 // once gives equal section plans the same compact key without hash collisions.
@@ -31,7 +31,7 @@ function placementId(definition, sections) {
 function planFixed(input) {
     const { handle, app } = input;
     const unresolved = (reason) => ({ status: 'unresolved', reason });
-    const result = resolveFilingStatusTargets(handle.surface.routes, input.bindingRoute, input.binding, input.params);
+    const result = resolveFormStatusTargets(handle.surface.routes, input.bindingRoute, input.binding, input.params);
     const duplicate = result.issues.find(issue => issue.reason === 'duplicate-group' || issue.reason === 'duplicate-target');
     if (duplicate)
         return unresolved(duplicate.reason);
@@ -166,7 +166,7 @@ function planFixed(input) {
                     route: destination,
                     ...(description === undefined ? {} : { description }),
                     resolveLinks(matchedSubject) {
-                        if (!matchesFilingSubjectPredicates(definition, matchedSubject, subjectMatch))
+                        if (!matchesFormSubjectPredicates(definition, matchedSubject, subjectMatch))
                             return undefined;
                         const fullParams = { ...params };
                         for (const [subjKey, paramName] of Object.entries(mapping)) {

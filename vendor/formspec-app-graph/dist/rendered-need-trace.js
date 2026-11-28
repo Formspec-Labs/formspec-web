@@ -340,25 +340,25 @@ function surfaceNodes(handle, entries) {
                 if (stringProp(slot, 'slotType') === 'static-content' && binding) {
                     out.push(generationNode(handle, 'surface-static-content', `${slotPointer}/binding`, binding, `${nodeLabel(slot, `slots[${slotIndex}]`)} content`));
                 }
-                if (stringProp(slot, 'slotType') === 'filing-status' && binding) {
+                if (stringProp(slot, 'slotType') === 'form-status' && binding) {
                     const bindingPointer = `${slotPointer}/binding`;
-                    out.push(generationNode(handle, 'surface-filing-status-binding', bindingPointer, binding, 'Filing tracker'));
+                    out.push(generationNode(handle, 'surface-form-status-binding', bindingPointer, binding, 'Form status tracker'));
                     if (Array.isArray(binding.groups))
                         binding.groups.forEach((rawGroup, groupIndex) => {
                             const group = record(rawGroup);
                             if (!group)
                                 return;
                             const groupPointer = `${bindingPointer}/groups/${groupIndex}`;
-                            out.push(generationNode(handle, 'surface-filing-status-group', groupPointer, group, stringProp(group, 'label') ?? `groups[${groupIndex}]`));
+                            out.push(generationNode(handle, 'surface-form-status-group', groupPointer, group, stringProp(group, 'label') ?? `groups[${groupIndex}]`));
                             const repeat = record(group.repeat);
                             if (repeat)
-                                out.push(generationNode(handle, 'surface-filing-status-repeat', groupPointer + '/repeat', repeat, 'Filing tracker roster'));
+                                out.push(generationNode(handle, 'surface-form-status-repeat', groupPointer + '/repeat', repeat, 'Form status roster'));
                             if (Array.isArray(group.forms))
                                 group.forms.forEach((rawEntry, entryIndex) => {
                                     const entry = record(rawEntry);
                                     if (!entry)
                                         return;
-                                    out.push(generationNode(handle, 'surface-filing-status-entry', `${groupPointer}/forms/${entryIndex}`, entry, stringProp(entry, 'routeRef') ?? `forms[${entryIndex}]`));
+                                    out.push(generationNode(handle, 'surface-form-status-entry', `${groupPointer}/forms/${entryIndex}`, entry, stringProp(entry, 'routeRef') ?? `forms[${entryIndex}]`));
                                 });
                         });
                 }

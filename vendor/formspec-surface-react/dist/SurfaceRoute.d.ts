@@ -36,14 +36,14 @@ import { type SurfaceRouteTitleResolver } from './title-presentation.js';
 import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type SurfaceDiagnostic, type SurfaceRoutePlan, type SurfaceStrings } from '@formspec-org/surface';
 import type { OntologyDocument, LocaleDocument, ReferencesDocument, ResponseActionsDocument } from '@formspec-org/types';
-import { type FilingStatusOptions } from './FilingStatus.js';
+import { type FormStatusOptions } from './FormStatus.js';
 import { type SurfaceDefinitionFormRenderInput, type SurfaceDefinitionFormRenderer, type SurfaceFormSession, type SurfaceSemanticControlScopeResolver } from './SurfaceSlot.js';
 import type { AdvanceTransition, FireTransition } from './SurfaceApp.js';
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport } from './widget-api.js';
 import type { SurfaceSemanticOutputScopeResolver } from './semantic-output.js';
 import type { WidgetActionCoordinator } from './widget-action-runtime.js';
 export interface SurfaceRouteViewProps {
-    filingStatus?: FilingStatusOptions | undefined;
+    formStatus?: FormStatusOptions | undefined;
     bandPreferenceScope?: string | undefined;
     formSession?: SurfaceFormSession | undefined;
     overviewDestination?: string | undefined;
@@ -106,4 +106,4 @@ export interface SurfaceRouteViewProps {
      */
     onAdvance?: AdvanceTransition | undefined;
 }
-export declare function SurfaceRouteView({ plan, filingStatus, bandPreferenceScope, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onSlotFormEngineChange, onSlotVisibilityChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, overviewDestination, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
+export declare function SurfaceRouteView({ plan, formStatus, bandPreferenceScope, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onSlotFormEngineChange, onSlotVisibilityChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, overviewDestination, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
