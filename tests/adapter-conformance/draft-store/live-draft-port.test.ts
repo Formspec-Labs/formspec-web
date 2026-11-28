@@ -267,7 +267,6 @@ function findConformanceServerBinary(): string | undefined {
   const candidates = [
     resolve(repoDir, '../target/debug/examples/live_conformance_server'),
     resolve(repoDir, '../formspec-server/target/debug/examples/live_conformance_server'),
-    '/private/tmp/agy-p2d/source/target/debug/examples/live_conformance_server',
   ];
   return candidates.find((candidate) => existsSync(candidate));
 }
