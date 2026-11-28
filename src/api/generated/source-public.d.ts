@@ -78,7 +78,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["remove_admin_membership"];
         options?: never;
         head?: never;
         patch: operations["update_admin_membership"];
@@ -1333,6 +1333,11 @@ export interface components {
             principal_id: string;
             reason: string;
             role: string;
+            subject?: components["schemas"]["AdminMembershipSubject"] | null;
+        };
+        AdminMembershipSubject: {
+            iss: string;
+            sub: string;
         };
         AdminMembershipUpdateCommand: {
             reason?: string | null;
@@ -1568,10 +1573,22 @@ export interface components {
         };
         /** @description Batch no-create draft progress request (`POST /drafts/progress`). */
         DraftProgressBatchRequest: {
+            /**
+             * @description When true, also returns authorized filing + optional WOS review disposition observations
+             *     in `filings` (`fs-yvfo`, `fs-a60c`, ADR 0175 §4.5).
+             */
+            includeFilings?: boolean;
             queries: components["schemas"]["DraftProgressQuery"][];
         };
         /** @description Batch no-create draft progress response (`POST /drafts/progress`). */
         DraftProgressBatchResponse: {
+            /**
+             * @description Present when `includeFilings: true` was requested: one verified filing and WOS review
+             *     observation per query key, degrading cleanly to `review: "unavailable"` on WOS outage.
+             */
+            filings?: {
+                [key: string]: components["schemas"]["FilingStatusObservationView"];
+            } | null;
             results: {
                 [key: string]: components["schemas"]["DraftProgressReadOutcome"];
             };
@@ -1627,6 +1644,8 @@ export interface components {
              *     the newly advanced revision (`fs-yvfo`).
              */
             committedDraftRevision?: number | null;
+            /** @description Semantic version of the Definition bound to this draft (`fs-yvfo`). */
+            definition_version?: string | null;
             draft_id: string;
             /**
              * @description Verbatim editable engine draft snapshot (`FormDraftSnapshot`), keeping hidden answers and
@@ -1674,6 +1693,63 @@ export interface components {
             feature_key: string;
             owner: string;
             visible_in_managed_single_cell: boolean;
+        };
+        /**
+         * @description Whether WOS review disposition data was reachable for a verified filed Response.
+         * @enum {string}
+         */
+        FilingReviewAvailability: "available" | "unavailable";
+        /**
+         * @description Joined filing and optional WOS review observation for one tracker query (`fs-yvfo`, `fs-a60c`,
+         *     ADR 0175 §4.5).
+         */
+        FilingStatusObservationView: {
+            /** @enum {string} */
+            status: "none";
+        } | {
+            /** @enum {string} */
+            status: "unavailable";
+        } | {
+            comments?: string[];
+            mappingStatus?: components["schemas"]["ReviewDispositionMappingStatus"] | null;
+            outcomeUri?: string | null;
+            receiptRef: string;
+            responseHash: string;
+            review: components["schemas"]["FilingReviewAvailability"];
+            /** @enum {string} */
+            status: "filed";
+        } | {
+            comments?: string[];
+            outcomeUri?: string | null;
+            receiptRef: string;
+            responseHash: string;
+            review: components["schemas"]["FilingReviewAvailability"];
+            /** @enum {string} */
+            status: "returned";
+        } | {
+            comments?: string[];
+            outcomeUri?: string | null;
+            receiptRef: string;
+            responseHash: string;
+            review: components["schemas"]["FilingReviewAvailability"];
+            /** @enum {string} */
+            status: "accepted";
+        } | {
+            comments?: string[];
+            outcomeUri?: string | null;
+            receiptRef: string;
+            responseHash: string;
+            review: components["schemas"]["FilingReviewAvailability"];
+            /** @enum {string} */
+            status: "closed-without-acceptance";
+        } | {
+            comments?: string[];
+            outcomeUri?: string | null;
+            receiptRef: string;
+            responseHash: string;
+            review: components["schemas"]["FilingReviewAvailability"];
+            /** @enum {string} */
+            status: "reopened";
         };
         /** @description Immutable filing-unit identity saved before the browser authors a Response. */
         FilingSubject: {
@@ -1748,6 +1824,15 @@ export interface components {
         };
         /** @description Request body for initializing a draft before any canonical Response exists. */
         InitializeDraftCommand: {
+            /**
+             * @description Optional caller-observed `pin: "at-open"` `valueDigest` per declared instance (`fs-yvfo`).
+             *     When present on draft creation, the server compares every declared `at-open` pin against
+             *     this map before creating the draft and refuses mismatches with `409 Conflict`
+             *     (`PIN_UNAVAILABLE:<instance>: ...`) without creating a partial draft.
+             */
+            expected_selection_pins?: {
+                [key: string]: string;
+            } | null;
             form_version_id: string;
             /**
              * @description Look up an open draft for the complete declared subject without creating one.
@@ -2240,7 +2325,12 @@ export interface components {
             subject_ref: string;
         };
         /** @description Request body for retiring or redirecting an old form version. */
-        RetireFormVersionCommand: Record<string, never>;
+        RetireFormVersionCommand: Record<string, unknown>;
+        /**
+         * @description Whether a WOS outcome URI mapped to one of the four canonical surface review states.
+         * @enum {string}
+         */
+        ReviewDispositionMappingStatus: "mapped" | "unmapped";
         /** @description One authorized item returned by `POST /responses/select/list`. */
         SealedSelectionListItem: {
             authored: string;
@@ -2766,6 +2856,82 @@ export interface operations {
                 };
             };
             /** @description Membership storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    remove_admin_membership: {
+        parameters: {
+            query?: {
+                reason?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description Membership identifier. */
+                membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed membership */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMembershipView"];
+                };
+            };
+            /** @description Invalid membership removal */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current administrative authority required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Membership not found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The scope's last owner cannot be removed */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Membership or authority storage unavailable */
             503: {
                 headers: {
                     "Cache-Control"?: "private, no-store";

@@ -21,6 +21,15 @@ export {
   type HttpAdapterCohortConfig,
 } from './cohort.ts';
 export { HttpDraftStore, createHttpDraftStore, type HttpDraftStoreConfig } from './draft-store.ts';
+export {
+  HttpDraftPort,
+  HttpResponseSelector,
+  extractJsonObjectMember,
+  type FormTargetResolver,
+  type HttpDraftPortConfig,
+  type HttpResponseSelectorConfig,
+  type ResolvedFormTarget,
+} from './draft-port.ts';
 export { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 export {
   HttpAdapterError,
