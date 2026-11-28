@@ -2325,7 +2325,7 @@ export interface components {
             subject_ref: string;
         };
         /** @description Request body for retiring or redirecting an old form version. */
-        RetireFormVersionCommand: Record<string, unknown>;
+        RetireFormVersionCommand: Record<string, never>;
         /**
          * @description Whether a WOS outcome URI mapped to one of the four canonical surface review states.
          * @enum {string}
